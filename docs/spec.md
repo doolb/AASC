@@ -336,3 +336,5 @@
 - [聊天视频任务实现伪代码](spec/chat-video.md)
 
 - [聊天附件上传伪代码](spec/chat-attachments.md)
+
+- [HIE 子工程与游戏任务桥接](spec/subprojects-hie.md)

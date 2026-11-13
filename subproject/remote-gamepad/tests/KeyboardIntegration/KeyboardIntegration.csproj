@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Protocol/Protocol.csproj" />
+    <PackageReference Include="Terminal.Gui" Version="1.19.0" />
+    <Compile Include="../../src/Sender/KeyboardRouter.cs" Link="KeyboardRouter.cs" />
+    <Compile Include="../../src/Sender/KeyboardHook.cs" Link="KeyboardHook.cs" />
+    <Compile Include="../../src/Sender/RawMouseInput.cs" Link="RawMouseInput.cs" />
+    <Compile Include="../../src/Sender/TerminalDashboard.cs" Link="TerminalDashboard.cs" />
+    <Compile Include="../../src/Sender/TelemetryClient.cs" Link="TelemetryClient.cs" />
+    <Compile Include="../../src/Sender/PowerClient.cs" Link="PowerClient.cs" />
+    <Compile Include="../../src/Sender/SenderSettings.cs" Link="SenderSettings.cs" />
+    <Compile Include="../../src/Sender/SenderLog.cs" Link="SenderLog.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 2,
+  "mapId": "honor-of-kings-25d",
+  "spaceModel": "moba-25d",
+  "revision": 3,
+  "coordinateSystem": {
+    "horizontal": [
+      "x",
+      "z"
+    ],
+    "up": "y"
+  },
+  "projection": {
+    "kind": "minimap-pixel-to-moba-25d",
+    "sourceRect": {
+      "x": 0,
+      "y": 0,
+      "width": 260,
+      "height": 230
+    },
+    "formula": {
+      "x": "minimap.x",
+      "z": "-minimap.y"
+    }
+  },
+  "landmarks": [
+    {
+      "id": "training-spawn",
+      "position": {
+        "x": 5,
+        "z": 5
+      },
+      "kind": "base",
+      "source": "adb-real"
+    },
+    {
+      "id": "training-safe-tower",
+      "position": {
+        "x": 15,
+        "z": 5
+      },
+      "kind": "tower",
+      "source": "adb-real-verified"
+    },
+    {
+      "id": "training-mid-sample",
+      "position": {
+        "x": 25,
+        "z": 5
+      },
+      "kind": "road",
+      "source": "configured"
+    }
+  ],
+  "motionSamples": [
+    {
+      "id": "adb-move-spawn-to-safe-tower",
+      "from": {
+        "x": 5,
+        "z": 5
+      },
+      "to": {
+        "x": 15,
+        "z": 5
+      },
+      "durationMs": 1100,
+      "commandedVector": {
+        "x": 0.7,
+        "z": 0.7
+      },
+      "source": "adb-real",
+      "observedAt": "2026-09-07T15:13:59.982Z"
+    },
+    {
+      "id": "adb-verified-move-base-exit",
+      "from": {
+        "x": 5,
+        "z": 5
+      },
+      "to": {
+        "x": 15,
+        "z": 5
+      },
+      "durationMs": 900,
+      "commandedVector": {
+        "x": 1,
+        "z": 0
+      },
+      "controlOrigin": {
+        "x": 270,
+        "y": 560
+      },
+      "controlRadius": 105,
+      "source": "adb-real-verified",
+      "observedAt": "2026-09-07T15:42:29.200Z",
+      "verified": true
+    }
+  ],
+  "sourceSessions": [
+    "sample-static-map-2026-09-05",
+    "adb-real-hok-training-2026-09-07",
+    "adb-real-hok-training-2026-09-07-verified"
+  ],
+  "tiles": [
+    {
+      "id": "hok-training-sample-0",
+      "version": 3,
+      "spaceModel": "moba-25d",
+      "coordinateSystem": {
+        "horizontal": [
+          "x",
+          "z"
+        ],
+        "up": "y"
+      },
+      "cellSize": 10,
+      "sourcePointCount": 3,
+      "confidence": 0.9033333333333333,
+      "vertices": [
+        {
+          "x": 0,
+          "z": 0,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "z": 0,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "z": 10,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "z": 10,
+          "y": 0
+        },
+        {
+          "x": 20,
+          "z": 0,
+          "y": 0
+        },
+        {
+          "x": 20,
+          "z": 10,
+          "y": 0
+        },
+        {
+          "x": 30,
+          "z": 0,
+          "y": 0
+        },
+        {
+          "x": 30,
+          "z": 10,
+          "y": 0
+        }
+      ],
+      "polygons": [
+        {
+          "id": "poly:0:0",
+          "vertices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "neighbors": [
+            "poly:1:0"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.95
+        },
+        {
+          "id": "poly:1:0",
+          "vertices": [
+            1,
+            4,
+            5,
+            2
+          ],
+          "neighbors": [
+            "poly:0:0",
+            "poly:2:0"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.92
+        },
+        {
+          "id": "poly:2:0",
+          "vertices": [
+            4,
+            6,
+            7,
+            5
+          ],
+          "neighbors": [
+            "poly:1:0"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        }
+      ]
+    }
+  ],
+  "updatedAt": "2026-09-07T15:42:29.212Z"
+}

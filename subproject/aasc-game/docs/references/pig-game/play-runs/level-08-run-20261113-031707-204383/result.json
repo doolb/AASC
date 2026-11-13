@@ -1,0 +1,9 @@
+{
+  "status": "interrupted",
+  "level": 8,
+  "clicks": 0,
+  "confirmed": 0,
+  "reason": "多帧识别数量不一致，可能有漏检或动画",
+  "pending_action": null,
+  "screenshot": "interrupted.png"
+}

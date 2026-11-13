@@ -1,0 +1,14 @@
+{
+  "status": "search_limit",
+  "states": 77901,
+  "model": "assumed_slide_to_obstacle_or_exit",
+  "grid": [
+    104.26201825375857,
+    232.538428285402,
+    29.85633270321358,
+    12,
+    19
+  ],
+  "initial_ducks": [],
+  "actions": []
+}

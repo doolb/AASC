@@ -1,0 +1,16 @@
+{
+  "current_blend": "current-retopo.blend",
+  "source_signature": "a6372e8424d3c9dad7056527324deffe0336c7e33bc38ffcfffd9f3c5cf67661",
+  "scene_objects": 58,
+  "libraries": [
+    {
+      "original": "D:\\down\\小闪\\测试\\idle099_Shoulder_20261030\\shoulder_corner_flow_review.blend",
+      "copied": "E:\\retopo\\dependencies\\shoulder_corner_flow_review.blend"
+    },
+    {
+      "original": "D:\\down\\小闪\\测试\\SurfaceCageRebuild_20261030\\surface-cage-examples.blend",
+      "copied": "E:\\retopo\\dependencies\\surface-cage-examples.blend"
+    }
+  ],
+  "originals_retained": true
+}

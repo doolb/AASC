@@ -1,0 +1,21 @@
+{
+  "status": "stage_plan",
+  "states": 301,
+  "actions": [
+    {
+      "index": 53,
+      "pig_id": 54,
+      "direction": "south",
+      "from": [
+        4,
+        10
+      ],
+      "to": [
+        4,
+        11
+      ],
+      "exited": false,
+      "travel_cells": 1
+    }
+  ]
+}

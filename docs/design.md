@@ -206,3 +206,5 @@
 - [聊天视频生成与主AI原生视频展示](design/chat-video.md)
 
 - [聊天附件上传](design/chat-attachments.md)
+
+- [HIE 子工程与游戏任务桥接](design/subprojects-hie.md)

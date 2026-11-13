@@ -1,0 +1,66 @@
+{
+  "status": "stage_plan",
+  "states": 48,
+  "actions": [
+    {
+      "index": 28,
+      "pig_id": 29,
+      "direction": "east",
+      "from": [
+        4,
+        17
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6
+    },
+    {
+      "index": 22,
+      "pig_id": 23,
+      "direction": "south",
+      "from": [
+        5,
+        13
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4
+    },
+    {
+      "index": 18,
+      "pig_id": 19,
+      "direction": "south",
+      "from": [
+        5,
+        11
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6
+    },
+    {
+      "index": 10,
+      "pig_id": 11,
+      "direction": "south",
+      "from": [
+        5,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 9
+    },
+    {
+      "index": 26,
+      "pig_id": 27,
+      "direction": "south",
+      "from": [
+        7,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3
+    }
+  ]
+}

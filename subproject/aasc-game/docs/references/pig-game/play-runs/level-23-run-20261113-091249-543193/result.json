@@ -1,0 +1,9 @@
+{
+  "status": "interrupted",
+  "level": 23,
+  "clicks": 0,
+  "confirmed": 0,
+  "reason": "鸭子网格位置重复或越界",
+  "pending_action": null,
+  "screenshot": "interrupted.png"
+}

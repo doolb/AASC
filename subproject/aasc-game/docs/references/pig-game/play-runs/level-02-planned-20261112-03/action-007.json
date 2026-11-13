@@ -1,0 +1,19 @@
+{
+  "action": {
+    "index": 0,
+    "pig_id": 1,
+    "direction": "east",
+    "from": [
+      4,
+      0
+    ],
+    "to": null,
+    "exited": true,
+    "travel_cells": 6
+  },
+  "observed_center": [
+    241.0,
+    300.5
+  ],
+  "planned_actions": 73
+}

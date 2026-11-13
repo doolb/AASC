@@ -1,0 +1,2495 @@
+{
+  "schemaVersion": 2,
+  "mapId": "honor-of-kings-25d",
+  "spaceModel": "moba-25d",
+  "revision": 2,
+  "coordinateSystem": {
+    "horizontal": [
+      "x",
+      "z"
+    ],
+    "up": "y"
+  },
+  "projection": {
+    "kind": "minimap-pixel-to-moba-25d",
+    "sourceRect": {
+      "x": 0,
+      "y": 0,
+      "width": 260,
+      "height": 230
+    },
+    "formula": {
+      "x": "minimap.x",
+      "z": "-minimap.y"
+    },
+    "coordinateSystem": {
+      "horizontal": [
+        "x",
+        "z"
+      ],
+      "up": "y"
+    }
+  },
+  "landmarks": [
+    {
+      "id": "training-spawn",
+      "position": {
+        "x": 28,
+        "z": -220
+      },
+      "kind": "base"
+    },
+    {
+      "id": "training-mid-sample",
+      "position": {
+        "x": 130,
+        "z": -120
+      },
+      "kind": "road"
+    }
+  ],
+  "sourceSessions": [
+    "adb-192.168.1.6:5555-training-2026-09-05"
+  ],
+  "tiles": [
+    {
+      "id": "hok-training-live-0",
+      "version": 1,
+      "spaceModel": "moba-25d",
+      "coordinateSystem": {
+        "horizontal": [
+          "x",
+          "z"
+        ],
+        "up": "y"
+      },
+      "cellSize": 10,
+      "sourcePointCount": 165,
+      "confidence": 0.8400000000000025,
+      "vertices": [
+        {
+          "x": 40,
+          "y": 0,
+          "z": -240
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -240
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -230
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -230
+        },
+        {
+          "x": 30,
+          "y": 0,
+          "z": -230
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -220
+        },
+        {
+          "x": 30,
+          "y": 0,
+          "z": -220
+        },
+        {
+          "x": 20,
+          "y": 0,
+          "z": -220
+        },
+        {
+          "x": 30,
+          "y": 0,
+          "z": -210
+        },
+        {
+          "x": 20,
+          "y": 0,
+          "z": -210
+        },
+        {
+          "x": 10,
+          "y": 0,
+          "z": -210
+        },
+        {
+          "x": 20,
+          "y": 0,
+          "z": -200
+        },
+        {
+          "x": 10,
+          "y": 0,
+          "z": -200
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -220
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -210
+        },
+        {
+          "x": 30,
+          "y": 0,
+          "z": -200
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -210
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -200
+        },
+        {
+          "x": 30,
+          "y": 0,
+          "z": -190
+        },
+        {
+          "x": 20,
+          "y": 0,
+          "z": -190
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -220
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -210
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -200
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -190
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -200
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -190
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -180
+        },
+        {
+          "x": 30,
+          "y": 0,
+          "z": -180
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -210
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -200
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -190
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -180
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -190
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -180
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -170
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -170
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -170
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -190
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -180
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -180
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -170
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 40,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -170
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 90,
+          "y": 0,
+          "z": -180
+        },
+        {
+          "x": 90,
+          "y": 0,
+          "z": -170
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 50,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 90,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 100,
+          "y": 0,
+          "z": -170
+        },
+        {
+          "x": 100,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 90,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 60,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 100,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 90,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 70,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 110,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 110,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 100,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 90,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 110,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 100,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 90,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 80,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 120,
+          "y": 0,
+          "z": -160
+        },
+        {
+          "x": 120,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 110,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 100,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 120,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 120,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 110,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 110,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 100,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 130,
+          "y": 0,
+          "z": -150
+        },
+        {
+          "x": 130,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 130,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 120,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 140,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 140,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 130,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 120,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 140,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 140,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 130,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 130,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 120,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 150,
+          "y": 0,
+          "z": -140
+        },
+        {
+          "x": 150,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 150,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 140,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 160,
+          "y": 0,
+          "z": -130
+        },
+        {
+          "x": 160,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 150,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 140,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 130,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 160,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 150,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 150,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 170,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 170,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 160,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 160,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 170,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 160,
+          "y": 0,
+          "z": -80
+        },
+        {
+          "x": 150,
+          "y": 0,
+          "z": -80
+        },
+        {
+          "x": 180,
+          "y": 0,
+          "z": -120
+        },
+        {
+          "x": 180,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 180,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 170,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 170,
+          "y": 0,
+          "z": -80
+        },
+        {
+          "x": 190,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 190,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 180,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 180,
+          "y": 0,
+          "z": -80
+        },
+        {
+          "x": 190,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 180,
+          "y": 0,
+          "z": -70
+        },
+        {
+          "x": 170,
+          "y": 0,
+          "z": -70
+        },
+        {
+          "x": 200,
+          "y": 0,
+          "z": -110
+        },
+        {
+          "x": 200,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 200,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 190,
+          "y": 0,
+          "z": -80
+        },
+        {
+          "x": 210,
+          "y": 0,
+          "z": -100
+        },
+        {
+          "x": 210,
+          "y": 0,
+          "z": -90
+        },
+        {
+          "x": 200,
+          "y": 0,
+          "z": -80
+        },
+        {
+          "x": 190,
+          "y": 0,
+          "z": -70
+        },
+        {
+          "x": 190,
+          "y": 0,
+          "z": -60
+        },
+        {
+          "x": 180,
+          "y": 0,
+          "z": -60
+        },
+        {
+          "x": 210,
+          "y": 0,
+          "z": -80
+        },
+        {
+          "x": 210,
+          "y": 0,
+          "z": -70
+        },
+        {
+          "x": 200,
+          "y": 0,
+          "z": -70
+        },
+        {
+          "x": 200,
+          "y": 0,
+          "z": -60
+        }
+      ],
+      "polygons": [
+        {
+          "id": "poly:4:-24",
+          "vertices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "neighbors": [
+            "poly:4:-23"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:3:-23",
+          "vertices": [
+            4,
+            3,
+            5,
+            6
+          ],
+          "neighbors": [
+            "poly:4:-23",
+            "poly:3:-22"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:4:-23",
+          "vertices": [
+            3,
+            2,
+            13,
+            5
+          ],
+          "neighbors": [
+            "poly:3:-23",
+            "poly:4:-24",
+            "poly:4:-22"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:2:-22",
+          "vertices": [
+            7,
+            6,
+            8,
+            9
+          ],
+          "neighbors": [
+            "poly:3:-22",
+            "poly:2:-21"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:3:-22",
+          "vertices": [
+            6,
+            5,
+            14,
+            8
+          ],
+          "neighbors": [
+            "poly:2:-22",
+            "poly:4:-22",
+            "poly:3:-23",
+            "poly:3:-21"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:4:-22",
+          "vertices": [
+            5,
+            13,
+            16,
+            14
+          ],
+          "neighbors": [
+            "poly:3:-22",
+            "poly:5:-22",
+            "poly:4:-23",
+            "poly:4:-21"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:5:-22",
+          "vertices": [
+            13,
+            20,
+            21,
+            16
+          ],
+          "neighbors": [
+            "poly:4:-22",
+            "poly:5:-21"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:1:-21",
+          "vertices": [
+            10,
+            9,
+            11,
+            12
+          ],
+          "neighbors": [
+            "poly:2:-21"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:2:-21",
+          "vertices": [
+            9,
+            8,
+            15,
+            11
+          ],
+          "neighbors": [
+            "poly:1:-21",
+            "poly:3:-21",
+            "poly:2:-22",
+            "poly:2:-20"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:3:-21",
+          "vertices": [
+            8,
+            14,
+            17,
+            15
+          ],
+          "neighbors": [
+            "poly:2:-21",
+            "poly:4:-21",
+            "poly:3:-22",
+            "poly:3:-20"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:4:-21",
+          "vertices": [
+            14,
+            16,
+            22,
+            17
+          ],
+          "neighbors": [
+            "poly:3:-21",
+            "poly:5:-21",
+            "poly:4:-22",
+            "poly:4:-20"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:5:-21",
+          "vertices": [
+            16,
+            21,
+            24,
+            22
+          ],
+          "neighbors": [
+            "poly:4:-21",
+            "poly:6:-21",
+            "poly:5:-22",
+            "poly:5:-20"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:6:-21",
+          "vertices": [
+            21,
+            28,
+            29,
+            24
+          ],
+          "neighbors": [
+            "poly:5:-21",
+            "poly:6:-20"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:2:-20",
+          "vertices": [
+            11,
+            15,
+            18,
+            19
+          ],
+          "neighbors": [
+            "poly:3:-20",
+            "poly:2:-21"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:3:-20",
+          "vertices": [
+            15,
+            17,
+            23,
+            18
+          ],
+          "neighbors": [
+            "poly:2:-20",
+            "poly:4:-20",
+            "poly:3:-21",
+            "poly:3:-19"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:4:-20",
+          "vertices": [
+            17,
+            22,
+            25,
+            23
+          ],
+          "neighbors": [
+            "poly:3:-20",
+            "poly:5:-20",
+            "poly:4:-21",
+            "poly:4:-19"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:5:-20",
+          "vertices": [
+            22,
+            24,
+            30,
+            25
+          ],
+          "neighbors": [
+            "poly:4:-20",
+            "poly:6:-20",
+            "poly:5:-21",
+            "poly:5:-19"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:6:-20",
+          "vertices": [
+            24,
+            29,
+            32,
+            30
+          ],
+          "neighbors": [
+            "poly:5:-20",
+            "poly:6:-21",
+            "poly:6:-19"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:3:-19",
+          "vertices": [
+            18,
+            23,
+            26,
+            27
+          ],
+          "neighbors": [
+            "poly:4:-19",
+            "poly:3:-20"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:4:-19",
+          "vertices": [
+            23,
+            25,
+            31,
+            26
+          ],
+          "neighbors": [
+            "poly:3:-19",
+            "poly:5:-19",
+            "poly:4:-20",
+            "poly:4:-18"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:5:-19",
+          "vertices": [
+            25,
+            30,
+            33,
+            31
+          ],
+          "neighbors": [
+            "poly:4:-19",
+            "poly:6:-19",
+            "poly:5:-20",
+            "poly:5:-18"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:6:-19",
+          "vertices": [
+            30,
+            32,
+            39,
+            33
+          ],
+          "neighbors": [
+            "poly:5:-19",
+            "poly:7:-19",
+            "poly:6:-20",
+            "poly:6:-18"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:7:-19",
+          "vertices": [
+            32,
+            37,
+            38,
+            39
+          ],
+          "neighbors": [
+            "poly:6:-19",
+            "poly:7:-18"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:4:-18",
+          "vertices": [
+            26,
+            31,
+            35,
+            36
+          ],
+          "neighbors": [
+            "poly:5:-18",
+            "poly:4:-19",
+            "poly:4:-17"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:5:-18",
+          "vertices": [
+            31,
+            33,
+            34,
+            35
+          ],
+          "neighbors": [
+            "poly:4:-18",
+            "poly:6:-18",
+            "poly:5:-19",
+            "poly:5:-17"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:6:-18",
+          "vertices": [
+            33,
+            39,
+            40,
+            34
+          ],
+          "neighbors": [
+            "poly:5:-18",
+            "poly:7:-18",
+            "poly:6:-19",
+            "poly:6:-17"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:7:-18",
+          "vertices": [
+            39,
+            38,
+            43,
+            40
+          ],
+          "neighbors": [
+            "poly:6:-18",
+            "poly:8:-18",
+            "poly:7:-19",
+            "poly:7:-17"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:8:-18",
+          "vertices": [
+            38,
+            45,
+            46,
+            43
+          ],
+          "neighbors": [
+            "poly:7:-18",
+            "poly:8:-17"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:4:-17",
+          "vertices": [
+            36,
+            35,
+            41,
+            42
+          ],
+          "neighbors": [
+            "poly:5:-17",
+            "poly:4:-18"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:5:-17",
+          "vertices": [
+            35,
+            34,
+            44,
+            41
+          ],
+          "neighbors": [
+            "poly:4:-17",
+            "poly:6:-17",
+            "poly:5:-18",
+            "poly:5:-16"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:6:-17",
+          "vertices": [
+            34,
+            40,
+            48,
+            44
+          ],
+          "neighbors": [
+            "poly:5:-17",
+            "poly:7:-17",
+            "poly:6:-18",
+            "poly:6:-16"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:7:-17",
+          "vertices": [
+            40,
+            43,
+            47,
+            48
+          ],
+          "neighbors": [
+            "poly:6:-17",
+            "poly:8:-17",
+            "poly:7:-18",
+            "poly:7:-16"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:8:-17",
+          "vertices": [
+            43,
+            46,
+            51,
+            47
+          ],
+          "neighbors": [
+            "poly:7:-17",
+            "poly:9:-17",
+            "poly:8:-18",
+            "poly:8:-16"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:9:-17",
+          "vertices": [
+            46,
+            53,
+            54,
+            51
+          ],
+          "neighbors": [
+            "poly:8:-17",
+            "poly:9:-16"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:5:-16",
+          "vertices": [
+            41,
+            44,
+            49,
+            50
+          ],
+          "neighbors": [
+            "poly:6:-16",
+            "poly:5:-17"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:6:-16",
+          "vertices": [
+            44,
+            48,
+            52,
+            49
+          ],
+          "neighbors": [
+            "poly:5:-16",
+            "poly:7:-16",
+            "poly:6:-17",
+            "poly:6:-15"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:7:-16",
+          "vertices": [
+            48,
+            47,
+            56,
+            52
+          ],
+          "neighbors": [
+            "poly:6:-16",
+            "poly:8:-16",
+            "poly:7:-17",
+            "poly:7:-15"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:8:-16",
+          "vertices": [
+            47,
+            51,
+            55,
+            56
+          ],
+          "neighbors": [
+            "poly:7:-16",
+            "poly:9:-16",
+            "poly:8:-17",
+            "poly:8:-15"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:9:-16",
+          "vertices": [
+            51,
+            54,
+            59,
+            55
+          ],
+          "neighbors": [
+            "poly:8:-16",
+            "poly:10:-16",
+            "poly:9:-17",
+            "poly:9:-15"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:10:-16",
+          "vertices": [
+            54,
+            64,
+            65,
+            59
+          ],
+          "neighbors": [
+            "poly:9:-16",
+            "poly:11:-16",
+            "poly:10:-15"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:11:-16",
+          "vertices": [
+            64,
+            72,
+            73,
+            65
+          ],
+          "neighbors": [
+            "poly:10:-16",
+            "poly:11:-15"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:6:-15",
+          "vertices": [
+            49,
+            52,
+            57,
+            58
+          ],
+          "neighbors": [
+            "poly:7:-15",
+            "poly:6:-16"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:7:-15",
+          "vertices": [
+            52,
+            56,
+            61,
+            57
+          ],
+          "neighbors": [
+            "poly:6:-15",
+            "poly:8:-15",
+            "poly:7:-16",
+            "poly:7:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:8:-15",
+          "vertices": [
+            56,
+            55,
+            60,
+            61
+          ],
+          "neighbors": [
+            "poly:7:-15",
+            "poly:9:-15",
+            "poly:8:-16",
+            "poly:8:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:9:-15",
+          "vertices": [
+            55,
+            59,
+            66,
+            60
+          ],
+          "neighbors": [
+            "poly:8:-15",
+            "poly:10:-15",
+            "poly:9:-16",
+            "poly:9:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:10:-15",
+          "vertices": [
+            59,
+            65,
+            68,
+            66
+          ],
+          "neighbors": [
+            "poly:9:-15",
+            "poly:11:-15",
+            "poly:10:-16",
+            "poly:10:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:11:-15",
+          "vertices": [
+            65,
+            73,
+            76,
+            68
+          ],
+          "neighbors": [
+            "poly:10:-15",
+            "poly:12:-15",
+            "poly:11:-16",
+            "poly:11:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:12:-15",
+          "vertices": [
+            73,
+            81,
+            82,
+            76
+          ],
+          "neighbors": [
+            "poly:11:-15",
+            "poly:12:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:7:-14",
+          "vertices": [
+            57,
+            61,
+            62,
+            63
+          ],
+          "neighbors": [
+            "poly:8:-14",
+            "poly:7:-15"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:8:-14",
+          "vertices": [
+            61,
+            60,
+            67,
+            62
+          ],
+          "neighbors": [
+            "poly:7:-14",
+            "poly:9:-14",
+            "poly:8:-15",
+            "poly:8:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:9:-14",
+          "vertices": [
+            60,
+            66,
+            69,
+            67
+          ],
+          "neighbors": [
+            "poly:8:-14",
+            "poly:10:-14",
+            "poly:9:-15",
+            "poly:9:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:10:-14",
+          "vertices": [
+            66,
+            68,
+            74,
+            69
+          ],
+          "neighbors": [
+            "poly:9:-14",
+            "poly:11:-14",
+            "poly:10:-15",
+            "poly:10:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:11:-14",
+          "vertices": [
+            68,
+            76,
+            77,
+            74
+          ],
+          "neighbors": [
+            "poly:10:-14",
+            "poly:12:-14",
+            "poly:11:-15",
+            "poly:11:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:12:-14",
+          "vertices": [
+            76,
+            82,
+            83,
+            77
+          ],
+          "neighbors": [
+            "poly:11:-14",
+            "poly:13:-14",
+            "poly:12:-15",
+            "poly:12:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:13:-14",
+          "vertices": [
+            82,
+            85,
+            86,
+            83
+          ],
+          "neighbors": [
+            "poly:12:-14",
+            "poly:14:-14",
+            "poly:13:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:14:-14",
+          "vertices": [
+            85,
+            94,
+            95,
+            86
+          ],
+          "neighbors": [
+            "poly:13:-14",
+            "poly:14:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:8:-13",
+          "vertices": [
+            62,
+            67,
+            70,
+            71
+          ],
+          "neighbors": [
+            "poly:9:-13",
+            "poly:8:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:9:-13",
+          "vertices": [
+            67,
+            69,
+            75,
+            70
+          ],
+          "neighbors": [
+            "poly:8:-13",
+            "poly:10:-13",
+            "poly:9:-14"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:10:-13",
+          "vertices": [
+            69,
+            74,
+            78,
+            75
+          ],
+          "neighbors": [
+            "poly:9:-13",
+            "poly:11:-13",
+            "poly:10:-14",
+            "poly:10:-12"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:11:-13",
+          "vertices": [
+            74,
+            77,
+            84,
+            78
+          ],
+          "neighbors": [
+            "poly:10:-13",
+            "poly:12:-13",
+            "poly:11:-14",
+            "poly:11:-12"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:12:-13",
+          "vertices": [
+            77,
+            83,
+            87,
+            84
+          ],
+          "neighbors": [
+            "poly:11:-13",
+            "poly:13:-13",
+            "poly:12:-14",
+            "poly:12:-12"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:13:-13",
+          "vertices": [
+            83,
+            86,
+            89,
+            87
+          ],
+          "neighbors": [
+            "poly:12:-13",
+            "poly:14:-13",
+            "poly:13:-14",
+            "poly:13:-12"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:14:-13",
+          "vertices": [
+            86,
+            95,
+            96,
+            89
+          ],
+          "neighbors": [
+            "poly:13:-13",
+            "poly:15:-13",
+            "poly:14:-14",
+            "poly:14:-12"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:15:-13",
+          "vertices": [
+            95,
+            98,
+            99,
+            96
+          ],
+          "neighbors": [
+            "poly:14:-13",
+            "poly:15:-12"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:10:-12",
+          "vertices": [
+            75,
+            78,
+            79,
+            80
+          ],
+          "neighbors": [
+            "poly:11:-12",
+            "poly:10:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:11:-12",
+          "vertices": [
+            78,
+            84,
+            88,
+            79
+          ],
+          "neighbors": [
+            "poly:10:-12",
+            "poly:12:-12",
+            "poly:11:-13"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:12:-12",
+          "vertices": [
+            84,
+            87,
+            91,
+            88
+          ],
+          "neighbors": [
+            "poly:11:-12",
+            "poly:13:-12",
+            "poly:12:-13",
+            "poly:12:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:13:-12",
+          "vertices": [
+            87,
+            89,
+            90,
+            91
+          ],
+          "neighbors": [
+            "poly:12:-12",
+            "poly:14:-12",
+            "poly:13:-13",
+            "poly:13:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:14:-12",
+          "vertices": [
+            89,
+            96,
+            100,
+            90
+          ],
+          "neighbors": [
+            "poly:13:-12",
+            "poly:15:-12",
+            "poly:14:-13",
+            "poly:14:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:15:-12",
+          "vertices": [
+            96,
+            99,
+            103,
+            100
+          ],
+          "neighbors": [
+            "poly:14:-12",
+            "poly:16:-12",
+            "poly:15:-13",
+            "poly:15:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:16:-12",
+          "vertices": [
+            99,
+            106,
+            107,
+            103
+          ],
+          "neighbors": [
+            "poly:15:-12",
+            "poly:17:-12",
+            "poly:16:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:17:-12",
+          "vertices": [
+            106,
+            113,
+            114,
+            107
+          ],
+          "neighbors": [
+            "poly:16:-12",
+            "poly:17:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:12:-11",
+          "vertices": [
+            88,
+            91,
+            92,
+            93
+          ],
+          "neighbors": [
+            "poly:13:-11",
+            "poly:12:-12"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:13:-11",
+          "vertices": [
+            91,
+            90,
+            97,
+            92
+          ],
+          "neighbors": [
+            "poly:12:-11",
+            "poly:14:-11",
+            "poly:13:-12",
+            "poly:13:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:14:-11",
+          "vertices": [
+            90,
+            100,
+            104,
+            97
+          ],
+          "neighbors": [
+            "poly:13:-11",
+            "poly:15:-11",
+            "poly:14:-12",
+            "poly:14:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:15:-11",
+          "vertices": [
+            100,
+            103,
+            108,
+            104
+          ],
+          "neighbors": [
+            "poly:14:-11",
+            "poly:16:-11",
+            "poly:15:-12",
+            "poly:15:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:16:-11",
+          "vertices": [
+            103,
+            107,
+            110,
+            108
+          ],
+          "neighbors": [
+            "poly:15:-11",
+            "poly:17:-11",
+            "poly:16:-12",
+            "poly:16:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:17:-11",
+          "vertices": [
+            107,
+            114,
+            115,
+            110
+          ],
+          "neighbors": [
+            "poly:16:-11",
+            "poly:18:-11",
+            "poly:17:-12",
+            "poly:17:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:18:-11",
+          "vertices": [
+            114,
+            118,
+            119,
+            115
+          ],
+          "neighbors": [
+            "poly:17:-11",
+            "poly:19:-11",
+            "poly:18:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:19:-11",
+          "vertices": [
+            118,
+            125,
+            126,
+            119
+          ],
+          "neighbors": [
+            "poly:18:-11",
+            "poly:19:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:13:-10",
+          "vertices": [
+            92,
+            97,
+            101,
+            102
+          ],
+          "neighbors": [
+            "poly:14:-10",
+            "poly:13:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:14:-10",
+          "vertices": [
+            97,
+            104,
+            105,
+            101
+          ],
+          "neighbors": [
+            "poly:13:-10",
+            "poly:15:-10",
+            "poly:14:-11"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:15:-10",
+          "vertices": [
+            104,
+            108,
+            109,
+            105
+          ],
+          "neighbors": [
+            "poly:14:-10",
+            "poly:16:-10",
+            "poly:15:-11",
+            "poly:15:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:16:-10",
+          "vertices": [
+            108,
+            110,
+            116,
+            109
+          ],
+          "neighbors": [
+            "poly:15:-10",
+            "poly:17:-10",
+            "poly:16:-11",
+            "poly:16:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:17:-10",
+          "vertices": [
+            110,
+            115,
+            120,
+            116
+          ],
+          "neighbors": [
+            "poly:16:-10",
+            "poly:18:-10",
+            "poly:17:-11",
+            "poly:17:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:18:-10",
+          "vertices": [
+            115,
+            119,
+            122,
+            120
+          ],
+          "neighbors": [
+            "poly:17:-10",
+            "poly:19:-10",
+            "poly:18:-11",
+            "poly:18:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:19:-10",
+          "vertices": [
+            119,
+            126,
+            127,
+            122
+          ],
+          "neighbors": [
+            "poly:18:-10",
+            "poly:20:-10",
+            "poly:19:-11",
+            "poly:19:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:20:-10",
+          "vertices": [
+            126,
+            129,
+            130,
+            127
+          ],
+          "neighbors": [
+            "poly:19:-10",
+            "poly:20:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:15:-9",
+          "vertices": [
+            105,
+            109,
+            111,
+            112
+          ],
+          "neighbors": [
+            "poly:16:-9",
+            "poly:15:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:16:-9",
+          "vertices": [
+            109,
+            116,
+            117,
+            111
+          ],
+          "neighbors": [
+            "poly:15:-9",
+            "poly:17:-9",
+            "poly:16:-10"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:17:-9",
+          "vertices": [
+            116,
+            120,
+            121,
+            117
+          ],
+          "neighbors": [
+            "poly:16:-9",
+            "poly:18:-9",
+            "poly:17:-10",
+            "poly:17:-8"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:18:-9",
+          "vertices": [
+            120,
+            122,
+            128,
+            121
+          ],
+          "neighbors": [
+            "poly:17:-9",
+            "poly:19:-9",
+            "poly:18:-10",
+            "poly:18:-8"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:19:-9",
+          "vertices": [
+            122,
+            127,
+            131,
+            128
+          ],
+          "neighbors": [
+            "poly:18:-9",
+            "poly:20:-9",
+            "poly:19:-10",
+            "poly:19:-8"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:20:-9",
+          "vertices": [
+            127,
+            130,
+            135,
+            131
+          ],
+          "neighbors": [
+            "poly:19:-9",
+            "poly:20:-10",
+            "poly:20:-8"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:17:-8",
+          "vertices": [
+            117,
+            121,
+            123,
+            124
+          ],
+          "neighbors": [
+            "poly:18:-8",
+            "poly:17:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:18:-8",
+          "vertices": [
+            121,
+            128,
+            132,
+            123
+          ],
+          "neighbors": [
+            "poly:17:-8",
+            "poly:19:-8",
+            "poly:18:-9",
+            "poly:18:-7"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:19:-8",
+          "vertices": [
+            128,
+            131,
+            137,
+            132
+          ],
+          "neighbors": [
+            "poly:18:-8",
+            "poly:20:-8",
+            "poly:19:-9",
+            "poly:19:-7"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:20:-8",
+          "vertices": [
+            131,
+            135,
+            136,
+            137
+          ],
+          "neighbors": [
+            "poly:19:-8",
+            "poly:20:-9"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:18:-7",
+          "vertices": [
+            123,
+            132,
+            133,
+            134
+          ],
+          "neighbors": [
+            "poly:19:-7",
+            "poly:18:-8"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        },
+        {
+          "id": "poly:19:-7",
+          "vertices": [
+            132,
+            137,
+            138,
+            133
+          ],
+          "neighbors": [
+            "poly:18:-7",
+            "poly:19:-8"
+          ],
+          "region": "road",
+          "cost": 1,
+          "confidence": 0.84
+        }
+      ]
+    }
+  ],
+  "updatedAt": "2026-09-05T10:10:50.503Z"
+}

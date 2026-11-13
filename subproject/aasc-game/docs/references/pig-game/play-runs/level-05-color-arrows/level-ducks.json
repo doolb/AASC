@@ -1,0 +1,188 @@
+{
+  "level": 5,
+  "status": "candidates_unverified",
+  "source": "original.png",
+  "duck_candidates": [
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        337.4,
+        327.4
+      ],
+      "bbox": [
+        325,
+        313,
+        26,
+        27
+      ],
+      "pixel_area": 464,
+      "id": 1
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        308.2,
+        327.5
+      ],
+      "bbox": [
+        296,
+        314,
+        26,
+        26
+      ],
+      "pixel_area": 453,
+      "id": 2
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        337.5,
+        357.0
+      ],
+      "bbox": [
+        325,
+        343,
+        26,
+        27
+      ],
+      "pixel_area": 455,
+      "id": 3
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        308.1,
+        357.1
+      ],
+      "bbox": [
+        296,
+        343,
+        26,
+        27
+      ],
+      "pixel_area": 450,
+      "id": 4
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        337.3,
+        504.5
+      ],
+      "bbox": [
+        325,
+        490,
+        26,
+        28
+      ],
+      "pixel_area": 432,
+      "id": 5
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        308.1,
+        504.6
+      ],
+      "bbox": [
+        296,
+        490,
+        26,
+        28
+      ],
+      "pixel_area": 437,
+      "id": 6
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        308.0,
+        533.8
+      ],
+      "bbox": [
+        296,
+        520,
+        26,
+        28
+      ],
+      "pixel_area": 440,
+      "id": 7
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        190.5,
+        533.9
+      ],
+      "bbox": [
+        178,
+        520,
+        26,
+        28
+      ],
+      "pixel_area": 440,
+      "id": 8
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        219.8,
+        534.0
+      ],
+      "bbox": [
+        207,
+        520,
+        26,
+        28
+      ],
+      "pixel_area": 442,
+      "id": 9
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        337.4,
+        534.0
+      ],
+      "bbox": [
+        325,
+        520,
+        26,
+        28
+      ],
+      "pixel_area": 447,
+      "id": 10
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        219.8,
+        563.3
+      ],
+      "bbox": [
+        207,
+        550,
+        26,
+        27
+      ],
+      "pixel_area": 435,
+      "id": 11
+    },
+    {
+      "kind": "yellow_duck_candidate",
+      "center": [
+        190.5,
+        563.4
+      ],
+      "bbox": [
+        178,
+        549,
+        26,
+        28
+      ],
+      "pixel_area": 441,
+      "id": 12
+    }
+  ],
+  "note": "黄色对象候选；逃跑和碰撞规则未确认"
+}

@@ -1,0 +1,36 @@
+{
+  "before": [
+    {
+      "kind": "blue_elephant_candidate",
+      "bbox": [
+        324,
+        601,
+        77,
+        112
+      ],
+      "blocking_bbox": null,
+      "blocking_status": "unknown",
+      "assumed_role": "blocker",
+      "pixel_area": 4859
+    }
+  ],
+  "after": [
+    {
+      "kind": "blue_elephant_candidate",
+      "bbox": [
+        326,
+        601,
+        77,
+        112
+      ],
+      "blocking_bbox": null,
+      "blocking_status": "unknown",
+      "assumed_role": "blocker",
+      "pixel_area": 4813
+    }
+  ],
+  "click": [
+    362,
+    657
+  ]
+}

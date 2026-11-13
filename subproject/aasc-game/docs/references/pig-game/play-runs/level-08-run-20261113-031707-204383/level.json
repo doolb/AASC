@@ -1,0 +1,57 @@
+{
+  "level": 8,
+  "status": "candidates_unverified",
+  "image_size": [
+    530,
+    942
+  ],
+  "original_sha256": "9821c3f13a491731557252cc6bde88849b23397097180d4b1f9ddae795b08438",
+  "board": [
+    74,
+    205,
+    392,
+    603
+  ],
+  "grid_parameters": null,
+  "gesture_candidates": [],
+  "count": 1,
+  "other_entities": [],
+  "unknown_directions": 0,
+  "pigs": [
+    {
+      "center": [
+        107.5,
+        429.5
+      ],
+      "normalized_center": [
+        0.20283,
+        0.455945
+      ],
+      "bbox": [
+        97,
+        410,
+        21,
+        39
+      ],
+      "visual_bbox": [
+        88,
+        401,
+        39,
+        57
+      ],
+      "direction": "north",
+      "direction_degrees": 267.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 13
+      },
+      "id": 1
+    }
+  ],
+  "warnings": [
+    "检测结果均为候选，数量与朝向需要结合原图人工核对",
+    "初始网格待复核：候选太少，无法自动校准网格"
+  ]
+}

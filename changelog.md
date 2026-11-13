@@ -14861,3 +14861,9 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 
 - ✅ [2026-11-12] 将手机倾斜驱动角色的增益和限幅提高到两倍，保持镜头独立限幅。
   - `display-wallpaper-controls.js`、PMX/VRM 运行时及壁纸测试；`npm run test:hologram-camera` 3 项通过。v190 基于已发布 v189，仅更改三个壁纸脚本，LAN/WAN 已发布校验；ADB 手机服务仍为 v164，外网设备及实际视差等待更新后验证。
+
+### HIE 子工程
+
+- ✅ [2026-11-13] 将 HIE、retop 和 remote-gamepad 迁入 `subproject/`，保留独立 Git 历史及未提交内容；增加 HIE 游戏任务证据桥接。桥接及分层测试 8 项通过，HIE build 通过。
+
+- ✅ [2026-11-13] HIE、retop、remote-gamepad 与 aasc-game 统一归属 AASC 主仓库；排除模型、本机采集、运行记录和构建产物，工作文件保留。

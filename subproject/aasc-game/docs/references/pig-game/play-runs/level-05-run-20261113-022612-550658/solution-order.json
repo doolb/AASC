@@ -1,0 +1,2668 @@
+{
+  "status": "victory_verified",
+  "steps": [
+    {
+      "index": 0,
+      "pig_id": 1,
+      "direction": "east",
+      "from": [
+        5,
+        0
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 5,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 34,
+      "pig_id": 36,
+      "direction": "west",
+      "from": [
+        2,
+        7
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 78,
+      "pig_id": 79,
+      "direction": "west",
+      "from": [
+        2,
+        16
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 6,
+      "pig_id": 9,
+      "direction": "north",
+      "from": [
+        1,
+        1
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 17,
+      "pig_id": 19,
+      "direction": "west",
+      "from": [
+        1,
+        4
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 69,
+      "pig_id": 75,
+      "direction": "south",
+      "from": [
+        11,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 70,
+      "pig_id": 72,
+      "direction": "south",
+      "from": [
+        0,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 73,
+      "pig_id": 74,
+      "direction": "south",
+      "from": [
+        10,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 1,
+      "pig_id": 3,
+      "direction": "north",
+      "from": [
+        3,
+        0
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 2,
+      "pig_id": 4,
+      "direction": "north",
+      "from": [
+        2,
+        0
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 13,
+      "pig_id": 15,
+      "direction": "west",
+      "from": [
+        0,
+        3
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 14,
+      "pig_id": 16,
+      "direction": "west",
+      "from": [
+        2,
+        3
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 15,
+      "pig_id": 17,
+      "direction": "west",
+      "from": [
+        4,
+        3
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 24,
+      "pig_id": 25,
+      "direction": "west",
+      "from": [
+        0,
+        5
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 51,
+      "pig_id": 53,
+      "direction": "west",
+      "from": [
+        0,
+        11
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 58,
+      "pig_id": 60,
+      "direction": "east",
+      "from": [
+        10,
+        12
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 61,
+      "pig_id": 63,
+      "direction": "west",
+      "from": [
+        0,
+        13
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 45,
+      "pig_id": 47,
+      "direction": "south",
+      "from": [
+        0,
+        9
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 63,
+      "pig_id": 66,
+      "direction": "east",
+      "from": [
+        10,
+        13
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 50,
+      "pig_id": 52,
+      "direction": "south",
+      "from": [
+        11,
+        10
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 5,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 42,
+      "pig_id": 44,
+      "direction": "south",
+      "from": [
+        11,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 7,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          9
+        ]
+      ]
+    },
+    {
+      "index": 38,
+      "pig_id": 40,
+      "direction": "east",
+      "from": [
+        9,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [
+        [
+          8,
+          8
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          7,
+          9
+        ],
+        [
+          8,
+          9
+        ]
+      ],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 43,
+      "pig_id": 45,
+      "direction": "east",
+      "from": [
+        9,
+        9
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 75,
+      "pig_id": 77,
+      "direction": "south",
+      "from": [
+        4,
+        15
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 76,
+      "pig_id": 78,
+      "direction": "south",
+      "from": [
+        5,
+        15
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 0,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 77,
+      "pig_id": 80,
+      "direction": "west",
+      "from": [
+        6,
+        16
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 79,
+      "pig_id": 81,
+      "direction": "west",
+      "from": [
+        8,
+        16
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 8,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 66,
+      "pig_id": 68,
+      "direction": "south",
+      "from": [
+        9,
+        13
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 56,
+      "pig_id": 56,
+      "direction": "south",
+      "from": [
+        9,
+        11
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 53,
+      "pig_id": 55,
+      "direction": "east",
+      "from": [
+        7,
+        11
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 62,
+      "pig_id": 65,
+      "direction": "east",
+      "from": [
+        7,
+        13
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 64,
+      "pig_id": 64,
+      "direction": "east",
+      "from": [
+        5,
+        13
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 5,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 71,
+      "pig_id": 73,
+      "direction": "south",
+      "from": [
+        7,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 72,
+      "pig_id": 71,
+      "direction": "south",
+      "from": [
+        8,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 74,
+      "pig_id": 76,
+      "direction": "east",
+      "from": [
+        2,
+        15
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 8,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 68,
+      "pig_id": 70,
+      "direction": "east",
+      "from": [
+        5,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 5,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 54,
+      "pig_id": 57,
+      "direction": "south",
+      "from": [
+        5,
+        11
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 55,
+      "pig_id": 58,
+      "direction": "south",
+      "from": [
+        6,
+        11
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 65,
+      "pig_id": 67,
+      "direction": "south",
+      "from": [
+        2,
+        13
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 67,
+      "pig_id": 69,
+      "direction": "west",
+      "from": [
+        3,
+        14
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 59,
+      "pig_id": 61,
+      "direction": "south",
+      "from": [
+        3,
+        12
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 60,
+      "pig_id": 62,
+      "direction": "south",
+      "from": [
+        4,
+        12
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 57,
+      "pig_id": 59,
+      "direction": "east",
+      "from": [
+        1,
+        12
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 9,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 3,
+      "pig_id": 6,
+      "direction": "west",
+      "from": [
+        4,
+        1
+      ],
+      "to": [
+        1,
+        1
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 4,
+      "pig_id": 7,
+      "direction": "west",
+      "from": [
+        6,
+        1
+      ],
+      "to": [
+        3,
+        1
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 11,
+      "pig_id": 13,
+      "direction": "north",
+      "from": [
+        6,
+        2
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 7,
+      "pig_id": 10,
+      "direction": "south",
+      "from": [
+        0,
+        1
+      ],
+      "to": [
+        0,
+        4
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 3,
+      "pig_id": 6,
+      "direction": "west",
+      "from": [
+        1,
+        1
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 4,
+      "pig_id": 7,
+      "direction": "west",
+      "from": [
+        3,
+        1
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 10,
+      "pig_id": 11,
+      "direction": "east",
+      "from": [
+        4,
+        2
+      ],
+      "to": [
+        7,
+        2
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 9,
+      "pig_id": 12,
+      "direction": "east",
+      "from": [
+        2,
+        2
+      ],
+      "to": [
+        5,
+        2
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 26,
+      "pig_id": 28,
+      "direction": "north",
+      "from": [
+        2,
+        5
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 5,
+      "duck_departures": [],
+      "ducks_after": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ]
+    },
+    {
+      "index": 39,
+      "pig_id": 41,
+      "direction": "north",
+      "from": [
+        2,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 8,
+      "duck_departures": [
+        [
+          3,
+          9
+        ],
+        [
+          3,
+          10
+        ],
+        [
+          4,
+          9
+        ],
+        [
+          4,
+          10
+        ]
+      ],
+      "ducks_after": []
+    },
+    {
+      "index": 49,
+      "pig_id": 51,
+      "direction": "north",
+      "from": [
+        2,
+        10
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 10,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 20,
+      "pig_id": 22,
+      "direction": "north",
+      "from": [
+        3,
+        4
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 52,
+      "pig_id": 54,
+      "direction": "west",
+      "from": [
+        3,
+        11
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 18,
+      "pig_id": 20,
+      "direction": "west",
+      "from": [
+        5,
+        4
+      ],
+      "to": [
+        1,
+        4
+      ],
+      "exited": false,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 19,
+      "pig_id": 21,
+      "direction": "west",
+      "from": [
+        7,
+        4
+      ],
+      "to": [
+        3,
+        4
+      ],
+      "exited": false,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 23,
+      "pig_id": 26,
+      "direction": "west",
+      "from": [
+        4,
+        5
+      ],
+      "to": [
+        1,
+        5
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 27,
+      "pig_id": 30,
+      "direction": "south",
+      "from": [
+        9,
+        5
+      ],
+      "to": [
+        9,
+        8
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 16,
+      "pig_id": 18,
+      "direction": "south",
+      "from": [
+        9,
+        3
+      ],
+      "to": [
+        9,
+        6
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 8,
+      "pig_id": 5,
+      "direction": "south",
+      "from": [
+        9,
+        1
+      ],
+      "to": [
+        9,
+        4
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 5,
+      "pig_id": 8,
+      "direction": "west",
+      "from": [
+        10,
+        1
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 10,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 22,
+      "pig_id": 24,
+      "direction": "north",
+      "from": [
+        11,
+        4
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 12,
+      "pig_id": 14,
+      "direction": "north",
+      "from": [
+        10,
+        2
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 21,
+      "pig_id": 23,
+      "direction": "north",
+      "from": [
+        10,
+        4
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 31,
+      "pig_id": 35,
+      "direction": "north",
+      "from": [
+        10,
+        6
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 10,
+      "pig_id": 11,
+      "direction": "east",
+      "from": [
+        7,
+        2
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 9,
+      "pig_id": 12,
+      "direction": "east",
+      "from": [
+        5,
+        2
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 5,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 46,
+      "pig_id": 48,
+      "direction": "west",
+      "from": [
+        5,
+        10
+      ],
+      "to": [
+        2,
+        10
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 41,
+      "pig_id": 43,
+      "direction": "south",
+      "from": [
+        6,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 7,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 47,
+      "pig_id": 49,
+      "direction": "west",
+      "from": [
+        7,
+        10
+      ],
+      "to": [
+        4,
+        10
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 48,
+      "pig_id": 50,
+      "direction": "west",
+      "from": [
+        9,
+        10
+      ],
+      "to": [
+        6,
+        10
+      ],
+      "exited": false,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 27,
+      "pig_id": 30,
+      "direction": "south",
+      "from": [
+        9,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 7,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 16,
+      "pig_id": 18,
+      "direction": "south",
+      "from": [
+        9,
+        6
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 9,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 8,
+      "pig_id": 5,
+      "direction": "south",
+      "from": [
+        9,
+        4
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 11,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 25,
+      "pig_id": 27,
+      "direction": "east",
+      "from": [
+        7,
+        5
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 30,
+      "pig_id": 34,
+      "direction": "north",
+      "from": [
+        8,
+        6
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 33,
+      "pig_id": 33,
+      "direction": "north",
+      "from": [
+        7,
+        6
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 29,
+      "pig_id": 31,
+      "direction": "east",
+      "from": [
+        0,
+        6
+      ],
+      "to": [
+        2,
+        6
+      ],
+      "exited": false,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 7,
+      "pig_id": 10,
+      "direction": "south",
+      "from": [
+        0,
+        4
+      ],
+      "to": [
+        0,
+        6
+      ],
+      "exited": false,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 18,
+      "pig_id": 20,
+      "direction": "west",
+      "from": [
+        1,
+        4
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 19,
+      "pig_id": 21,
+      "direction": "west",
+      "from": [
+        3,
+        4
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 3,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 32,
+      "pig_id": 32,
+      "direction": "north",
+      "from": [
+        4,
+        6
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 23,
+      "pig_id": 26,
+      "direction": "west",
+      "from": [
+        1,
+        5
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 35,
+      "pig_id": 37,
+      "direction": "west",
+      "from": [
+        5,
+        7
+      ],
+      "to": [
+        1,
+        7
+      ],
+      "exited": false,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 40,
+      "pig_id": 42,
+      "direction": "north",
+      "from": [
+        5,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 8,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 37,
+      "pig_id": 39,
+      "direction": "east",
+      "from": [
+        3,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 7,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 36,
+      "pig_id": 38,
+      "direction": "east",
+      "from": [
+        0,
+        8
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 10,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 7,
+      "pig_id": 10,
+      "direction": "south",
+      "from": [
+        0,
+        6
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 9,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 35,
+      "pig_id": 37,
+      "direction": "west",
+      "from": [
+        1,
+        7
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 1,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 44,
+      "pig_id": 46,
+      "direction": "north",
+      "from": [
+        1,
+        9
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 9,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 46,
+      "pig_id": 48,
+      "direction": "west",
+      "from": [
+        2,
+        10
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 2,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 47,
+      "pig_id": 49,
+      "direction": "west",
+      "from": [
+        4,
+        10
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 4,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 48,
+      "pig_id": 50,
+      "direction": "west",
+      "from": [
+        6,
+        10
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 6,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 28,
+      "pig_id": 29,
+      "direction": "south",
+      "from": [
+        6,
+        5
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 10,
+      "duck_departures": [],
+      "ducks_after": []
+    },
+    {
+      "index": 29,
+      "pig_id": 31,
+      "direction": "east",
+      "from": [
+        2,
+        6
+      ],
+      "to": null,
+      "exited": true,
+      "travel_cells": 8,
+      "duck_departures": [],
+      "ducks_after": []
+    }
+  ]
+}

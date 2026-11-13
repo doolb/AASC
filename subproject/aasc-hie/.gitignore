@@ -1,0 +1,13 @@
+node_modules/
+
+# Runtime logs
+logs/
+runtime-logs/
+*.log
+
+# Temporary frames
+tmp/frames/
+frames/
+
+# Unpublished package and runtime data
+data/unpublished/

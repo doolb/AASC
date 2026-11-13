@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Protocol/Protocol.csproj" />
+    <Compile Include="../../src/Sender/AggregateClient.cs" Link="AggregateClient.cs" />
+    <Compile Include="../../src/Sender/SenderLog.cs" Link="SenderLog.cs" />
+    <Compile Include="../../src/Server/GpuCounters.cs" Link="GpuCounters.cs" />
+    <Compile Include="../../src/Server/PresentMonSampler.cs" Link="PresentMonSampler.cs" />
+    <Compile Include="../../src/Server/ProcessTree.cs" Link="ProcessTree.cs" />
+    <Compile Include="../../src/Server/RtssSampler.cs" Link="RtssSampler.cs" />
+  </ItemGroup>
+</Project>

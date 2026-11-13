@@ -1,0 +1,24 @@
+{
+  "models": [
+    {
+      "id": "anydepth-dav2-sdt-vitb-fp16",
+      "task": "depth",
+      "backend": "onnx-anydepth",
+      "modelPath": "/mnt/AASC/res/models/anydepth/dav2_sdt_vitb-518-fp16.onnx",
+      "inputSize": 518,
+      "mean": [0.485, 0.456, 0.406],
+      "std": [0.229, 0.224, 0.225],
+      "relative": true
+    },
+    {
+      "id": "anydepth-dav2-sdt-vitb-fp32",
+      "task": "depth",
+      "backend": "onnx-anydepth",
+      "modelPath": "/mnt/AASC/res/models/anydepth/dav2_sdt_vitb-518.onnx",
+      "inputSize": 518,
+      "mean": [0.485, 0.456, 0.406],
+      "std": [0.229, 0.224, 0.225],
+      "relative": true
+    }
+  ]
+}

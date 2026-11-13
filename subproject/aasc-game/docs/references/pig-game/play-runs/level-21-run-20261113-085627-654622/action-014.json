@@ -1,0 +1,21 @@
+{
+  "action": {
+    "index": 15,
+    "pig_id": 16,
+    "direction": "north",
+    "from": [
+      2,
+      6
+    ],
+    "to": [
+      2,
+      2
+    ],
+    "exited": false,
+    "travel_cells": 4
+  },
+  "observed_center": [
+    165.5,
+    493.0
+  ]
+}

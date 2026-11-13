@@ -1,0 +1,40 @@
+{
+  "action": {
+    "index": 7,
+    "pig_id": 10,
+    "direction": "south",
+    "from": [
+      0,
+      1
+    ],
+    "to": [
+      0,
+      4
+    ],
+    "exited": false,
+    "travel_cells": 3,
+    "duck_departures": [],
+    "ducks_after": [
+      [
+        3,
+        9
+      ],
+      [
+        3,
+        10
+      ],
+      [
+        4,
+        9
+      ],
+      [
+        4,
+        10
+      ]
+    ]
+  },
+  "observed_center": [
+    103.0,
+    313.0
+  ]
+}

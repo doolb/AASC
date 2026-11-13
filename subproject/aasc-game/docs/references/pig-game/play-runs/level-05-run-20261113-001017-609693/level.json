@@ -1,0 +1,57 @@
+{
+  "level": 5,
+  "status": "candidates_unverified",
+  "image_size": [
+    530,
+    942
+  ],
+  "original_sha256": "58e1ae1ba9158870897387afb9cf42efcb955cbdbbdc7711d3eb7c5f2be2b4ab",
+  "board": [
+    74,
+    205,
+    392,
+    603
+  ],
+  "grid_parameters": null,
+  "gesture_candidates": [],
+  "count": 1,
+  "unknown_directions": 1,
+  "pigs": [
+    {
+      "center": [
+        418.0,
+        246.0
+      ],
+      "normalized_center": [
+        0.788679,
+        0.261146
+      ],
+      "bbox": [
+        400,
+        231,
+        36,
+        30
+      ],
+      "visual_bbox": [
+        391,
+        222,
+        54,
+        48
+      ],
+      "direction": "unknown",
+      "direction_degrees": null,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 289,
+        "axis_negative": 45
+      },
+      "id": 1
+    }
+  ],
+  "warnings": [
+    "存在方向不明确的小猪，需要人工核对标注图和原图",
+    "检测结果均为候选，数量与朝向需要结合原图人工核对",
+    "初始网格待复核：候选太少，无法自动校准网格"
+  ]
+}

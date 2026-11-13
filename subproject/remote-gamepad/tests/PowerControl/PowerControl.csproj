@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Protocol/Protocol.csproj" />
+    <Compile Include="../../src/Sender/PowerClient.cs" Link="PowerClient.cs" />
+    <Compile Include="../../src/Sender/GamepadClient.cs" Link="GamepadClient.cs" />
+    <Compile Include="../../src/Sender/PowerArguments.cs" Link="PowerArguments.cs" />
+    <Compile Include="../../src/Sender/SenderSettings.cs" Link="SenderSettings.cs" />
+    <Compile Include="../../src/Sender/KeyboardRouter.cs" Link="KeyboardRouter.cs" />
+    <Compile Include="../../src/Sender/SenderLog.cs" Link="SenderLog.cs" />
+    <Compile Include="../../src/Sender/AggregateClient.cs" Link="AggregateClient.cs" />
+    <Compile Include="../../src/Server/PowerServer.cs" Link="PowerServer.cs" />
+    <Compile Include="../../src/Server/AutoSleepCoordinator.cs" Link="AutoSleepCoordinator.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Protocol/Protocol.csproj" />
+    <Compile Include="../../src/Sender/AggregateClient.cs" Link="AggregateClient.cs" />
+    <Compile Include="../../src/Sender/SenderLog.cs" Link="SenderLog.cs" />
+  </ItemGroup>
+</Project>

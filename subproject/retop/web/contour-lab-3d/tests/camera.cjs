@@ -1,0 +1,9 @@
+const assert=require('node:assert/strict'),E=require('../engine.js')(),{cameraMatrix}=require('../viewer.js');
+const camera={yaw:.65,pitch:.36,zoom:1.35,pan:[.12,-.08]},center=[12,-7,3],scale=9,aspect=.8;
+const project=(p,m)=>{const v=[...p,1],q=[0,1,2,3].map(i=>v.reduce((s,x,k)=>s+m[k*4+i]*x,0));return q.map(v=>v/q[3]);};
+const z=[Math.sin(camera.yaw)*Math.cos(camera.pitch),Math.sin(camera.pitch),Math.cos(camera.yaw)*Math.cos(camera.pitch)],x=E.unit(E.cross([0,1,0],z));
+const ortho=cameraMatrix(camera,E,center,scale,aspect),persp=cameraMatrix({...camera,projection:'perspective'},E,center,scale,aspect);
+for(const offset of [0,.1,-.25]){const p=E.add(center,E.mul(x,scale*offset)),a=project(p,ortho.matrix),b=project(p,persp.matrix);for(let k=0;k<2;k++)assert(Math.abs(a[k]-b[k])<1e-12,'switch matches the focus-plane framing');}
+const shifted=d=>E.add(E.add(center,E.mul(x,scale*.1)),E.mul(z,d));const oa=project(shifted(-scale*.3),ortho.matrix),ob=project(shifted(scale*.3),ortho.matrix),pa=project(shifted(-scale*.3),persp.matrix),pb=project(shifted(scale*.3),persp.matrix);assert(Math.abs(oa[0]-ob[0])<1e-12);assert(pb[0]>pa[0]);
+for(const zoom of [.2,1,8])for(const aspect of [.25,1,3]){const lens=cameraMatrix({...camera,zoom,projection:'perspective'},E,center,scale,aspect);assert(lens.matrix.every(Number.isFinite));for(const d of [-.5,.5]){const p=project(shifted(scale*d),lens.matrix);assert(p[2]>-1&&p[2]<1,'source stays between the near/far planes at extreme zoom');const distance=2*lens.near*lens.far/(lens.far+lens.near-p[2]*(lens.far-lens.near));assert(Math.abs(distance-(lens.distance-scale*d))<scale*1e-10);}}
+assert.deepEqual(camera,{yaw:.65,pitch:.36,zoom:1.35,pan:[.12,-.08]});console.log('PASS orthographic/perspective framing, foreshortening, extreme zoom clipping and picking-depth conversion');

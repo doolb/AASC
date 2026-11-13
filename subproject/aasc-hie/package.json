@@ -1,0 +1,29 @@
+{
+  "name": "aasc-hie",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure-JavaScript hierarchical autonomy, navigation, and execution engine",
+  "scripts": {
+    "build": "node --check src/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node src/index.js",
+    "nav-check": "node src/cli.js nav-check",
+    "nav-chain": "node src/cli.js nav-chain",
+    "nav-serve": "node src/cli.js nav-serve",
+    "nav-map-build": "node src/cli.js nav-map-build",
+    "hok:preview": "node scripts/hok-state-preview.js",
+    "hok:capture": "node scripts/hok-state-capture.js",
+    "hok:index": "node scripts/hok-build-fingerprint-index.js"
+  },
+  "dependencies": {
+    "@techstark/opencv-js": "5.0.0-release.1",
+    "bmp-js": "0.1.0",
+    "onnxruntime-web": "1.26.0",
+    "pngjs": "7.0.0"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}

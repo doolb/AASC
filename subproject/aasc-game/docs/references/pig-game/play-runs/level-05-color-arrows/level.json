@@ -1,0 +1,2547 @@
+{
+  "level": 5,
+  "status": "candidates_unverified",
+  "source": {
+    "kind": "x11",
+    "display": ":1",
+    "window_id": "0x3a00015",
+    "window_crop": null
+  },
+  "original_sha256": "ef2a99e015dbc04d2e299c0fb0c52fdc22d884f9a7f9fab2ff1520acc0a5d96f",
+  "image_size": [
+    530,
+    942
+  ],
+  "board": [
+    74,
+    205,
+    391,
+    602
+  ],
+  "grid_parameters": null,
+  "gesture_candidates": [],
+  "coordinates": "游戏窗口左上角为原点，x 向右，y 向下；角度从右侧顺时针",
+  "count": 81,
+  "unknown_directions": 1,
+  "warnings": [
+    "存在方向不明确的小猪，需要人工核对标注图和原图",
+    "检测结果均为候选，数量与朝向需要结合原图人工核对"
+  ],
+  "pigs": [
+    {
+      "center": [
+        269.0,
+        265.5
+      ],
+      "normalized_center": [
+        0.507547,
+        0.281847
+      ],
+      "bbox": [
+        248,
+        254,
+        42,
+        23
+      ],
+      "visual_bbox": [
+        239,
+        245,
+        60,
+        41
+      ],
+      "direction": "east",
+      "direction_degrees": 353.1,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 5,
+        "axis_negative": 0
+      },
+      "id": 1
+    },
+    {
+      "center": [
+        329.0,
+        265.5
+      ],
+      "normalized_center": [
+        0.620755,
+        0.281847
+      ],
+      "bbox": [
+        308,
+        254,
+        42,
+        23
+      ],
+      "visual_bbox": [
+        299,
+        245,
+        60,
+        41
+      ],
+      "direction": "east",
+      "direction_degrees": 354.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 6,
+        "axis_negative": 0
+      },
+      "id": 2
+    },
+    {
+      "center": [
+        192.5,
+        278.5
+      ],
+      "normalized_center": [
+        0.363208,
+        0.295648
+      ],
+      "bbox": [
+        182,
+        258,
+        21,
+        41
+      ],
+      "visual_bbox": [
+        173,
+        249,
+        39,
+        59
+      ],
+      "direction": "north",
+      "direction_degrees": 268.6,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 5
+      },
+      "id": 3
+    },
+    {
+      "center": [
+        162.5,
+        279.0
+      ],
+      "normalized_center": [
+        0.306604,
+        0.296178
+      ],
+      "bbox": [
+        152,
+        258,
+        21,
+        42
+      ],
+      "visual_bbox": [
+        143,
+        249,
+        39,
+        60
+      ],
+      "direction": "north",
+      "direction_degrees": 269.2,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 4
+    },
+    {
+      "center": [
+        370.5,
+        280.5
+      ],
+      "normalized_center": [
+        0.699057,
+        0.297771
+      ],
+      "bbox": [
+        361,
+        261,
+        19,
+        39
+      ],
+      "visual_bbox": [
+        352,
+        252,
+        37,
+        57
+      ],
+      "direction": "south",
+      "direction_degrees": 92.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 12
+      },
+      "id": 5
+    },
+    {
+      "center": [
+        235.5,
+        295.5
+      ],
+      "normalized_center": [
+        0.44434,
+        0.313694
+      ],
+      "bbox": [
+        217,
+        284,
+        37,
+        23
+      ],
+      "visual_bbox": [
+        208,
+        275,
+        55,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 182.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 11
+      },
+      "id": 6
+    },
+    {
+      "center": [
+        294.5,
+        295.5
+      ],
+      "normalized_center": [
+        0.55566,
+        0.313694
+      ],
+      "bbox": [
+        276,
+        284,
+        37,
+        23
+      ],
+      "visual_bbox": [
+        267,
+        275,
+        55,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 182.1,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 7
+    },
+    {
+      "center": [
+        414.5,
+        295.5
+      ],
+      "normalized_center": [
+        0.782075,
+        0.313694
+      ],
+      "bbox": [
+        397,
+        284,
+        35,
+        23
+      ],
+      "visual_bbox": [
+        388,
+        275,
+        53,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 180.8,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 14
+      },
+      "id": 8
+    },
+    {
+      "center": [
+        133.0,
+        308.0
+      ],
+      "normalized_center": [
+        0.250943,
+        0.326964
+      ],
+      "bbox": [
+        122,
+        287,
+        22,
+        42
+      ],
+      "visual_bbox": [
+        113,
+        278,
+        40,
+        60
+      ],
+      "direction": "north",
+      "direction_degrees": 269.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 9
+    },
+    {
+      "center": [
+        103.0,
+        313.0
+      ],
+      "normalized_center": [
+        0.19434,
+        0.332272
+      ],
+      "bbox": [
+        92,
+        290,
+        22,
+        46
+      ],
+      "visual_bbox": [
+        83,
+        281,
+        40,
+        64
+      ],
+      "direction": "south",
+      "direction_degrees": 92.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 10
+    },
+    {
+      "center": [
+        240.0,
+        324.5
+      ],
+      "normalized_center": [
+        0.45283,
+        0.34448
+      ],
+      "bbox": [
+        219,
+        313,
+        42,
+        23
+      ],
+      "visual_bbox": [
+        210,
+        304,
+        60,
+        41
+      ],
+      "direction": "east",
+      "direction_degrees": 354.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 9,
+        "axis_negative": 0
+      },
+      "id": 11
+    },
+    {
+      "center": [
+        180.0,
+        325.0
+      ],
+      "normalized_center": [
+        0.339623,
+        0.345011
+      ],
+      "bbox": [
+        158,
+        314,
+        44,
+        22
+      ],
+      "visual_bbox": [
+        149,
+        305,
+        62,
+        40
+      ],
+      "direction": "east",
+      "direction_degrees": 354.8,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 10,
+        "axis_negative": 0
+      },
+      "id": 12
+    },
+    {
+      "center": [
+        281.0,
+        338.0
+      ],
+      "normalized_center": [
+        0.530189,
+        0.358811
+      ],
+      "bbox": [
+        271,
+        318,
+        20,
+        40
+      ],
+      "visual_bbox": [
+        262,
+        309,
+        38,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 270.7,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 9,
+        "axis_negative": 0
+      },
+      "id": 13
+    },
+    {
+      "center": [
+        400.5,
+        338.5
+      ],
+      "normalized_center": [
+        0.75566,
+        0.359342
+      ],
+      "bbox": [
+        391,
+        318,
+        19,
+        41
+      ],
+      "visual_bbox": [
+        382,
+        309,
+        37,
+        59
+      ],
+      "direction": "north",
+      "direction_degrees": 271.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 7,
+        "axis_negative": 0
+      },
+      "id": 14
+    },
+    {
+      "center": [
+        116.5,
+        354.5
+      ],
+      "normalized_center": [
+        0.219811,
+        0.376327
+      ],
+      "bbox": [
+        97,
+        343,
+        39,
+        23
+      ],
+      "visual_bbox": [
+        88,
+        334,
+        57,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 180.7,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 15
+    },
+    {
+      "center": [
+        175.5,
+        354.5
+      ],
+      "normalized_center": [
+        0.331132,
+        0.376327
+      ],
+      "bbox": [
+        156,
+        343,
+        39,
+        23
+      ],
+      "visual_bbox": [
+        147,
+        334,
+        57,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 180.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 10
+      },
+      "id": 16
+    },
+    {
+      "center": [
+        235.5,
+        354.5
+      ],
+      "normalized_center": [
+        0.44434,
+        0.376327
+      ],
+      "bbox": [
+        217,
+        343,
+        37,
+        23
+      ],
+      "visual_bbox": [
+        208,
+        334,
+        55,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 179.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 13
+      },
+      "id": 17
+    },
+    {
+      "center": [
+        370.5,
+        373.0
+      ],
+      "normalized_center": [
+        0.699057,
+        0.395966
+      ],
+      "bbox": [
+        361,
+        350,
+        19,
+        46
+      ],
+      "visual_bbox": [
+        352,
+        341,
+        37,
+        64
+      ],
+      "direction": "south",
+      "direction_degrees": 93.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 10
+      },
+      "id": 18
+    },
+    {
+      "center": [
+        146.0,
+        384.5
+      ],
+      "normalized_center": [
+        0.275472,
+        0.408174
+      ],
+      "bbox": [
+        127,
+        373,
+        38,
+        23
+      ],
+      "visual_bbox": [
+        118,
+        364,
+        56,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 182.0,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 5
+      },
+      "id": 19
+    },
+    {
+      "center": [
+        265.0,
+        384.5
+      ],
+      "normalized_center": [
+        0.5,
+        0.408174
+      ],
+      "bbox": [
+        246,
+        373,
+        38,
+        23
+      ],
+      "visual_bbox": [
+        237,
+        364,
+        56,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 179.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 20
+    },
+    {
+      "center": [
+        325.0,
+        384.5
+      ],
+      "normalized_center": [
+        0.613208,
+        0.408174
+      ],
+      "bbox": [
+        307,
+        373,
+        36,
+        23
+      ],
+      "visual_bbox": [
+        298,
+        364,
+        54,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 178.6,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 11
+      },
+      "id": 21
+    },
+    {
+      "center": [
+        192.5,
+        397.5
+      ],
+      "normalized_center": [
+        0.363208,
+        0.421975
+      ],
+      "bbox": [
+        182,
+        377,
+        21,
+        41
+      ],
+      "visual_bbox": [
+        173,
+        368,
+        39,
+        59
+      ],
+      "direction": "north",
+      "direction_degrees": 271.2,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 9,
+        "axis_negative": 0
+      },
+      "id": 22
+    },
+    {
+      "center": [
+        400.5,
+        398.0
+      ],
+      "normalized_center": [
+        0.75566,
+        0.422505
+      ],
+      "bbox": [
+        391,
+        378,
+        19,
+        40
+      ],
+      "visual_bbox": [
+        382,
+        369,
+        37,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 272.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 9,
+        "axis_negative": 0
+      },
+      "id": 23
+    },
+    {
+      "center": [
+        430.0,
+        398.0
+      ],
+      "normalized_center": [
+        0.811321,
+        0.422505
+      ],
+      "bbox": [
+        421,
+        378,
+        18,
+        40
+      ],
+      "visual_bbox": [
+        412,
+        369,
+        36,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 272.1,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 8,
+        "axis_negative": 0
+      },
+      "id": 24
+    },
+    {
+      "center": [
+        116.5,
+        413.5
+      ],
+      "normalized_center": [
+        0.219811,
+        0.43896
+      ],
+      "bbox": [
+        97,
+        402,
+        39,
+        23
+      ],
+      "visual_bbox": [
+        88,
+        393,
+        57,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 179.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 25
+    },
+    {
+      "center": [
+        235.5,
+        413.5
+      ],
+      "normalized_center": [
+        0.44434,
+        0.43896
+      ],
+      "bbox": [
+        217,
+        402,
+        37,
+        23
+      ],
+      "visual_bbox": [
+        208,
+        393,
+        55,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 178.8,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 12
+      },
+      "id": 26
+    },
+    {
+      "center": [
+        329.0,
+        414.0
+      ],
+      "normalized_center": [
+        0.620755,
+        0.43949
+      ],
+      "bbox": [
+        308,
+        403,
+        42,
+        22
+      ],
+      "visual_bbox": [
+        299,
+        394,
+        60,
+        40
+      ],
+      "direction": "east",
+      "direction_degrees": 352.7,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 3,
+        "axis_negative": 0
+      },
+      "id": 27
+    },
+    {
+      "center": [
+        162.5,
+        427.0
+      ],
+      "normalized_center": [
+        0.306604,
+        0.453291
+      ],
+      "bbox": [
+        152,
+        407,
+        21,
+        40
+      ],
+      "visual_bbox": [
+        143,
+        398,
+        39,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 270.0,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 9,
+        "axis_negative": 0
+      },
+      "id": 28
+    },
+    {
+      "center": [
+        281.0,
+        431.5
+      ],
+      "normalized_center": [
+        0.530189,
+        0.458068
+      ],
+      "bbox": [
+        271,
+        409,
+        20,
+        45
+      ],
+      "visual_bbox": [
+        262,
+        400,
+        38,
+        63
+      ],
+      "direction": "south",
+      "direction_degrees": 95.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 29
+    },
+    {
+      "center": [
+        370.5,
+        431.5
+      ],
+      "normalized_center": [
+        0.699057,
+        0.458068
+      ],
+      "bbox": [
+        361,
+        409,
+        19,
+        45
+      ],
+      "visual_bbox": [
+        352,
+        400,
+        37,
+        63
+      ],
+      "direction": "south",
+      "direction_degrees": 95.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 10
+      },
+      "id": 30
+    },
+    {
+      "center": [
+        120.5,
+        444.0
+      ],
+      "normalized_center": [
+        0.227358,
+        0.471338
+      ],
+      "bbox": [
+        98,
+        433,
+        45,
+        22
+      ],
+      "visual_bbox": [
+        89,
+        424,
+        63,
+        40
+      ],
+      "direction": "east",
+      "direction_degrees": 357.2,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 12,
+        "axis_negative": 0
+      },
+      "id": 31
+    },
+    {
+      "center": [
+        221.5,
+        457.0
+      ],
+      "normalized_center": [
+        0.417925,
+        0.485138
+      ],
+      "bbox": [
+        211,
+        437,
+        21,
+        40
+      ],
+      "visual_bbox": [
+        202,
+        428,
+        39,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 271.6,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 8,
+        "axis_negative": 0
+      },
+      "id": 32
+    },
+    {
+      "center": [
+        311.0,
+        457.0
+      ],
+      "normalized_center": [
+        0.586792,
+        0.485138
+      ],
+      "bbox": [
+        301,
+        437,
+        20,
+        40
+      ],
+      "visual_bbox": [
+        292,
+        428,
+        38,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 272.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 10,
+        "axis_negative": 0
+      },
+      "id": 33
+    },
+    {
+      "center": [
+        340.5,
+        457.0
+      ],
+      "normalized_center": [
+        0.642453,
+        0.485138
+      ],
+      "bbox": [
+        331,
+        437,
+        19,
+        40
+      ],
+      "visual_bbox": [
+        322,
+        428,
+        37,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 272.0,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 9,
+        "axis_negative": 0
+      },
+      "id": 34
+    },
+    {
+      "center": [
+        400.5,
+        457.0
+      ],
+      "normalized_center": [
+        0.75566,
+        0.485138
+      ],
+      "bbox": [
+        391,
+        437,
+        19,
+        40
+      ],
+      "visual_bbox": [
+        382,
+        428,
+        37,
+        58
+      ],
+      "direction": "north",
+      "direction_degrees": 272.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 7,
+        "axis_negative": 0
+      },
+      "id": 35
+    },
+    {
+      "center": [
+        175.5,
+        473.0
+      ],
+      "normalized_center": [
+        0.331132,
+        0.502123
+      ],
+      "bbox": [
+        156,
+        462,
+        39,
+        22
+      ],
+      "visual_bbox": [
+        147,
+        453,
+        57,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 177.8,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 36
+    },
+    {
+      "center": [
+        265.0,
+        473.5
+      ],
+      "normalized_center": [
+        0.5,
+        0.502654
+      ],
+      "bbox": [
+        246,
+        462,
+        38,
+        23
+      ],
+      "visual_bbox": [
+        237,
+        453,
+        56,
+        41
+      ],
+      "direction": "west",
+      "direction_degrees": 180.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 20
+      },
+      "id": 37
+    },
+    {
+      "center": [
+        121.0,
+        503.0
+      ],
+      "normalized_center": [
+        0.228302,
+        0.53397
+      ],
+      "bbox": [
+        99,
+        492,
+        44,
+        22
+      ],
+      "visual_bbox": [
+        90,
+        483,
+        62,
+        40
+      ],
+      "direction": "east",
+      "direction_degrees": 355.9,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 5,
+        "axis_negative": 0
+      },
+      "id": 38
+    },
+    {
+      "center": [
+        209.5,
+        503.0
+      ],
+      "normalized_center": [
+        0.395283,
+        0.53397
+      ],
+      "bbox": [
+        188,
+        492,
+        43,
+        22
+      ],
+      "visual_bbox": [
+        179,
+        483,
+        61,
+        40
+      ],
+      "direction": "east",
+      "direction_degrees": 354.9,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 5,
+        "axis_negative": 0
+      },
+      "id": 39
+    },
+    {
+      "center": [
+        388.5,
+        503.0
+      ],
+      "normalized_center": [
+        0.733019,
+        0.53397
+      ],
+      "bbox": [
+        368,
+        492,
+        41,
+        22
+      ],
+      "visual_bbox": [
+        359,
+        483,
+        59,
+        40
+      ],
+      "direction": "east",
+      "direction_degrees": 352.5,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 5,
+        "axis_negative": 0
+      },
+      "id": 40
+    },
+    {
+      "center": [
+        162.5,
+        516.5
+      ],
+      "normalized_center": [
+        0.306604,
+        0.548301
+      ],
+      "bbox": [
+        152,
+        497,
+        21,
+        39
+      ],
+      "visual_bbox": [
+        143,
+        488,
+        39,
+        57
+      ],
+      "direction": "north",
+      "direction_degrees": 270.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 13,
+        "axis_negative": 0
+      },
+      "id": 41
+    },
+    {
+      "center": [
+        252.0,
+        516.5
+      ],
+      "normalized_center": [
+        0.475472,
+        0.548301
+      ],
+      "bbox": [
+        242,
+        497,
+        20,
+        39
+      ],
+      "visual_bbox": [
+        233,
+        488,
+        38,
+        57
+      ],
+      "direction": "north",
+      "direction_degrees": 271.6,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 13,
+        "axis_negative": 0
+      },
+      "id": 42
+    },
+    {
+      "center": [
+        281.0,
+        520.5
+      ],
+      "normalized_center": [
+        0.530189,
+        0.552548
+      ],
+      "bbox": [
+        271,
+        498,
+        20,
+        45
+      ],
+      "visual_bbox": [
+        262,
+        489,
+        38,
+        63
+      ],
+      "direction": "south",
+      "direction_degrees": 95.6,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 7
+      },
+      "id": 43
+    },
+    {
+      "center": [
+        430.0,
+        520.5
+      ],
+      "normalized_center": [
+        0.811321,
+        0.552548
+      ],
+      "bbox": [
+        421,
+        498,
+        18,
+        45
+      ],
+      "visual_bbox": [
+        412,
+        489,
+        36,
+        63
+      ],
+      "direction": "south",
+      "direction_degrees": 95.1,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 7
+      },
+      "id": 44
+    },
+    {
+      "center": [
+        388.5,
+        532.5
+      ],
+      "normalized_center": [
+        0.733019,
+        0.565287
+      ],
+      "bbox": [
+        368,
+        522,
+        41,
+        21
+      ],
+      "visual_bbox": [
+        359,
+        513,
+        59,
+        39
+      ],
+      "direction": "east",
+      "direction_degrees": 354.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 7,
+        "axis_negative": 0
+      },
+      "id": 45
+    },
+    {
+      "center": [
+        133.0,
+        546.5
+      ],
+      "normalized_center": [
+        0.250943,
+        0.580149
+      ],
+      "bbox": [
+        122,
+        527,
+        22,
+        39
+      ],
+      "visual_bbox": [
+        113,
+        518,
+        40,
+        57
+      ],
+      "direction": "north",
+      "direction_degrees": 271.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 13,
+        "axis_negative": 0
+      },
+      "id": 46
+    },
+    {
+      "center": [
+        103.0,
+        550.0
+      ],
+      "normalized_center": [
+        0.19434,
+        0.583864
+      ],
+      "bbox": [
+        92,
+        528,
+        22,
+        44
+      ],
+      "visual_bbox": [
+        83,
+        519,
+        40,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 98.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 7
+      },
+      "id": 47
+    },
+    {
+      "center": [
+        265.0,
+        562.0
+      ],
+      "normalized_center": [
+        0.5,
+        0.596603
+      ],
+      "bbox": [
+        246,
+        551,
+        38,
+        22
+      ],
+      "visual_bbox": [
+        237,
+        542,
+        56,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 177.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 11
+      },
+      "id": 48
+    },
+    {
+      "center": [
+        324.5,
+        562.0
+      ],
+      "normalized_center": [
+        0.612264,
+        0.596603
+      ],
+      "bbox": [
+        306,
+        551,
+        37,
+        22
+      ],
+      "visual_bbox": [
+        297,
+        542,
+        55,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 176.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 14
+      },
+      "id": 49
+    },
+    {
+      "center": [
+        384.5,
+        562.0
+      ],
+      "normalized_center": [
+        0.725472,
+        0.596603
+      ],
+      "bbox": [
+        367,
+        551,
+        35,
+        22
+      ],
+      "visual_bbox": [
+        358,
+        542,
+        53,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 176.0,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 14
+      },
+      "id": 50
+    },
+    {
+      "center": [
+        162.5,
+        576.5
+      ],
+      "normalized_center": [
+        0.306604,
+        0.611996
+      ],
+      "bbox": [
+        152,
+        557,
+        21,
+        39
+      ],
+      "visual_bbox": [
+        143,
+        548,
+        39,
+        57
+      ],
+      "direction": "north",
+      "direction_degrees": 271.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 12,
+        "axis_negative": 0
+      },
+      "id": 51
+    },
+    {
+      "center": [
+        430.0,
+        578.0
+      ],
+      "normalized_center": [
+        0.811321,
+        0.613588
+      ],
+      "bbox": [
+        421,
+        559,
+        18,
+        38
+      ],
+      "visual_bbox": [
+        412,
+        550,
+        36,
+        56
+      ],
+      "direction": "south",
+      "direction_degrees": 95.0,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 7
+      },
+      "id": 52
+    },
+    {
+      "center": [
+        116.5,
+        592.0
+      ],
+      "normalized_center": [
+        0.219811,
+        0.62845
+      ],
+      "bbox": [
+        97,
+        581,
+        39,
+        22
+      ],
+      "visual_bbox": [
+        88,
+        572,
+        57,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 176.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 10
+      },
+      "id": 53
+    },
+    {
+      "center": [
+        205.0,
+        592.0
+      ],
+      "normalized_center": [
+        0.386792,
+        0.62845
+      ],
+      "bbox": [
+        186,
+        581,
+        38,
+        22
+      ],
+      "visual_bbox": [
+        177,
+        572,
+        56,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 176.8,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 11
+      },
+      "id": 54
+    },
+    {
+      "center": [
+        329.0,
+        592.0
+      ],
+      "normalized_center": [
+        0.620755,
+        0.62845
+      ],
+      "bbox": [
+        308,
+        581,
+        42,
+        22
+      ],
+      "visual_bbox": [
+        299,
+        572,
+        60,
+        40
+      ],
+      "direction": "east",
+      "direction_degrees": 353.6,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 6,
+        "axis_negative": 0
+      },
+      "id": 55
+    },
+    {
+      "center": [
+        370.5,
+        607.5
+      ],
+      "normalized_center": [
+        0.699057,
+        0.644904
+      ],
+      "bbox": [
+        361,
+        588,
+        19,
+        39
+      ],
+      "visual_bbox": [
+        352,
+        579,
+        37,
+        57
+      ],
+      "direction": "south",
+      "direction_degrees": 96.7,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 56
+    },
+    {
+      "center": [
+        252.0,
+        609.5
+      ],
+      "normalized_center": [
+        0.475472,
+        0.647028
+      ],
+      "bbox": [
+        242,
+        587,
+        20,
+        45
+      ],
+      "visual_bbox": [
+        233,
+        578,
+        38,
+        63
+      ],
+      "direction": "south",
+      "direction_degrees": 97.1,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 57
+    },
+    {
+      "center": [
+        281.0,
+        610.0
+      ],
+      "normalized_center": [
+        0.530189,
+        0.647558
+      ],
+      "bbox": [
+        271,
+        588,
+        20,
+        44
+      ],
+      "visual_bbox": [
+        262,
+        579,
+        38,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 97.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 7
+      },
+      "id": 58
+    },
+    {
+      "center": [
+        150.5,
+        621.5
+      ],
+      "normalized_center": [
+        0.283962,
+        0.659766
+      ],
+      "bbox": [
+        129,
+        611,
+        43,
+        21
+      ],
+      "visual_bbox": [
+        120,
+        602,
+        61,
+        39
+      ],
+      "direction": "east",
+      "direction_degrees": 354.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 8,
+        "axis_negative": 0
+      },
+      "id": 59
+    },
+    {
+      "center": [
+        418.5,
+        621.5
+      ],
+      "normalized_center": [
+        0.789623,
+        0.659766
+      ],
+      "bbox": [
+        398,
+        611,
+        41,
+        21
+      ],
+      "visual_bbox": [
+        389,
+        602,
+        59,
+        39
+      ],
+      "direction": "unknown",
+      "direction_degrees": null,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 2,
+        "axis_negative": 0
+      },
+      "id": 60
+    },
+    {
+      "center": [
+        192.5,
+        639.0
+      ],
+      "normalized_center": [
+        0.363208,
+        0.678344
+      ],
+      "bbox": [
+        182,
+        617,
+        21,
+        44
+      ],
+      "visual_bbox": [
+        173,
+        608,
+        39,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 98.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 61
+    },
+    {
+      "center": [
+        221.5,
+        639.0
+      ],
+      "normalized_center": [
+        0.417925,
+        0.678344
+      ],
+      "bbox": [
+        211,
+        617,
+        21,
+        44
+      ],
+      "visual_bbox": [
+        202,
+        608,
+        39,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 97.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 7
+      },
+      "id": 62
+    },
+    {
+      "center": [
+        116.5,
+        651.0
+      ],
+      "normalized_center": [
+        0.219811,
+        0.691083
+      ],
+      "bbox": [
+        97,
+        640,
+        39,
+        22
+      ],
+      "visual_bbox": [
+        88,
+        631,
+        57,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 176.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 63
+    },
+    {
+      "center": [
+        269.0,
+        651.5
+      ],
+      "normalized_center": [
+        0.507547,
+        0.691614
+      ],
+      "bbox": [
+        248,
+        641,
+        42,
+        21
+      ],
+      "visual_bbox": [
+        239,
+        632,
+        60,
+        39
+      ],
+      "direction": "east",
+      "direction_degrees": 353.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 8,
+        "axis_negative": 0
+      },
+      "id": 64
+    },
+    {
+      "center": [
+        329.0,
+        651.5
+      ],
+      "normalized_center": [
+        0.620755,
+        0.691614
+      ],
+      "bbox": [
+        308,
+        641,
+        42,
+        21
+      ],
+      "visual_bbox": [
+        299,
+        632,
+        60,
+        39
+      ],
+      "direction": "east",
+      "direction_degrees": 354.1,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 5,
+        "axis_negative": 0
+      },
+      "id": 65
+    },
+    {
+      "center": [
+        418.0,
+        651.5
+      ],
+      "normalized_center": [
+        0.788679,
+        0.691614
+      ],
+      "bbox": [
+        397,
+        641,
+        42,
+        21
+      ],
+      "visual_bbox": [
+        388,
+        632,
+        60,
+        39
+      ],
+      "direction": "east",
+      "direction_degrees": 352.6,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 5,
+        "axis_negative": 0
+      },
+      "id": 66
+    },
+    {
+      "center": [
+        162.5,
+        667.0
+      ],
+      "normalized_center": [
+        0.306604,
+        0.708068
+      ],
+      "bbox": [
+        152,
+        647,
+        21,
+        40
+      ],
+      "visual_bbox": [
+        143,
+        638,
+        39,
+        58
+      ],
+      "direction": "south",
+      "direction_degrees": 99.3,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 7
+      },
+      "id": 67
+    },
+    {
+      "center": [
+        370.5,
+        669.0
+      ],
+      "normalized_center": [
+        0.699057,
+        0.710191
+      ],
+      "bbox": [
+        361,
+        647,
+        19,
+        44
+      ],
+      "visual_bbox": [
+        352,
+        638,
+        37,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 96.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 8
+      },
+      "id": 68
+    },
+    {
+      "center": [
+        205.0,
+        680.5
+      ],
+      "normalized_center": [
+        0.386792,
+        0.722399
+      ],
+      "bbox": [
+        186,
+        670,
+        38,
+        21
+      ],
+      "visual_bbox": [
+        177,
+        661,
+        56,
+        39
+      ],
+      "direction": "west",
+      "direction_degrees": 175.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 11
+      },
+      "id": 69
+    },
+    {
+      "center": [
+        269.0,
+        681.0
+      ],
+      "normalized_center": [
+        0.507547,
+        0.72293
+      ],
+      "bbox": [
+        248,
+        671,
+        42,
+        20
+      ],
+      "visual_bbox": [
+        239,
+        662,
+        60,
+        38
+      ],
+      "direction": "east",
+      "direction_degrees": 355.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 11,
+        "axis_negative": 0
+      },
+      "id": 70
+    },
+    {
+      "center": [
+        340.5,
+        697.0
+      ],
+      "normalized_center": [
+        0.642453,
+        0.739915
+      ],
+      "bbox": [
+        331,
+        677,
+        19,
+        40
+      ],
+      "visual_bbox": [
+        322,
+        668,
+        37,
+        58
+      ],
+      "direction": "south",
+      "direction_degrees": 98.4,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 71
+    },
+    {
+      "center": [
+        103.0,
+        699.0
+      ],
+      "normalized_center": [
+        0.19434,
+        0.742038
+      ],
+      "bbox": [
+        92,
+        677,
+        22,
+        44
+      ],
+      "visual_bbox": [
+        83,
+        668,
+        40,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 98.5,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 5
+      },
+      "id": 72
+    },
+    {
+      "center": [
+        311.0,
+        699.0
+      ],
+      "normalized_center": [
+        0.586792,
+        0.742038
+      ],
+      "bbox": [
+        301,
+        677,
+        20,
+        44
+      ],
+      "visual_bbox": [
+        292,
+        668,
+        38,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 96.8,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 5
+      },
+      "id": 73
+    },
+    {
+      "center": [
+        400.5,
+        699.0
+      ],
+      "normalized_center": [
+        0.75566,
+        0.742038
+      ],
+      "bbox": [
+        391,
+        677,
+        19,
+        44
+      ],
+      "visual_bbox": [
+        382,
+        668,
+        37,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 96.4,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 4
+      },
+      "id": 74
+    },
+    {
+      "center": [
+        430.0,
+        699.0
+      ],
+      "normalized_center": [
+        0.811321,
+        0.742038
+      ],
+      "bbox": [
+        421,
+        677,
+        18,
+        44
+      ],
+      "visual_bbox": [
+        412,
+        668,
+        36,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 95.9,
+      "confidence": "low",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 4
+      },
+      "id": 75
+    },
+    {
+      "center": [
+        150.5,
+        711.0
+      ],
+      "normalized_center": [
+        0.283962,
+        0.754777
+      ],
+      "bbox": [
+        129,
+        701,
+        43,
+        20
+      ],
+      "visual_bbox": [
+        120,
+        692,
+        61,
+        38
+      ],
+      "direction": "east",
+      "direction_degrees": 355.7,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 6,
+        "axis_negative": 0
+      },
+      "id": 76
+    },
+    {
+      "center": [
+        222.0,
+        728.0
+      ],
+      "normalized_center": [
+        0.418868,
+        0.772824
+      ],
+      "bbox": [
+        212,
+        706,
+        20,
+        44
+      ],
+      "visual_bbox": [
+        203,
+        697,
+        38,
+        62
+      ],
+      "direction": "south",
+      "direction_degrees": 97.7,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 6
+      },
+      "id": 77
+    },
+    {
+      "center": [
+        251.5,
+        729.5
+      ],
+      "normalized_center": [
+        0.474528,
+        0.774416
+      ],
+      "bbox": [
+        241,
+        707,
+        21,
+        45
+      ],
+      "visual_bbox": [
+        232,
+        698,
+        39,
+        63
+      ],
+      "direction": "south",
+      "direction_degrees": 100.2,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 9
+      },
+      "id": 78
+    },
+    {
+      "center": [
+        175.5,
+        740.0
+      ],
+      "normalized_center": [
+        0.331132,
+        0.785563
+      ],
+      "bbox": [
+        156,
+        729,
+        39,
+        22
+      ],
+      "visual_bbox": [
+        147,
+        720,
+        57,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 174.5,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 11
+      },
+      "id": 79
+    },
+    {
+      "center": [
+        294.5,
+        740.0
+      ],
+      "normalized_center": [
+        0.55566,
+        0.785563
+      ],
+      "bbox": [
+        276,
+        729,
+        37,
+        22
+      ],
+      "visual_bbox": [
+        267,
+        720,
+        55,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 172.9,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 11
+      },
+      "id": 80
+    },
+    {
+      "center": [
+        354.5,
+        740.0
+      ],
+      "normalized_center": [
+        0.668868,
+        0.785563
+      ],
+      "bbox": [
+        336,
+        729,
+        37,
+        22
+      ],
+      "visual_bbox": [
+        327,
+        720,
+        55,
+        40
+      ],
+      "direction": "west",
+      "direction_degrees": 174.0,
+      "confidence": "medium",
+      "gesture_occluded": false,
+      "head_dark_pixels": {
+        "axis_positive": 0,
+        "axis_negative": 14
+      },
+      "id": 81
+    }
+  ],
+  "timing_ms": {
+    "capture_or_read": 1371.7,
+    "recognition": 1012.1
+  }
+}

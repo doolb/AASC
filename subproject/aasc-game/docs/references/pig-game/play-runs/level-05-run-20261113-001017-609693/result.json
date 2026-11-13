@@ -1,0 +1,9 @@
+{
+  "status": "interrupted",
+  "level": 5,
+  "clicks": 0,
+  "confirmed": 0,
+  "reason": "存在无法稳定确认方向的小猪",
+  "pending_action": null,
+  "screenshot": "interrupted.png"
+}

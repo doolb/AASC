@@ -1,0 +1,40 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { mkdtempSync, copyFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const path = require('node:path');
+const esbuild = require('esbuild');
+const { createRelay } = require('../server/relay');
+const { games } = require('../games/catalog');
+const fixture = require('./fixtures/test-game');
+
+test('真实网页可选择并运行仅测试注册的三人游戏', { timeout: 45000 }, async t => {
+    let puppeteer;
+    try { puppeteer = require('puppeteer-core'); } catch (_) { t.skip('需要 puppeteer-core'); return; }
+    const dir = mkdtempSync(path.join(tmpdir(), 'aasc-games-browser-'));
+    const assets = path.resolve('app/src/main/assets');
+    for (const file of ['index.html', 'style.css', 'third-party-licenses.txt']) copyFileSync(path.join(assets, file), path.join(dir, file));
+    const testModule = { name: 'test-game-module', setup(build) { build.onResolve({ filter: /^\.\/games\/modules$/ }, () => ({ path: path.resolve('tests/fixtures/modules.js') })); } };
+    await esbuild.build({ entryPoints: ['client.js'], bundle: true, platform: 'browser', outfile: path.join(dir, 'app.js'), plugins: [testModule], logLevel: 'silent' });
+    const relay = createRelay({ games: { ...games, [fixture.game.id]: fixture.game }, assetDir: dir });
+    await new Promise(resolve => relay.server.listen(0, '127.0.0.1', resolve));
+    t.after(() => { for (const socket of relay.wss.clients) socket.terminate(); relay.server.close(); });
+    const url = `http://127.0.0.1:${relay.server.address().port}`;
+    const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    t.after(() => browser.close());
+    const contexts = await Promise.all([browser.createBrowserContext(), browser.createBrowserContext(), browser.createBrowserContext()]);
+    const [host, first, second] = await Promise.all(contexts.map(context => context.newPage()));
+    for (const page of [host, first, second]) page.on('dialog', dialog => dialog.accept('测试玩家'));
+    await host.goto(url); await host.select('#gameSelect', 'test-three'); await host.click('#relayHost');
+    await host.waitForFunction(() => document.querySelector('#roomAddress').textContent.includes('game=test-three'));
+    const invite = await host.$eval('#roomAddress', node => node.textContent);
+    assert.equal(new URL(invite).searchParams.get('version'), '2');
+    await first.goto(invite); await second.goto(invite);
+    await host.waitForFunction(() => document.querySelector('#test-state').textContent.endsWith(':3'));
+    await second.click('#test-pulse');
+    await first.waitForFunction(() => document.querySelector('#test-state').textContent === '1:2:3');
+    assert.equal(await host.$eval('#test-state', node => node.textContent), '0:2:3');
+    await host.close();
+    await first.waitForFunction(() => document.querySelector('#gameArea').getAttribute('aria-disabled') === 'true');
+    assert.match(await first.$eval('#notice', node => node.textContent), /房主离线/);
+});

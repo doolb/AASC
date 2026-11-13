@@ -1,0 +1,9 @@
+{
+  "status": "interrupted",
+  "level": 7,
+  "clicks": 0,
+  "confirmed": 0,
+  "reason": "当前猪鸭位置与人工复核布局不一致",
+  "pending_action": null,
+  "screenshot": "interrupted.png"
+}

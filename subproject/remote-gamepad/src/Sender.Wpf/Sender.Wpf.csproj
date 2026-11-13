@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Sender.Wpf</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Protocol/Protocol.csproj" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <Compile Include="../Sender/AggregateClient.cs" Link="Shared/AggregateClient.cs" />
+    <Compile Include="../Sender/AudioClient.cs" Link="Shared/AudioClient.cs" />
+    <Compile Include="../Sender/GamepadClient.cs" Link="Shared/GamepadClient.cs" />
+    <Compile Include="../Sender/KeyboardClient.cs" Link="Shared/KeyboardClient.cs" />
+    <Compile Include="../Sender/KeyboardHook.cs" Link="Shared/KeyboardHook.cs" />
+    <Compile Include="../Sender/KeyboardRouter.cs" Link="Shared/KeyboardRouter.cs" />
+    <Compile Include="../Sender/PowerArguments.cs" Link="Shared/PowerArguments.cs" />
+    <Compile Include="../Sender/PowerClient.cs" Link="Shared/PowerClient.cs" />
+    <Compile Include="../Sender/RawMouseInput.cs" Link="Shared/RawMouseInput.cs" />
+    <Compile Include="../Sender/SenderLog.cs" Link="Shared/SenderLog.cs" />
+    <Compile Include="../Sender/SenderSettings.cs" Link="Shared/SenderSettings.cs" />
+    <Compile Include="../Sender/TelemetryClient.cs" Link="Shared/TelemetryClient.cs" />
+  </ItemGroup>
+</Project>

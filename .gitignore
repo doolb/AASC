@@ -79,3 +79,23 @@ doubao-signatures.json.*.tmp
 /res/models/hmr2-node-onnx/fp32-op18-dml-static/installed.json
 /res/models/hmr2-node-onnx/fp32-op18-dml-static/.install.lock
 /res/models/hmr2-node-onnx/fp32-op18-dml-static/.install-*/
+
+# 子工程的大型模型、采集数据与本机生成产物保留在本地
+/subproject/aasc-hie/data/models/**/*.onnx
+/subproject/aasc-hie/data/datasets/
+/subproject/aasc-hie/tmp/
+/subproject/aasc-hie/P1000537_*.jpg
+/subproject/retop/artifacts/
+/subproject/retop/dependencies/
+/subproject/retop/srcmodel/
+/subproject/retop/web/**/dist/
+/subproject/retop/**/*.blend*
+/subproject/retop/**/*.log
+/subproject/aasc-game/docs/references/pig-game/play-runs/
+/subproject/aasc-game/docs/references/pig-game/extractions/
+/subproject/aasc-game/**/__pycache__/
+/subproject/aasc-game/**/*.pyc
+
+# Python 缓存是本机生成物
+/subproject/**/__pycache__/
+/subproject/**/*.pyc
