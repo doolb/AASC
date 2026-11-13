@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -19,6 +20,26 @@ REFERENCES = ROOT / 'docs/references/pig-game'
 
 
 class PigExtractorTest(unittest.TestCase):
+    def test_red_highlight_unique_association(self):
+        image = np.full((120, 120, 3), 220, np.uint8)
+        pigs = [{'bbox': [20, 20, 20, 40]}, {'bbox': [50, 20, 20, 40]}]
+        cv2.rectangle(image, (17, 17), (43, 63), (0, 0, 255), 2)
+        extract.mark_red_highlight(image, pigs, 1)
+        self.assertTrue(pigs[0]['highlighted_clickable'])
+        self.assertFalse(pigs[1]['highlighted_clickable'])
+        cv2.rectangle(image, (47, 17), (73, 63), (0, 0, 255), 2)
+        extract.mark_red_highlight(image, pigs, 1)
+        self.assertFalse(any(pig['highlighted_clickable'] for pig in pigs))
+
+    def test_eight_direction_candidate_scores(self):
+        for index, name in enumerate(extract.DIRECTIONS):
+            angle = math.radians(index * 45)
+            axis = np.array([math.cos(angle), math.sin(angle)])
+            scores = extract.direction_candidate_scores(axis, 12, 1)
+            self.assertEqual(max(scores, key=scores.get), name)
+            self.assertEqual(len(scores), 8)
+        self.assertTrue(all(score == 0 for score in extract.direction_candidate_scores(np.array([1, 0]), 0, 0).values()))
+
     def test_estimated_blocking_box_uses_grid_not_visual_bounds(self):
         pigs = [{'id': 1, 'center': [130, 200], 'bbox': [104, 190, 52, 20],
                  'visual_bbox': [100, 184, 60, 32], 'direction': 'east', 'length': 3}]

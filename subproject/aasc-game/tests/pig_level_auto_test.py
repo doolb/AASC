@@ -31,6 +31,37 @@ def candidate():
 
 
 class AutoTest(unittest.TestCase):
+    def test_saturated_gold_lock_candidates_on_level_43(self):
+        path = REF / 'play-runs/level-43-run-20261113-214824-156938/original.png'
+        if not path.exists():
+            self.skipTest('本地第 43 关样本不可用')
+        candidates = app.auto.find_yellow_ducks(image(path), (74, 205, 391, 602))
+        gold = [item for item in candidates if item.get('detection_source') == 'saturated_gold']
+        self.assertEqual(len(gold), 2)
+
+    def test_lock_candidates_are_distinguished_from_ducks(self):
+        board = (74, 205, 392, 603)
+        locked = image(REF / 'play-runs/level-34-run-20261113-155215-143779/original.png')
+        candidates = app.auto.find_yellow_ducks(locked, board)
+        locks = app.auto.find_locked_pigs(locked, candidates)
+        self.assertEqual(len(locks), 3)
+        self.assertTrue(all(lock['kind'] == 'locked_pig_candidate' for lock in locks))
+        class Fake:
+            def capture(self): return locked.copy()
+        class Executor:
+            def run(self, adapter, data, board, output, wait): return 'victory'
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'level'
+            with patch.object(app.locked_candidate, 'build_layout', side_effect=lambda pigs, grid, locks, board, ducks=(): {'locks': {str(i): 1 for i in range(len(locks))}}), patch.object(app.locked_candidate, 'solve', side_effect=lambda data: data), patch.object(app.locked_candidate, 'locked_module', return_value=Executor()):
+                status, _ = app.run_level(Fake(), output, 34, duck_auto=True)
+            self.assertEqual(status, 'victory')
+            self.assertEqual(len(json.loads((output / 'lock-full-verified.json').read_text())['locks']), 3)
+        frame33 = image(REF / 'play-runs/level-33-run-20261113-142104-621930/original.png')
+        self.assertEqual(len(app.auto.find_locked_pigs(frame33, app.auto.find_yellow_ducks(frame33, board))), 2)
+        for name in ('level-30-run-20261113-120136-876985', 'level-25-run-20261113-094109-109533', 'level-23-run-20261113-091249-543193'):
+            frame = image(REF / 'play-runs' / name / 'original.png')
+            self.assertEqual(app.auto.find_locked_pigs(frame, app.auto.find_yellow_ducks(frame, board)), [])
+
     def test_initial_stability_retries_whole_frames_without_click(self):
         first, second = object(), object()
         class Fake:
@@ -141,6 +172,16 @@ class AutoTest(unittest.TestCase):
             self.assertTrue(data['excluded_yellow_candidates'])
             self.assertFalse(data['other_entities'])
             self.assertFalse(fake.clicks)
+
+    def test_elephant_template_on_blue_background(self):
+        board = (74, 205, 391, 602)
+        frame = image(REF / 'play-runs/level-37-run-20261113-165729-032632/original.png')
+        elephants = app.auto.find_blue_elephants(frame, board)
+        self.assertEqual(len(elephants), 1)
+        self.assertEqual(elephants[0]['detection_source'], 'appearance_template')
+        for name in ('level-34-run-20261113-155215-143779', 'level-35-run-20261113-161649-771633', 'level-36-run-20261113-163831-606396'):
+            stage = image(REF / 'play-runs' / name / 'original.png')
+            self.assertEqual(app.auto.find_blue_elephants(stage, board), [])
 
     def test_elephant_candidate_becomes_estimated_blocker(self):
         stage = image(REF / 'play-runs/level-21-new-animal-observation/original.png')

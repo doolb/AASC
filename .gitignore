@@ -99,3 +99,6 @@ doubao-signatures.json.*.tmp
 # Python 缓存是本机生成物
 /subproject/**/__pycache__/
 /subproject/**/*.pyc
+
+# references 保存本地参考与采集资源，不纳入 Git
+**/references/

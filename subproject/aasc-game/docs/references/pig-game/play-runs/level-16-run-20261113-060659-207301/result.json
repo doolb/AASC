@@ -1,9 +1,0 @@
-{
-  "status": "interrupted",
-  "level": 16,
-  "clicks": 0,
-  "confirmed": 0,
-  "reason": "完整计划未找到：search_limit",
-  "pending_action": null,
-  "screenshot": "interrupted.png"
-}

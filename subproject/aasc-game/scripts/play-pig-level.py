@@ -91,7 +91,7 @@ def intersects_ray(origin, vector, box, margin):
 
 
 def choose_pig(pigs, attempted):
-    """只选择前方无遮挡、且未在当前棋盘上尝试过的已知方向目标。"""
+    """按方向和阻挡选择；红框只在关卡首次点击时有效，不用于续跑选点。"""
     options = []
     for pig in pigs:
         direction = pig['direction']

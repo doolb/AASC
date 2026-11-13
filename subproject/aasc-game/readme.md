@@ -19,3 +19,13 @@ ANDROID_HOME=/opt/android-sdk npm run build:apk
 ```
 
 调试 APK 输出在 `app/build/outputs/apk/debug/app-debug.apk`。测试中的服务端 JVM 回归使用本机 Gradle 缓存的 org.json；Chromium 页面检查使用可用的 puppeteer-core 和 `/usr/bin/chromium`。需要在实际设备上验证 Wi-Fi 联机、扫码和 Android 生命周期。
+
+## 猪了个猪：第 40、48 关练习
+
+独立静态网页可回放已提取的第 40、48 关，也可以关闭提示自行游玩：
+
+```sh
+npm run start:pig-level
+```
+
+访问 `http://127.0.0.1:8788/?level=48`。页面顶部可选择关卡，网址可使用 `?level=40` 或 `?level=48`，默认第 48 关。网页可拖动进度条、前后查看参考步骤或撤回自行操作。第 40 关每只猪离场使锁计数减一；第 48 关剪刀猪离场时解除一根绳，绳子全部解除前绳猪不能移动。关卡来自截图复核，规则与步骤已经网页模型重放验证，仍需与真实游戏对照。也可将 `web/pig-level/` 整个目录交给静态 HTTP 服务器，无需服务端游戏逻辑；预览服务可通过 `PIG_LEVEL_HOST` 和 `PIG_LEVEL_PORT` 设置监听地址与端口。

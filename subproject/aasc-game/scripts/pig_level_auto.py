@@ -60,6 +60,19 @@ def find_yellow_ducks(image, board):
                 break
         if len(pieces) == nx * ny:
             ducks.extend(pieces)
+    # 数字锁的金色可能与橙色背景相连；更高饱和度仅生成候选，仍须 OCR 和方向复核。
+    gold = cv2.inRange(hsv[y:y + height, x:x + width], (10, 160, 140), (40, 255, 255))
+    gold_count, _, gold_stats, gold_centers = cv2.connectedComponentsWithStats(gold)
+    for index in range(1, gold_count):
+        bx, by, bw, bh, area = (int(value) for value in gold_stats[index])
+        if not (140 * scale * scale <= area <= 1000 * scale * scale and
+                12 * scale <= bw <= 35 * scale and 12 * scale <= bh <= 35 * scale):
+            continue
+        cx, cy = (float(value) for value in gold_centers[index])
+        cx, cy = cx + x, cy + y
+        if all(math.dist((cx, cy), duck['center']) > 12 * scale for duck in ducks):
+            ducks.append({'kind': 'yellow_duck_candidate', 'center': [round(cx, 1), round(cy, 1)],
+                          'bbox': [x + bx, y + by, bw, bh], 'pixel_area': area, 'detection_source': 'saturated_gold'})
     # 沙色背景可能与黄色鸭子连成一个大区域；用已观察鸭子模板补充漏检。
     size = max(1, round(29 * scale))
     region = image[y:y + height, x:x + width]
@@ -93,6 +106,43 @@ def find_yellow_ducks(image, board):
     return ducks
 
 
+
+def find_locked_pigs(image, yellow_candidates):
+    """局部模板筛选疑似计数锁；未知锁样式仍应由后续画面核对拦截。"""
+    templates = []
+    # 仅为经过现场复核的模板绑定解锁数和方向，其余外观不得猜测。
+    references = [('lock-template-33-a.png', 'north', 50), ('lock-template-33-b.png', 'west', 34),
+                  ('lock-template-34-a.png', 'north', 25), ('lock-template-34-b.png', 'south', 50),
+                  ('lock-template-34-c.png', 'east', 35), ('lock-template-35-a.png', 'east', 30),
+                  ('lock-template-35-b.png', 'east', 50), ('lock-template-39-a.png', 'west', 35),
+                  ('lock-template-39-b.png', 'east', 50), ('lock-template-40-a.png', 'north', 30)]
+    for name, direction, threshold in references:
+        sample = cv2.imread(str(ROOT / 'docs/references/pig-game' / name), cv2.IMREAD_GRAYSCALE)
+        if sample is not None:
+            templates.append((cv2.resize(sample, (28, 28)), direction, threshold))
+    if not templates:
+        return []
+    result = []
+    for candidate in yellow_candidates:
+        x, y, width, height = candidate['bbox']
+        if width < 1 or height < 1:
+            continue
+        crop = image[y:y + height, x:x + width]
+        if crop.size == 0:
+            continue
+        gray = cv2.cvtColor(cv2.resize(crop, (28, 28)), cv2.COLOR_BGR2GRAY)
+        matches = sorted(((float(cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)[0, 0]), direction, threshold)
+                          for template, direction, threshold in templates), reverse=True)
+        score, direction, threshold = matches[0]
+        if score >= 0.7:
+            lock = dict(candidate)
+            lock.update({'kind': 'locked_pig_candidate', 'detection_source': 'lock_template', 'similarity': round(score, 3)})
+            competing = [item[0] for item in matches if item[1:] != (direction, threshold)]
+            if score >= 0.98 and (not competing or score - max(competing) >= 0.03):
+                lock.update({'direction': direction, 'unlock_exits': threshold})
+            result.append(lock)
+    return result
+
 def find_blue_elephants(image, board):
     """识别已观察的大块蓝色物件候选；未检出不能证明不存在其他物件。"""
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
@@ -110,6 +160,23 @@ def find_blue_elephants(image, board):
             result.append({'kind': 'blue_elephant_candidate', 'bbox': [bx, by, bw, bh],
                            'blocking_bbox': None, 'blocking_status': 'unknown',
                            'assumed_role': 'blocker', 'pixel_area': area})
+    # 蓝灰小象可能与蓝色棋盘连成同一区域；局部身体模板补充颜色漏检。
+    template = cv2.imread(str(ROOT / 'docs/references/pig-game/elephant-template-level37.png'))
+    if template is not None:
+        sample = cv2.resize(template, (max(1, round(template.shape[1] * scale)), max(1, round(template.shape[0] * scale))))
+        region = image[y:y + height, x:x + width]
+        if sample.shape[0] <= height and sample.shape[1] <= width:
+            scores = cv2.matchTemplate(region, sample, cv2.TM_CCOEFF_NORMED)
+            _, score, _, (tx, ty) = cv2.minMaxLoc(scores)
+            if score >= 0.85:
+                bx = max(x, x + tx - round(11 * scale))
+                by = max(y, y + ty - round(17 * scale))
+                bw = min(x + width - bx, round(107 * scale))
+                bh = min(y + height - by, round(70 * scale))
+                if all(math.dist((bx + bw / 2, by + bh / 2), (old['bbox'][0] + old['bbox'][2] / 2, old['bbox'][1] + old['bbox'][3] / 2)) > 30 * scale for old in result):
+                    result.append({'kind': 'blue_elephant_candidate', 'bbox': [bx, by, bw, bh],
+                                   'blocking_bbox': None, 'blocking_status': 'unknown', 'assumed_role': 'blocker',
+                                   'detection_source': 'appearance_template', 'similarity': round(float(score), 3)})
     return result
 
 

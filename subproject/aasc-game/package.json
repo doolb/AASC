@@ -12,6 +12,7 @@
     "test:pig-stage": "python3 -m unittest discover -s tests -p 'pig_level_stage_test.py'",
     "test:pig-merge": "python3 -m unittest discover -s tests -p 'pig_level_merge_test.py'",
     "test:pig-lock-merge": "python3 -m unittest discover -s tests -p 'pig_level_lock_merge_test.py'",
+    "test:pig-locked": "python3 -m unittest discover -s tests -p 'pig_level_locked_test.py'",
     "test:pig-elephant": "python3 -m unittest discover -s tests -p 'pig_level_elephant_test.py'",
     "auto:pig": "python3 scripts/auto-pig-levels.py",
     "resume:pig": "python3 scripts/resume-pig-level.py",
@@ -21,11 +22,18 @@
     "advance:pig": "python3 scripts/advance-pig-layout.py",
     "merge:pig": "python3 scripts/merge-pig-stages.py",
     "merge:lock-pig": "python3 scripts/merge-pig-lock-stages.py",
+    "locked:pig": "python3 scripts/play-pig-locked.py",
     "play:pig": "python3 scripts/play-pig-level.py",
     "extract:pig": "python3 scripts/extract-pig-level.py",
     "start": "node server/relay.js",
     "build:web": "esbuild client.js --bundle --platform=browser --minify --outfile=app/src/main/assets/app.js",
-    "build:apk": "npm run build:web && gradle :app:assembleDebug --offline --no-daemon"
+    "build:apk": "npm run build:web && gradle :app:assembleDebug --offline --no-daemon",
+    "start:pig-level": "node scripts/serve-pig-level.js",
+    "test:pig-web": "node --test tests/pig-level-web.test.js",
+    "test:pig-animation": "node --test tests/pig-level-animation.test.js",
+    "test:pig-ocr": "python3 -m unittest discover -s tests -p 'pig_level_ocr_test.py'",
+    "test:pig-lock-hints": "python3 -m unittest discover -s tests -p 'pig_level_lock_hints_test.py'",
+    "stage:lock-pig": "python3 scripts/play-pig-lock-stages.py"
   },
   "dependencies": {
     "esbuild": "^0.28.2",

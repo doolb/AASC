@@ -122,7 +122,7 @@ def settle_ducks(state, directions, ducks, columns, rows, lengths=None, blockers
     return tuple(sorted(all_ducks - visited)), tuple(sorted(all_ducks & visited))
 
 
-def validate_candidate_plan(pigs, ducks, columns, rows, candidate, blockers=()):
+def validate_candidate_plan(pigs, ducks, columns, rows, candidate, blockers=(), require_complete=True):
     """独立重放外部候选，逐步验证完整猪鸭状态，不访问或操作游戏。"""
     state, directions = prepare(pigs, columns, rows)
     initial = state
@@ -165,9 +165,10 @@ def validate_candidate_plan(pigs, ducks, columns, rows, candidate, blockers=()):
                              'from': state[index], 'to': destination, 'exited': bool(action['exited']),
                              'travel_cells': action['travel_cells'], 'duck_departures': departed, 'ducks_after': next_ducks})
             state, remaining = following, next_ducks
-        if any(position is not None for position in state) or remaining:
+        if require_complete and (any(position is not None for position in state) or remaining):
             raise ValueError('候选计划未使猪和鸭全部离开')
-        return {'status': 'solved_with_fixed_blockers' if fixed else ('solved_hypothesis' if duck_cells else 'solved'), 'states': 0,
+        status = 'partial' if any(position is not None for position in state) or remaining else ('solved_with_fixed_blockers' if fixed else ('solved_hypothesis' if duck_cells else 'solved'))
+        return {'status': status, 'states': 0,
                 'initial': initial, 'initial_duck_departures': (), 'actions': verified}
     except (TypeError, KeyError, ValueError) as error:
         raise ValueError('外部候选计划校验失败：' + str(error)) from error

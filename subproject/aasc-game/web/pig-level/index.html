@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6c776">
+<title>猪了个猪 · 第 48 关</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main class="app">
+    <header class="topbar"><div><span class="eyebrow">猪了个猪 · 关卡练习</span><h1>第 <span id="levelNumber">48</span> 关</h1></div><div class="top-actions"><label class="level-picker">关卡<select id="levelSelect" aria-label="选择关卡"><option value="40">第 40 关</option><option value="48">第 48 关</option></select></label><button class="text-button" id="resetButton" type="button">重新开始</button></div></header>
+    <section class="game-card" aria-label="游戏棋盘">
+        <div class="game-meta"><span id="remaining">剩余 95 只</span><span id="ropeCount">✂ 还需 3 把剪刀</span></div>
+        <div id="board" class="board" role="group" aria-label="点击小猪移动"></div>
+        <div id="win" class="win" hidden><div class="win-card"><span class="win-icon">✦</span><strong>挑战成功！</strong><p>所有小猪都安全离开了</p><button id="winReset" type="button">再玩一次</button></div></div>
+    </section>
+    <section class="controls" aria-label="步骤控制">
+        <div class="control-heading"><div><span class="eyebrow">通关步骤</span><h2 id="stepText">准备开始</h2></div><label class="switch-label"><input id="hintToggle" type="checkbox" checked><span class="switch"></span><span>步骤提示</span></label></div>
+        <p id="status" class="status" aria-live="polite">点小猪，或使用步骤按钮查看解法。</p>
+        <div class="progress"><button id="previous" class="step-button" type="button" aria-label="上一步">‹</button><input id="slider" type="range" min="0" value="0" aria-label="步骤进度"><button id="next" class="step-button primary" type="button" aria-label="下一步">›</button></div>
+        <div class="progress-labels"><span id="progressText">0 / 176</span><button id="undo" class="undo" type="button">↶ 撤回一步</button></div>
+    </section>
+    <p class="footnote" id="ruleText">剪刀猪离场后会解除一根绳；绳子全部解开后才能移动绳子猪。</p>
+</main>
+<script type="module" src="./app.mjs"></script>
+</body>
+</html>

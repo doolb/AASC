@@ -24,12 +24,25 @@ def load_module(name, filename):
 player = load_module('pig_play_auto', 'play-pig-level.py')
 auto = load_module('pig_auto_helpers', 'pig_level_auto.py')
 fast = load_module('pig_fast_candidate', 'pig_fast_candidate.py')
+locked_candidate = load_module('pig_locked_candidate', 'pig_locked_candidate.py')
+ocr = load_module('pig_ocr_bridge', 'pig_ocr.py')
 # 覆盖已观察到的第二、三关棋盘；不能包含下方道具按钮。
 player.extract.DEFAULT_BOARD = (74, 205, 391, 602)
 
 
 def screen_point(image, x, y):
     return round(x * image.shape[1] / 530), round(y * image.shape[0] / 942)
+
+
+def small_blue_markers(image, board):
+    """在普通流程中提示尚未复核的剪刀或绳索，不猜测其身份和方向。"""
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    x, y, width, height = board
+    mask = cv2.inRange(hsv[y:y + height, x:x + width], (90, 120, 55), (130, 255, 255))
+    count, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+    scale = (image.shape[1] / 530) * (image.shape[0] / 942)
+    return [[int(x + bx), int(y + by), int(w), int(h)] for bx, by, w, h, area in stats[1:count]
+            if 70 * scale <= area <= 400 * scale]
 
 
 def same_centers(first, second):
@@ -213,7 +226,7 @@ def stable_initial_with_retries(adapter, level, image, attempts=3):
     raise ValueError('初始画面多组采样均不稳定：' + str(last_error))
 
 
-def run_level(adapter, output, level, initial=None, max_states=100000, timeout=15.0, max_steps=300, wait_seconds=1.5, reviewed_layout=None, duck_auto=False, candidate_plan=None, filter_outside_yellow=False):
+def run_level(adapter, output, level, initial=None, max_states=100000, timeout=15.0, max_steps=300, wait_seconds=1.5, reviewed_layout=None, duck_auto=False, candidate_plan=None, filter_outside_yellow=False, ocr_options=None, special_layout=None):
     """完成单关并记录资料；只有下一帧确认位置后才确认上一步。"""
     output.mkdir(parents=True, exist_ok=False)
     image = initial if initial is not None else adapter.capture()
@@ -258,6 +271,42 @@ def run_level(adapter, output, level, initial=None, max_states=100000, timeout=1
         board = player.extract.valid_board(image, reference.get('board') if reviewed_layout is not None else None)
         raw, _, warnings = player.extract.identify(image, board)
         ducks = auto.find_yellow_ducks(image, board)
+        locked_pigs = auto.find_locked_pigs(image, ducks)
+        ocr_summary = None
+        if ocr_options is not None:
+            try:
+                ocr_summary, locked_pigs = ocr.inspect(image, output, ducks, locked_pigs, ocr_options)
+            except (OSError, ValueError, RuntimeError, cv2.error) as error:
+                # 局部识别失败时保留原识别结果与原因，避免把异常当作识别成功。
+                ocr_summary = {'status': 'unavailable', 'title': None, 'locks': [], 'errors': [str(error)]}
+            (output / 'ocr').mkdir(exist_ok=True)
+            player.write_json(output / 'ocr' / 'result.json', ocr_summary)
+            warnings.extend(ocr_summary.get('errors', []))
+            title = (ocr_summary.get('title') or {}).get('recognized')
+            if title and title['value'] != level:
+                raise ValueError(f"OCR 识别关卡 {title['value']} 与目标关卡 {level} 不一致")
+        if special_layout is not None:
+            # 特殊外观遮挡猪身，先以复核布局及蓝色标记核对整盘，再生成独立重放的计划。
+            special = json.loads(Path(special_layout).read_text(encoding='utf-8'))
+            executor = locked_candidate.locked_module()
+            state, directions = player.solver.prepare(special['pigs'], special['grid'][3], special['grid'][4])
+            matched = executor.match_scissors_frame(image, special['board'], special['pigs'], state, directions,
+                                                     special['grid'], set(special.get('scissors', ())),
+                                                     set(special.get('ropes', ())), special.get('ducks', ()))
+            if matched is None:
+                raise ValueError('剪刀猪复核布局与当前画面不一致')
+            player.write_json(output / 'special-reviewed.json', special)
+            solution = locked_candidate.solve(special)
+            player.write_json(output / 'special-full-verified.json', solution)
+            status = executor.run(adapter, solution, special['board'], output / 'special-run', wait=wait_seconds)
+            player.write_json(output / 'result.json', {'status': status, 'execution': 'special-run'})
+            return status, image
+        markers = small_blue_markers(image, board)
+        if markers:
+            player.write_json(output / 'blue-markers.json', {'status': 'unreviewed', 'boxes': markers})
+            raise ValueError('发现未复核的蓝色特殊标记，需核对剪刀和绳索布局')
+        lock_boxes = {tuple(lock['bbox']) for lock in locked_pigs}
+        ducks = [duck for duck in ducks if tuple(duck['bbox']) not in lock_boxes]
         unknown_entities = auto.find_blue_elephants(image, board)
         if unknown_entities:
             warnings.append('发现蓝色大象候选，先按图像范围估计静态阻挡，真实范围及规则待验证')
@@ -286,13 +335,29 @@ def run_level(adapter, output, level, initial=None, max_states=100000, timeout=1
                       'original_sha256': hashlib.sha256((output / 'original.png').read_bytes()).hexdigest(),
                       'board': list(board), 'grid_parameters': list(raw_grid) if raw_grid else None,
                       'gesture_candidates': gestures, 'count': len(raw),
-                      'other_entities': ducks + unknown_entities, 'excluded_yellow_candidates': excluded_yellow,
+                      'other_entities': ducks + locked_pigs + unknown_entities, 'excluded_yellow_candidates': excluded_yellow,
                       'unknown_directions': sum(pig['direction'] == 'unknown' for pig in raw),
-                      'pigs': raw, 'warnings': warnings}
+                      'pigs': raw, 'warnings': warnings,
+                      'ocr': {'status': ocr_summary['status'], 'result': 'ocr/result.json'} if ocr_summary else {'status': 'disabled'}}
         player.write_json(output / 'level.json', level_data)
         marked = auto.mark_unknown_entities(auto.mark_ducks(player.extract.annotate(image, raw, board, gestures), ducks), unknown_entities, raw_grid)
+        for lock in locked_pigs:
+            x, y, width, height = lock['bbox']
+            cv2.rectangle(marked, (x, y), (x + width, y + height), (0, 210, 255), 2)
+            cv2.putText(marked, 'LOCK?', (x, max(12, y - 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 210, 255), 1)
         if not cv2.imwrite(str(output / 'annotated.png'), marked):
             raise OSError('无法保存方向标注图')
+        if locked_pigs:
+            # 锁猪保持占格，只有外观可确认其方向和解锁数时才参与完整计划。
+            if unknown_entities or raw_grid is None:
+                raise ValueError('锁猪与未知物件混合或网格不明，需复核')
+            lock_data = locked_candidate.build_layout(raw, raw_grid, locked_pigs, board, duck_cells(ducks, raw_grid))
+            solution = locked_candidate.solve(lock_data)
+            player.write_json(output / 'lock-full-verified.json', solution)
+            executor = locked_candidate.locked_module()
+            status = executor.run(adapter, solution, board, output / 'locked-run', wait=wait_seconds)
+            player.write_json(output / 'result.json', {'status': status, 'execution': 'locked-run'})
+            return status, image
         if unknown_entities and raw_grid is None:
             save_or_error(output / 'result.png', image)
             player.write_json(output / 'result.json', {'status': 'unsupported_entity', 'level': level,
@@ -479,9 +544,19 @@ def main(argv=None):
     parser.add_argument('--duck-auto', action='store_true', help='显式启用多帧识别鸭子布局与试验模型')
     parser.add_argument('--filter-outside-yellow', action='store_true', help='仅在人工核对黄色候选后过滤网格外或与猪重叠的候选')
     parser.add_argument('--candidate-plan', type=Path, help='首关外部候选计划，须配合复核布局并逐步验证')
+    parser.add_argument('--special-layout', type=Path, help='首关剪刀猪与捆绑猪人工复核布局')
+    parser.add_argument('--no-ocr', action='store_true', help='关闭默认启用的 AASC 局部 OCR')
+    parser.add_argument('--ocr-display', help='执行 OCR 的 AASC 显示端 ID')
+    parser.add_argument('--ocr-short-side', type=int, default=640, help='OCR 局部图片短边，0 表示原图（默认 640）')
+    parser.add_argument('--ocr-timeout', type=int, default=45, help='单次 OCR 超时秒数（默认 45）')
     args = parser.parse_args(argv)
     if args.start_level < 1 or args.max_levels < 1 or not math.isfinite(args.wait) or args.wait < 1:
         parser.error('关卡和关数必须为正整数；等待至少 1 秒')
+    if args.ocr_short_side != 0 and not 256 <= args.ocr_short_side <= 2048:
+        parser.error('OCR 短边必须为 0 或 256–2048 的整数')
+    if not 1 <= args.ocr_timeout <= 180:
+        parser.error('OCR 超时必须为 1–180 秒')
+    ocr_options = None if args.no_ocr else {'short_side': args.ocr_short_side, 'timeout': args.ocr_timeout, 'display_id': args.ocr_display}
     adapter = None
     try:
         adapter = player.X11Adapter(args.display, args.window_id)
@@ -503,7 +578,8 @@ def main(argv=None):
                                                reviewed_layout=args.reviewed_layout if offset == 0 else None,
                                                duck_auto=args.duck_auto,
                                                candidate_plan=args.candidate_plan if offset == 0 else None,
-                                               filter_outside_yellow=args.filter_outside_yellow if offset == 0 else False)
+                                               filter_outside_yellow=args.filter_outside_yellow if offset == 0 else False,
+                                               ocr_options=ocr_options, special_layout=args.special_layout if offset == 0 else None)
             print(f'第 {level} 关：{status}；资料 {output}', flush=True)
             if status != 'victory':
                 return 2

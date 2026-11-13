@@ -56,7 +56,7 @@ npm run play:pig -- --level 2 --display :1 --window-id 0x3c00003 --output /tmp/p
 npm run auto:pig -- --start-level 4 --display :1 --window-id 0x游戏窗口ID --max-levels 100
 ```
 
-若当前停在上一关的通关浮层，增加 `--from-victory`；这要求上一关截图位于 `play-runs/level-上一关-color-arrows/original.png`，或通过 `--previous-initial 路径` 指定，用来核对关卡标题变化。`--start-level` 由使用者提供，不宣称 OCR 校验了初始编号。
+若当前停在上一关的通关浮层，增加 `--from-victory`；这要求上一关截图位于 `play-runs/level-上一关-color-arrows/original.png`，或通过 `--previous-initial 路径` 指定，用来核对关卡标题变化。`--start-level` 由使用者提供，默认用局部 OCR 校验识别到的关卡编号；无法可靠识别时回退现有校验。
 
 每关在 `docs/references/pig-game/play-runs/level-编号-run-时间/` 创建独立目录。`original.png`、`level.json`、`annotated.png` 是首次点击前的画面和候选；`level-reviewed.json`、`plan.json` 保存多帧校验后的布局和完整计划。动作只有在后续实际画面核对后才生成 `action-编号.json`。通关后保存 `victory.png`、`solution-order.json`、`solution-order.png`，顺序图在初始猪的位置显示所有有效步骤号，右侧列出步骤。每步画面默认只在内存中使用。
 
@@ -79,3 +79,21 @@ npm run auto:pig -- --start-level 4 --display :1 --window-id 0x游戏窗口ID --
 较难关卡可以同时提供 `--reviewed-layout 路径 --candidate-plan 路径`：程序先使用现有占格规则逐步独立重放候选计划，核对每步猪的位置、长度和鸭子的变化，并确认终态全部离场；任何非法动作或不完整终态都会在点击前拒绝。实际执行仍逐帧匹配画面。
 
 常规搜索全部超时后，脚本可在本机有 `g++` 且布局规模适用时，临时编译并运行项目自带的快速离线遍历；输出仍需通过上述独立重放。编译器缺失、超时或找不到可校验路径时安全停止，不判定关卡无解。
+
+## 第 40、48 关静态练习网页
+
+在 `aasc-game` 目录执行 `npm run start:pig-level`，访问 `http://127.0.0.1:8788/?level=48`。支持第 40、48 关，可在顶部选择或使用 `?level=40`、`?level=48`，不带参数默认第 48 关；整个 `web/pig-level/` 目录可独立用于静态 HTTP 部署。使用进度条或左右按钮回放参考步骤，提示开关控制下一只猪的高亮；也可直接点击小猪自行游玩。偏离参考解后下一步按钮暂停，撤回或拖动进度条可恢复。第 40 关每只猪离场使锁计数减一，归零前不能点击锁猪；第 48 关三只剪刀猪离场各解除一根绳，绳未全部解开时不能点绳猪。启动页面会先重放验证参考步骤；关卡布局来自截图，仍需对照真实游戏确认。
+
+第 48 关小猪离场时会沿朝向滑出棋盘，棋盘内移动仍立即完成。动画期间可拖动进度条或重新开始；系统设置减少动态效果时跳过动画。
+
+## 关卡局部 OCR
+
+连续采集默认开启 AASC OCR：先截取顶部关卡标题，再对带数字特征的黄色锁候选截取局部图并按已有方向旋转识别，不上传完整截图。需要 AASC 服务运行且支持 OCR 的显示端在线；使用 `--no-ocr` 关闭，`--ocr-display 显示端ID` 指定显示端，`--ocr-short-side 640` 设置短边（0 为原尺寸），`--ocr-timeout 45` 设置单次超时秒数，服务地址沿用 `AASC_URL`。
+
+每次采集在关卡目录的 `ocr/` 保存裁剪图与 `result.json`，包含文字、置信度及区域。服务故障或低置信时回退现有识别；高置信标题与目标关卡不一致时停止，锁数字与已复核模板冲突时保留证据并停止依赖该锁的计划。OCR 只读取数字，不推断未知锁朝向。
+
+剪刀猪和捆绑猪关卡可对首屏完成复核后，给连续采集传 `--special-layout 复核布局.json`。布局包含网格、全部小猪、鸭子以及 `scissors`、`ropes` 编号；脚本先核对现场，再搜索并独立重放完整计划，搜索超限或现场不一致会停止。此路径的特殊外观目前需人工复核，不能自动保证后续新关卡识别。红色高亮提示仅在关卡首次点击时可参考；提取结果用 `highlighted_clickable` 标记，朝向仍独立识别。
+
+计数锁与固定未知物件混合、且已完成人工复核时，可用 `npm run stage:lock-pig -- --layout 复核布局.json --display :1 --window-id 0x窗口ID`。每次搜索达到预算后返回已探索到的有效阶段，独立验证并逐帧确认后重新搜索；初始红框只可用于关卡首次点击。该模式支持剪刀与绳索，但目前不处理鸭子；未知物件按估计的固定占格处理，阶段完成不等于通关。
+
+复核布局可提供 `object_direction`（`north`、`south`、`east`、`west`）。阶段执行期间每步会判断已识别小象前方的通道；通道打开后暂停阶段，确认整盘后尝试点击小象，确认离场才移除阻挡并重搜。未指定方向时不自动操作小象。

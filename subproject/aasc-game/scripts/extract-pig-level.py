@@ -161,6 +161,18 @@ def direction_for(image, bbox, mean, axis, scale):
     return DIRECTIONS[index], 'low' if total < 5 * scale * scale else 'medium', positive, negative, round(degrees, 1)
 
 
+
+def direction_candidate_scores(axis, positive, negative):
+    """用八个单位向量模板分别评估主轴和头部证据；分数只作复核依据。"""
+    total = positive + negative
+    scores = {}
+    for index, name in enumerate(DIRECTIONS):
+        angle = math.radians(index * 45)
+        projection = float(axis[0]) * math.cos(angle) + float(axis[1]) * math.sin(angle)
+        head = positive if projection >= 0 else negative
+        scores[name] = round(abs(projection) * head / max(total, 1), 4)
+    return scores
+
 def find_gesture(image, board):
     """使用已记录的游戏引导手指模板查找遮挡，未命中时不推测存在手指。"""
     path = Path(__file__).resolve().parent.parent / 'docs/references/pig-game/gesture-template.png'
@@ -185,6 +197,25 @@ def find_gesture(image, board):
             best = (score, (x + position[0], y + position[1], size[0], size[1]))
     # 阈值按已保存的有手指和无手指参考图检验，结果仍是候选。
     return [list(best[1])] if best and best[0] < 0.035 else []
+
+
+def mark_red_highlight(image, pigs, scale):
+    """将明显红色提示唯一关联到身体；轮廓可跨入相邻候选，不能重复标记。"""
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, (0, 200, 200), (5, 255, 255))
+    padding = max(2, round(8 * scale))
+    scores = []
+    for pig in pigs:
+        x, y, width, height = pig['bbox']
+        region = mask[max(0, y - padding):min(mask.shape[0], y + height + padding),
+                      max(0, x - padding):min(mask.shape[1], x + width + padding)]
+        score = cv2.countNonZero(region)
+        pig['red_highlight_pixels'] = score
+        pig['highlighted_clickable'] = False
+        scores.append((score, pig))
+    scores.sort(key=lambda entry: entry[0], reverse=True)
+    if scores and scores[0][0] >= 90 * scale * scale and (len(scores) == 1 or scores[0][0] > scores[1][0] * 2):
+        scores[0][1]['highlighted_clickable'] = True
 
 
 def identify(image, board=None, gestures=None):
@@ -223,6 +254,11 @@ def identify(image, board=None, gestures=None):
             axis = -axis
         bbox = tuple(int(value) for value in (bx, by, bw, bh))
         heading, confidence, positive, negative, degrees = direction_for(image, bbox, mean, axis, scale)
+        direction_scores = direction_candidate_scores(axis, positive, negative)
+        ranked_scores = sorted(direction_scores.values(), reverse=True)
+        # 身体轴落在相邻方向的分界附近时，不能把微小角度误差当作确定方向。
+        if ranked_scores[0] - ranked_scores[1] < 0.04:
+            heading, confidence, degrees = None, 'low', None
         # 手指覆盖身体时无法证明眼睛未受干扰，不把候选方向当作可靠结果。
         obscured = any(bx < gx + gw and bx + bw > gx and by < gy + gh and by + bh > gy
                        for gx, gy, gw, gh in gestures)
@@ -239,11 +275,13 @@ def identify(image, board=None, gestures=None):
             'bbox': list(bbox), 'visual_bbox': [vx, vy, vr - vx, vb - vy],
             'direction': heading or 'unknown', 'direction_degrees': degrees,
             'confidence': confidence, 'gesture_occluded': obscured,
-            'head_dark_pixels': {'axis_positive': positive, 'axis_negative': negative}
+            'head_dark_pixels': {'axis_positive': positive, 'axis_negative': negative},
+            'direction_candidate_scores': direction_scores
         })
     pigs.sort(key=lambda pig: (pig['center'][1], pig['center'][0]))
     for index, pig in enumerate(pigs, 1):
         pig['id'] = index
+    mark_red_highlight(image, pigs, scale)
     if not pigs:
         warnings.append('没有识别到候选小猪；请检查截图、棋盘范围和颜色变化')
     if any(pig['direction'] == 'unknown' for pig in pigs):
@@ -329,6 +367,8 @@ def annotate(image, pigs, board, gestures):
     for pig in pigs:
         x, y, w, h = pig['bbox']
         color = (0, 145, 255) if pig['direction'] == 'unknown' else (20, 230, 20)
+        if pig.get('highlighted_clickable'):
+            color = (0, 0, 255)
         vx, vy, vw, vh = pig.get('visual_bbox', pig['bbox'])
         cv2.rectangle(result, (vx, vy), (vx + vw, vy + vh), color, 1)
         if pig.get('blocking_bbox'):
@@ -343,6 +383,8 @@ def annotate(image, pigs, board, gestures):
             cv2.arrowedLine(result, (cx, cy), endpoint, DIRECTION_COLORS[pig['direction']], 2, tipLength=0.3)
         cv2.putText(result, str(pig['id']), (x, max(12, y - 2)), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 0, 0), 3, cv2.LINE_AA)
         cv2.putText(result, str(pig['id']), (x, max(12, y - 2)), cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1, cv2.LINE_AA)
+        if pig.get('highlighted_clickable'):
+            cv2.putText(result, 'HINT', (x, y + h + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 220), 1, cv2.LINE_AA)
     return result
 
 

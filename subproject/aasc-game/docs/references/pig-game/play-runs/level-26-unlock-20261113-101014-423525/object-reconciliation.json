@@ -1,6 +1,0 @@
-{
-  "status": "delayed_exit_confirmed",
-  "screenshot": "object-confirmed-after.png",
-  "reason": "点击后两秒画面仍显示小象；后续稳定截图小象不见，金币由 2378 变为 2379",
-  "initial_action": "object-action.json"
-}

@@ -32,6 +32,11 @@ class FakeWindow:
 
 
 class PigPlayerTest(unittest.TestCase):
+    def test_highlight_does_not_override_unknown_direction(self):
+        pig = {'id': 1, 'center': [20, 20], 'bbox': [15, 10, 10, 20], 'direction': 'unknown', 'highlighted_clickable': True}
+        self.assertIsNone(play.choose_pig([pig], []))
+        self.assertIsNone(play.choose_pig([pig], [(20, 20)]))
+
     def test_ximage_decoder_honors_row_padding_and_copies_pixels(self):
         data = (ctypes.c_ubyte * 24)(1, 2, 3, 0, 4, 5, 6, 0, 99, 99, 99, 99,
                                     7, 8, 9, 0, 10, 11, 12, 0, 99, 99, 99, 99)
