@@ -79,3 +79,18 @@ test('壁纸录音仅在壁纸可见且系统已授权时允许，摄像头仍�
     assert.match(view, /RESOURCE_VIDEO_CAPTURE && foreground/);
     assert.match(service, /setWallpaperVisible\(visible && !isPreview\)/);
 });
+
+test('壁纸浮窗隐藏前保存状态，重新显示按测量尺寸恢复贴边和收起', () => {
+    const overlay = read('src/apps/android-display/app/src/main/java/com/aasc/display/WallpaperOverlay.kt');
+    const showStart = overlay.indexOf('    fun show(webView: WebView)');
+    const showEnd = overlay.indexOf('    private fun invoke(', showStart);
+    const hideStart = overlay.indexOf('    fun hide()');
+    assert.ok(showStart >= 0 && showEnd > showStart && hideStart > showEnd);
+    const show = overlay.slice(showStart, showEnd);
+    const hide = overlay.slice(hideStart, overlay.indexOf('    private fun parseColor', hideStart));
+    assert.match(show, /val saved = loadPosition\(\)/);
+    assert.match(show, /expanded\.visibility = if \(collapsed\) View\.GONE else View\.VISIBLE/);
+    assert.match(show, /tab\.visibility = if \(collapsed\) View\.VISIBLE else View\.GONE/);
+    assert.match(show, /outer\.measure\([\s\S]*saved\.resolve\(/);
+    assert.match(hide, /savePosition\(\)[\s\S]*root = null/);
+});

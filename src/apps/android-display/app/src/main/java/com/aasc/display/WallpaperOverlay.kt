@@ -27,6 +27,7 @@ import kotlin.math.abs
 /** 桌面语音浮窗复用显示页的语音运行状态；不创建第二个显示连接。 */
 class WallpaperOverlay(private val context: Context) {
     private val manager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val preferences = context.getSharedPreferences("aasc_wallpaper_overlay", Context.MODE_PRIVATE)
     private val handler = Handler(Looper.getMainLooper())
     private var root: LinearLayout? = null
     private var page: WebView? = null
@@ -67,6 +68,9 @@ class WallpaperOverlay(private val context: Context) {
             x = (screenWidth() / 2 - dp(70)).coerceAtLeast(0)
             y = (screenHeight() - dp(230)).coerceAtLeast(0)
         }
+        val saved = loadPosition()
+        edge = saved?.edge ?: 0
+        collapsed = saved?.collapsed == true && edge != 0
         params = windowParams
         val outer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val expanded = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
@@ -92,6 +96,14 @@ class WallpaperOverlay(private val context: Context) {
         }
         outer.addView(expanded)
         outer.addView(tab, LinearLayout.LayoutParams(dp(28), dp(30)))
+        expanded.visibility = if (collapsed) View.GONE else View.VISIBLE
+        tab.visibility = if (collapsed) View.VISIBLE else View.GONE
+        if (saved != null) {
+            // 先用当前内容尺寸测量，再按新屏幕尺寸恢复，避免右侧收起把手跑出屏幕。
+            outer.measure(View.MeasureSpec.makeMeasureSpec(screenWidth(), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(screenHeight(), View.MeasureSpec.AT_MOST))
+            val (x, y) = saved.resolve(screenWidth(), screenHeight(), outer.measuredWidth, outer.measuredHeight)
+            windowParams.x = x; windowParams.y = y
+        }
         root = outer; content = expanded; handle = tab; status = label; voice = circle; mode = modeDot
         outer.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) constrainPosition()
@@ -102,6 +114,7 @@ class WallpaperOverlay(private val context: Context) {
         try {
             manager.addView(outer, windowParams)
             handler.post(refresh)
+            restartCollapse()
         } catch (error: Exception) {
             Log.e(TAG, "显示壁纸语音浮窗失败", error)
             root = null; content = null; handle = null; status = null; voice = null; mode = null; params = null; page = null
@@ -173,10 +186,10 @@ class WallpaperOverlay(private val context: Context) {
                 }
                 MotionEvent.ACTION_UP -> {
                     interacting = false
-                    if (moved) snapToEdge() else if (target.isEnabled && target.isClickable) target.performClick()
+                    if (moved) { snapToEdge(); savePosition() } else if (target.isEnabled && target.isClickable) target.performClick()
                     restartCollapse(); true
                 }
-                MotionEvent.ACTION_CANCEL -> { interacting = false; restartCollapse(); true }
+                MotionEvent.ACTION_CANCEL -> { interacting = false; if (moved) savePosition(); restartCollapse(); true }
                 else -> false
             }
         }
@@ -203,15 +216,19 @@ class WallpaperOverlay(private val context: Context) {
         if (root == null || edge == 0) return
         handler.removeCallbacks(collapse)
         collapsed = value
+        savePosition()
         content?.visibility = if (value) View.GONE else View.VISIBLE
         handle?.visibility = if (value) View.VISIBLE else View.GONE
-        root?.post {
+        val originalView = root ?: return
+        originalView.post {
+            if (root !== originalView) return@post
             val current = params ?: return@post
-            val view = root ?: return@post
+            val view = originalView
             view.measure(View.MeasureSpec.makeMeasureSpec(screenWidth(), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(screenHeight(), View.MeasureSpec.AT_MOST))
             val width = view.measuredWidth
             current.x = if (edge < 0) 0 else (screenWidth() - width).coerceAtLeast(0)
             updateWindow()
+            savePosition(view.measuredWidth, view.measuredHeight)
             if (!value) restartCollapse()
         }
     }
@@ -229,7 +246,8 @@ class WallpaperOverlay(private val context: Context) {
             maxWidth = (screenWidth() - dp(24)).coerceAtLeast(dp(80))
         }
         handle?.setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(12))
-        root?.post { constrainPosition() }
+        val originalView = root ?: return
+        originalView.post { if (root === originalView) { constrainPosition(); savePosition() } }
     }
 
     private fun constrainPosition() {
@@ -237,7 +255,7 @@ class WallpaperOverlay(private val context: Context) {
         val currentRoot = root ?: return
         val maxX = (screenWidth() - currentRoot.width).coerceAtLeast(0)
         val maxY = (screenHeight() - currentRoot.height).coerceAtLeast(0)
-        val nextX = if (edge > 0) maxX else current.x.coerceIn(0, maxX)
+        val nextX = when { edge > 0 -> maxX; edge < 0 -> 0; else -> current.x.coerceIn(0, maxX) }
         val nextY = current.y.coerceIn(0, maxY)
         if (current.x != nextX || current.y != nextY) {
             current.x = nextX; current.y = nextY
@@ -245,7 +263,33 @@ class WallpaperOverlay(private val context: Context) {
         }
     }
 
+    private fun loadPosition(): WallpaperOverlayPosition? {
+        if (!preferences.contains("saved")) return null
+        return try {
+            val savedEdge = preferences.getInt("edge", 0).coerceIn(-1, 1)
+            WallpaperOverlayPosition(
+                preferences.getFloat("x", 0f), preferences.getFloat("y", 0f), savedEdge,
+                preferences.getBoolean("collapsed", false) && savedEdge != 0
+            )
+        } catch (error: ClassCastException) {
+            Log.w(TAG, "读取浮窗位置失败，使用默认位置", error)
+            null
+        }
+    }
+
+    private fun savePosition(width: Int? = null, height: Int? = null) {
+        val current = params ?: return
+        val view = root ?: return
+        val measuredWidth = width ?: view.width
+        val measuredHeight = height ?: view.height
+        if (measuredWidth <= 0 || measuredHeight <= 0) return
+        val saved = WallpaperOverlayPosition.capture(current.x, current.y, screenWidth(), screenHeight(), measuredWidth, measuredHeight, edge, collapsed)
+        preferences.edit().putBoolean("saved", true).putFloat("x", saved.xFraction).putFloat("y", saved.yFraction)
+            .putInt("edge", saved.edge).putBoolean("collapsed", saved.collapsed).apply()
+    }
+
     fun hide() {
+        savePosition()
         handler.removeCallbacks(refresh); handler.removeCallbacks(collapse)
         val current = root
         root = null; page = null; params = null; content = null; handle = null; status = null; voice = null; mode = null
