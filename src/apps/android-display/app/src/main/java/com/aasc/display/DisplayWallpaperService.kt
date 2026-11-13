@@ -8,6 +8,8 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.service.wallpaper.WallpaperService
 import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.MotionEvent
 import android.view.View
@@ -34,10 +36,23 @@ class DisplayWallpaperService : WallpaperService() {
         private var surfaceWidth = 0
         private var surfaceHeight = 0
         private val overlay = WallpaperOverlay(this@DisplayWallpaperService)
+        private val overlayHandler = Handler(Looper.getMainLooper())
+        private val overlayVisibility = WallpaperOverlayShowDebouncer(
+            schedule = { task, delay -> overlayHandler.postDelayed(task, delay) },
+            cancel = { task -> overlayHandler.removeCallbacks(task) },
+            show = {
+                // 延时结束后再次验证桌面、壁纸和页面归属，禁止过期任务在其他应用上显示。
+                if (visible && !isPreview && !WallpaperDisplayCoordinator.foreground &&
+                    !WallpaperDisplayCoordinator.wallpaperSuspended && WallpaperDesktopTracker.isDesktop != false) {
+                    webView?.takeIf { it.parent === container }?.let { overlay.show(it) }
+                }
+            },
+            hide = { overlay.hide() }
+        )
         private val desktopListener: (Boolean?) -> Unit = { desktop ->
-            if (desktop == false) overlay.hide()
+            if (desktop == false) overlayVisibility.hideNow()
             else if (visible && !isPreview && !WallpaperDisplayCoordinator.foreground && !WallpaperDisplayCoordinator.wallpaperSuspended) {
-                webView?.takeIf { it.parent === container }?.let { overlay.show(it) }
+                overlayVisibility.requestShow()
             }
         }
         private val foregroundListener: (Boolean) -> Unit = { foreground ->
@@ -77,7 +92,7 @@ class DisplayWallpaperService : WallpaperService() {
             this.visible = visible
             if (visible) ensureRenderer(surfaceHolder)
             else {
-                overlay.hide()
+                overlayVisibility.hideNow()
                 if (webView != null && webView?.parent === container) {
                     WallpaperDisplayCoordinator.setWallpaperVisible(false)
                     webView?.onPause()
@@ -86,7 +101,7 @@ class DisplayWallpaperService : WallpaperService() {
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
-            overlay.hide()
+            overlayVisibility.hideNow()
             display?.setSurface(null)
             if (webView != null && webView?.parent === container) {
                 WallpaperDisplayCoordinator.setWallpaperVisible(false)
@@ -150,7 +165,7 @@ class DisplayWallpaperService : WallpaperService() {
                     webView?.onResume()
                 }
                 WallpaperDisplayCoordinator.setWallpaperVisible(visible && !isPreview)
-                if (!isPreview && WallpaperDesktopTracker.isDesktop != false) webView?.let { overlay.show(it) }
+                if (!isPreview && WallpaperDesktopTracker.isDesktop != false) overlayVisibility.requestShow()
             } catch (error: Exception) {
                 Log.e(TAG, "动态壁纸显示端启动失败", error)
                 releaseRenderer()
@@ -165,7 +180,7 @@ class DisplayWallpaperService : WallpaperService() {
         }
 
         private fun releaseRenderer() {
-            overlay.hide()
+            overlayVisibility.hideNow()
             if (container != null && webView?.parent === container) {
                 WallpaperDisplayCoordinator.setWallpaperVisible(false)
                 WallpaperDisplayCoordinator.setWallpaperActive(false)

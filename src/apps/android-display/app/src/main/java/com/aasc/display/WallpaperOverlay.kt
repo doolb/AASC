@@ -22,6 +22,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
+import java.lang.ref.WeakReference
 import kotlin.math.abs
 
 /** 桌面语音浮窗复用显示页的语音运行状态；不创建第二个显示连接。 */
@@ -30,6 +31,10 @@ class WallpaperOverlay(private val context: Context) {
     private val preferences = context.getSharedPreferences("aasc_wallpaper_overlay", Context.MODE_PRIVATE)
     private val handler = Handler(Looper.getMainLooper())
     private var root: LinearLayout? = null
+    private var attached = false
+    private var pendingAttach: Runnable? = null
+    private var lastSnapshot: JSONObject? = null
+    private var snapshotPage: WeakReference<WebView>? = null
     private var page: WebView? = null
     private var params: WindowManager.LayoutParams? = null
     private var content: LinearLayout? = null
@@ -45,20 +50,30 @@ class WallpaperOverlay(private val context: Context) {
     private val refresh = object : Runnable {
         override fun run() {
             val currentPage = page ?: return
-            if (root == null) return
+            val currentRoot = root ?: return
+            if (!attached) return
             val stamp = "${screenWidth()}:${screenHeight()}:${context.resources.configuration.fontScale}"
             if (configurationStamp != stamp) { configurationStamp = stamp; onConfigurationChanged() }
             currentPage.evaluateJavascript("window.DisplayVoiceControls && typeof window.DisplayVoiceControls.overlaySnapshot === 'function' ? window.DisplayVoiceControls.overlaySnapshot() : null") { value ->
-                if (root == null || page !== currentPage || value == "null") return@evaluateJavascript
-                try { render(JSONObject(value)) } catch (error: Exception) { Log.w(TAG, "读取壁纸语音状态失败", error) }
+                if (root !== currentRoot || page !== currentPage || !attached || value == "null") return@evaluateJavascript
+                try {
+                    val data = JSONObject(value)
+                    lastSnapshot = data
+                    snapshotPage = WeakReference(currentPage)
+                    render(data)
+                } catch (error: Exception) { Log.w(TAG, "读取壁纸语音状态失败", error) }
             }
             handler.postDelayed(this, 400)
         }
     }
 
     fun show(webView: WebView) {
+        if (root != null) {
+            if (page === webView || attached) { page = webView; return }
+            hide()
+        }
+        if (!Settings.canDrawOverlays(context)) return
         page = webView
-        if (root != null || !Settings.canDrawOverlays(context)) return
         val windowParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -98,12 +113,6 @@ class WallpaperOverlay(private val context: Context) {
         outer.addView(tab, LinearLayout.LayoutParams(dp(28), dp(30)))
         expanded.visibility = if (collapsed) View.GONE else View.VISIBLE
         tab.visibility = if (collapsed) View.VISIBLE else View.GONE
-        if (saved != null) {
-            // 先用当前内容尺寸测量，再按新屏幕尺寸恢复，避免右侧收起把手跑出屏幕。
-            outer.measure(View.MeasureSpec.makeMeasureSpec(screenWidth(), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(screenHeight(), View.MeasureSpec.AT_MOST))
-            val (x, y) = saved.resolve(screenWidth(), screenHeight(), outer.measuredWidth, outer.measuredHeight)
-            windowParams.x = x; windowParams.y = y
-        }
         root = outer; content = expanded; handle = tab; status = label; voice = circle; mode = modeDot
         outer.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) constrainPosition()
@@ -111,13 +120,53 @@ class WallpaperOverlay(private val context: Context) {
         attachDrag(label, outer, windowParams)
         attachDrag(circle, outer, windowParams)
         modeDot.setOnClickListener { restartCollapse(); invoke("mode") }
-        try {
-            manager.addView(outer, windowParams)
-            handler.post(refresh)
-            restartCollapse()
-        } catch (error: Exception) {
-            Log.e(TAG, "显示壁纸语音浮窗失败", error)
-            root = null; content = null; handle = null; status = null; voice = null; mode = null; params = null; page = null
+        val attach = Runnable {
+            // 离开桌面、页面切换或已经显示后，过期回调不能添加系统窗口。
+            if (root !== outer || page !== webView || attached) return@Runnable
+            pendingAttach?.let(handler::removeCallbacks)
+            pendingAttach = null
+            if (saved != null) {
+                // 样式和文字已经就绪，按实际测量尺寸恢复，避免首次布局再跳动。
+                outer.measure(View.MeasureSpec.makeMeasureSpec(screenWidth(), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(screenHeight(), View.MeasureSpec.AT_MOST))
+                val (x, y) = saved.resolve(screenWidth(), screenHeight(), outer.measuredWidth, outer.measuredHeight)
+                windowParams.x = x; windowParams.y = y
+            }
+            try {
+                manager.addView(outer, windowParams)
+                attached = true
+                handler.post(refresh)
+                restartCollapse()
+            } catch (error: Exception) {
+                Log.e(TAG, "显示壁纸语音浮窗失败", error)
+                root = null; content = null; handle = null; status = null; voice = null; mode = null; params = null; page = null
+            }
+        }
+        val cached = lastSnapshot?.takeIf { snapshotPage?.get() === webView }
+        if (cached != null) {
+            render(cached)
+            attach.run()
+        } else {
+            // 初次没有缓存时先绘制默认样式，等待网页快照但不无限阻塞浮窗。
+            render(JSONObject().put("label", "语音 连接中"))
+            pendingAttach = attach
+            handler.postDelayed(attach, 400L)
+            try {
+                webView.evaluateJavascript("window.DisplayVoiceControls && typeof window.DisplayVoiceControls.overlaySnapshot === 'function' ? window.DisplayVoiceControls.overlaySnapshot() : null") { value ->
+                    if (root !== outer || page !== webView || attached) return@evaluateJavascript
+                    try {
+                        if (value != "null") {
+                            val data = JSONObject(value)
+                            lastSnapshot = data
+                            snapshotPage = WeakReference(webView)
+                            render(data)
+                        }
+                    } catch (error: Exception) { Log.w(TAG, "读取壁纸语音状态失败", error) }
+                    attach.run()
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "准备壁纸语音状态失败", error)
+                attach.run()
+            }
         }
     }
 
@@ -247,7 +296,8 @@ class WallpaperOverlay(private val context: Context) {
         }
         handle?.setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(12))
         val originalView = root ?: return
-        originalView.post { if (root === originalView) { constrainPosition(); savePosition() } }
+        if (!attached) return
+        originalView.post { if (root === originalView && attached) { constrainPosition(); savePosition() } }
     }
 
     private fun constrainPosition() {
@@ -290,11 +340,15 @@ class WallpaperOverlay(private val context: Context) {
 
     fun hide() {
         savePosition()
+        pendingAttach?.let(handler::removeCallbacks)
+        pendingAttach = null
         handler.removeCallbacks(refresh); handler.removeCallbacks(collapse)
         val current = root
+        val wasAttached = attached
+        attached = false
         root = null; page = null; params = null; content = null; handle = null; status = null; voice = null; mode = null
         edge = 0; collapsed = false; interacting = false; configurationStamp = ""
-        if (current != null) try { manager.removeView(current) } catch (error: Exception) { Log.w(TAG, "移除壁纸语音浮窗失败", error) }
+        if (current != null && wasAttached) try { manager.removeView(current) } catch (error: Exception) { Log.w(TAG, "移除壁纸语音浮窗失败", error) }
     }
 
     private fun parseColor(value: String, fallback: Int): Int = try { Color.parseColor(value) } catch (_: Exception) { fallback }

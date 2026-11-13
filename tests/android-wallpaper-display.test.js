@@ -56,10 +56,12 @@ test('系统壁纸浮窗有权限保护，并随壁纸生命周期移除', () =>
     const activity = read('src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt');
     assert.match(manifest, /android.permission.SYSTEM_ALERT_WINDOW/);
     assert.match(activity, /Settings\.ACTION_MANAGE_OVERLAY_PERMISSION/);
-    assert.match(service, /if \(!isPreview && WallpaperDesktopTracker\.isDesktop != false\) webView\?\.let \{ overlay\.show\(it\) \}/);
-    assert.match(service, /if \(desktop == false\) overlay\.hide\(\)/);
-    assert.match(service, /onVisibilityChanged[\s\S]*?overlay\.hide\(\)/);
-    assert.match(service, /private fun releaseRenderer\(\) \{\s*overlay\.hide\(\)/);
+    assert.match(service, /if \(!isPreview && WallpaperDesktopTracker\.isDesktop != false\) overlayVisibility\.requestShow\(\)/);
+    assert.match(service, /if \(desktop == false\) overlayVisibility\.hideNow\(\)/);
+    assert.match(service, /onVisibilityChanged[\s\S]*?overlayVisibility\.hideNow\(\)/);
+    assert.match(service, /private fun releaseRenderer\(\) \{\s*overlayVisibility\.hideNow\(\)/);
+    assert.match(service, /WallpaperDesktopTracker\.isDesktop != false[\s\S]*?webView\?\.takeIf \{ it\.parent === container \}\?\.let \{ overlay\.show\(it\) \}/);
+    assert.match(service, /hide = \{ overlay\.hide\(\) \}/);
     assert.match(overlay, /Settings\.canDrawOverlays\(context\)/);
     assert.match(overlay, /TYPE_APPLICATION_OVERLAY/);
     assert.match(overlay, /handler\.removeCallbacks\(refresh\)/);
@@ -93,4 +95,21 @@ test('壁纸浮窗隐藏前保存状态，重新显示按测量尺寸恢复贴�
     assert.match(show, /tab\.visibility = if \(collapsed\) View\.VISIBLE else View\.GONE/);
     assert.match(show, /outer\.measure\([\s\S]*saved\.resolve\(/);
     assert.match(hide, /savePosition\(\)[\s\S]*root = null/);
+});
+
+
+test('壁纸浮窗先准备主题并保护异步显示，隐藏时取消旧回调', () => {
+    const overlay = read('src/apps/android-display/app/src/main/java/com/aasc/display/WallpaperOverlay.kt');
+    const start = overlay.indexOf('    fun show(webView: WebView)');
+    const end = overlay.indexOf('    private fun invoke(', start);
+    const hide = overlay.slice(overlay.indexOf('    fun hide()'));
+    assert.ok(start >= 0 && end > start);
+    const show = overlay.slice(start, end);
+    assert.match(show, /val cached = lastSnapshot\?\.takeIf \{ snapshotPage\?\.get\(\) === webView \}/);
+    assert.match(show, /if \(cached != null\) \{\s*render\(cached\)\s*attach\.run\(\)/);
+    assert.match(show, /handler\.postDelayed\(attach, 400L\)/);
+    assert.match(show, /root !== outer \|\| page !== webView \|\| attached/);
+    assert.match(show, /render\(data\)[\s\S]*?attach\.run\(\)/);
+    assert.match(hide, /pendingAttach\?\.let\(handler::removeCallbacks\)/);
+    assert.match(hide, /current != null && wasAttached/);
 });
