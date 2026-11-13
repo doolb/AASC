@@ -665,13 +665,14 @@ const SelfTest = {
                     ]);
                     if (!page.ok || !style.ok || !voice.ok || !controls.ok || !motion.ok) return { success: false, message: '壁纸控件资源不可读取' };
                     const [html, css, voiceScript, controlsScript, motionScript] = await Promise.all([page.text(), style.text(), voice.text(), controls.text(), motion.text()]);
-                    const valid = ['wallpaperControls', 'wallpaperOpenPreview', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime', 'wallpaperOverlayHideOtherApps', 'wallpaperInteractionShield', 'wallpaperContentInteraction', 'wallpaperHologramModel', 'wallpaperHologramMove', 'wallpaperHologramCamera']
+                    const valid = ['wallpaperControls', 'wallpaperOpenPreview', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime', 'wallpaperOverlayHideOtherApps', 'wallpaperOverlaySimplified', 'wallpaperInteractionShield', 'wallpaperContentInteraction', 'wallpaperHologramModel', 'wallpaperHologramMove', 'wallpaperHologramCamera']
                         .every(id => html.includes(`id="${id}"`)) && css.includes('body.is-wallpaper #displayInteractionLayer') && css.includes('.wallpaper-interaction-shield')
                         && css.includes('body.is-wallpaper #displayVoiceAsrResult')
                         && voiceScript.includes('overlaySnapshot') && voiceScript.includes('overlayAction')
                         && controlsScript.includes('setHolographicSensorEnabled')
                         && controlsScript.includes('setWallpaperMotionSensorEnabled') && controlsScript.includes('aasc-native-motion')
                         && controlsScript.includes('getWallpaperOverlayHideOtherApps') && controlsScript.includes('setWallpaperOverlayHideOtherApps')
+                        && controlsScript.includes('getWallpaperOverlaySimplified') && controlsScript.includes('setWallpaperOverlaySimplified')
                         && controlsScript.includes('devicemotion')
                         && html.includes('js/display-wallpaper-motion.js')
                         && controlsScript.includes('createWallpaperMotionEstimator')

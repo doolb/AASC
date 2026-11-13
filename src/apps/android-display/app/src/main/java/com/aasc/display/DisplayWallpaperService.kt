@@ -40,6 +40,7 @@ class DisplayWallpaperService : WallpaperService() {
         private val overlayPreferences by lazy { getSharedPreferences("aasc_display", Context.MODE_PRIVATE) }
         private val overlayPreferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "wallpaper_overlay_hide_other_apps") refreshOverlayVisibility()
+            if (key == "wallpaper_overlay_simplified") overlay.setSimplified(overlayPreferences.getBoolean(key, true))
         }
         private val overlay = WallpaperOverlay(this@DisplayWallpaperService)
         private val overlayHandler = Handler(Looper.getMainLooper())
@@ -115,6 +116,7 @@ class DisplayWallpaperService : WallpaperService() {
 
         override fun onDestroy() {
             releaseRenderer()
+            overlay.removeImmediately()
             WallpaperDisplayCoordinator.removeListener(foregroundListener)
             WallpaperDesktopTracker.removeListener(desktopListener)
             overlayPreferences.unregisterOnSharedPreferenceChangeListener(overlayPreferenceListener)

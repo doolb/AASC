@@ -42,6 +42,10 @@ class WallpaperOverlay(private val context: Context) {
     private var status: TextView? = null
     private var voice: VoiceCircle? = null
     private var mode: TextView? = null
+    private var voiceRow: FrameLayout? = null
+    private var simplified = context.getSharedPreferences("aasc_display", Context.MODE_PRIVATE)
+        .getBoolean("wallpaper_overlay_simplified", true)
+    private val transition = WallpaperOverlayTransition()
     private var edge: Int = 0
     private var collapsed = false
     private var interacting = false
@@ -69,8 +73,19 @@ class WallpaperOverlay(private val context: Context) {
 
     fun show(webView: WebView) {
         if (root != null) {
-            if (page === webView || attached) { page = webView; return }
-            hide()
+            if (attached && page === webView) {
+                if (transition.hiding) {
+                    transition.show()
+                    root?.animate()?.cancel()
+                    params?.let { it.flags = it.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv() }
+                    updateWindow()
+                    root?.animate()?.alpha(1f)?.setDuration(FADE_DURATION_MS)?.withEndAction(null)?.start()
+                    handler.post(refresh)
+                    restartCollapse()
+                }
+                return
+            }
+            removeImmediately()
         }
         if (!Settings.canDrawOverlays(context)) return
         page = webView
@@ -113,7 +128,8 @@ class WallpaperOverlay(private val context: Context) {
         outer.addView(tab, LinearLayout.LayoutParams(dp(28), dp(30)))
         expanded.visibility = if (collapsed) View.GONE else View.VISIBLE
         tab.visibility = if (collapsed) View.VISIBLE else View.GONE
-        root = outer; content = expanded; handle = tab; status = label; voice = circle; mode = modeDot
+        root = outer; content = expanded; handle = tab; status = label; voice = circle; mode = modeDot; voiceRow = row
+        setSimplified(simplified)
         outer.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) constrainPosition()
         }
@@ -132,8 +148,10 @@ class WallpaperOverlay(private val context: Context) {
                 windowParams.x = x; windowParams.y = y
             }
             try {
+                outer.alpha = 0f
                 manager.addView(outer, windowParams)
                 attached = true
+                outer.animate().alpha(1f).setDuration(FADE_DURATION_MS).start()
                 handler.post(refresh)
                 restartCollapse()
             } catch (error: Exception) {
@@ -171,6 +189,7 @@ class WallpaperOverlay(private val context: Context) {
     }
 
     private fun invoke(action: String) {
+        if (transition.hiding) return
         restartCollapse()
         val currentPage = page ?: return
         currentPage.evaluateJavascript("window.DisplayVoiceControls && typeof window.DisplayVoiceControls.overlayAction === 'function' && window.DisplayVoiceControls.overlayAction(${JSONObject.quote(action)})") { result ->
@@ -178,6 +197,17 @@ class WallpaperOverlay(private val context: Context) {
                 Toast.makeText(context, "语音暂不可用，请检查显示端连接和录音权限", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /** 简略样式收紧窗口到圆钮边界，同时保留位置与贴边收起状态。 */
+    fun setSimplified(value: Boolean) {
+        simplified = value
+        status?.visibility = if (value) View.GONE else View.VISIBLE
+        mode?.visibility = if (value) View.GONE else View.VISIBLE
+        val row = voiceRow ?: return
+        row.layoutParams = LinearLayout.LayoutParams(dp(if (value) 32 else 108), dp(if (value) 32 else 72))
+        voice?.layoutParams = FrameLayout.LayoutParams(dp(if (value) 32 else 64), dp(if (value) 32 else 64), Gravity.CENTER)
+        row.requestLayout()
     }
 
     private fun render(data: JSONObject) {
@@ -218,6 +248,9 @@ class WallpaperOverlay(private val context: Context) {
         target.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    if (simplified && target === voice) {
+                        if (!WallpaperOverlayHitTest.contains(target.width, target.height, event.x, event.y)) return@setOnTouchListener false
+                    }
                     interacting = true; handler.removeCallbacks(collapse)
                     startX = windowParams.x; startY = windowParams.y; downX = event.rawX; downY = event.rawY; moved = false
                     true
@@ -339,14 +372,33 @@ class WallpaperOverlay(private val context: Context) {
     }
 
     fun hide() {
+        val current = root ?: return
+        if (transition.hiding) return
+        savePosition()
+        pendingAttach?.let(handler::removeCallbacks)
+        pendingAttach = null
+        handler.removeCallbacks(refresh); handler.removeCallbacks(collapse)
+        if (!attached) { removeImmediately(); return }
+        val token = transition.beginHide() ?: return
+        params?.let { it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE }
+        updateWindow()
+        current.animate().cancel()
+        current.animate().alpha(0f).setDuration(FADE_DURATION_MS).withEndAction {
+            if (root === current && transition.mayRemove(token)) removeImmediately()
+        }.start()
+    }
+
+    fun removeImmediately() {
         savePosition()
         pendingAttach?.let(handler::removeCallbacks)
         pendingAttach = null
         handler.removeCallbacks(refresh); handler.removeCallbacks(collapse)
         val current = root
+        transition.show()
+        current?.animate()?.cancel()
         val wasAttached = attached
         attached = false
-        root = null; page = null; params = null; content = null; handle = null; status = null; voice = null; mode = null
+        root = null; page = null; params = null; content = null; handle = null; status = null; voice = null; mode = null; voiceRow = null
         edge = 0; collapsed = false; interacting = false; configurationStamp = ""
         if (current != null && wasAttached) try { manager.removeView(current) } catch (error: Exception) { Log.w(TAG, "移除壁纸语音浮窗失败", error) }
     }
@@ -357,7 +409,7 @@ class WallpaperOverlay(private val context: Context) {
     private fun screenHeight(): Int = context.resources.displayMetrics.heightPixels
     private fun dp(value: Int): Int = (value * context.resources.displayMetrics.density).toInt()
     private fun scaledText(value: Int): Float = dp(value) * context.resources.configuration.fontScale.coerceIn(1f, 1.3f)
-    private companion object { const val TAG = "AASCWallpaperOverlay" }
+    private companion object { const val TAG = "AASCWallpaperOverlay"; const val FADE_DURATION_MS = 120L }
 
     /** 与网页语音圆钮使用同一状态颜色，内圈显示语音活动及阈值。 */
     private class VoiceCircle(context: Context) : View(context) {

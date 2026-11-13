@@ -3,9 +3,10 @@ package com.aasc.display
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 
-/** 仅使用已有无障碍窗口事件判断桌面；未知状态保留壁纸可见性回退。 */
+/** 使用可信的无障碍窗口事件判断桌面；未知状态保留壁纸可见性回退。 */
 object WallpaperDesktopTracker {
     var isDesktop: Boolean? = null
         private set
@@ -17,7 +18,13 @@ object WallpaperDesktopTracker {
     fun reset() = update(null)
 
     fun onWindowEvent(context: Context, event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        event ?: return
+        if (!WallpaperDesktopPolicy.acceptsWindowEvent(
+                event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+                event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) event.windowChanges else 0,
+                AccessibilityEvent.WINDOWS_CHANGE_ACTIVE, AccessibilityEvent.WINDOWS_CHANGE_FOCUSED
+            )) return
         val packageName = event.packageName?.toString().orEmpty()
         // 系统浮窗和应用自身的私有 Presentation 不应取代实际前台应用。
         if (packageName.isBlank() || packageName == "com.android.systemui") return

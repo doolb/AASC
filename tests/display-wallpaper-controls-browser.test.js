@@ -21,7 +21,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await page.evaluate(() => {
         const preferences = {};
         Object.defineProperty(window, 'localStorage', { value: { getItem: key => preferences[key] ?? null, setItem: (key, value) => { preferences[key] = value; } } });
-        window.wallpaper = false; window.actualVolume = 36; window.previewCount = 0; window.hideOverlay = true;
+        window.wallpaper = false; window.actualVolume = 36; window.previewCount = 0; window.hideOverlay = true; window.simpleOverlay = true;
         window.hologram = {}; window.sensorEnabled = false;
         window.DeviceMotionEvent = window.DeviceMotionEvent || function DeviceMotionEvent() {};
         window.DisplayMmd = { setHolographicTilt: value => { window.hologram = value; } };
@@ -29,7 +29,9 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
             openWallpaperPreview: () => { window.previewCount++; }, getWallpaperMediaVolume: () => window.actualVolume, setWallpaperMediaVolume: value => { window.actualVolume = value; },
             setHolographicSensorEnabled: value => { window.sensorEnabled = value; return true; },
             getWallpaperOverlayHideOtherApps: () => window.hideOverlay,
-            setWallpaperOverlayHideOtherApps: value => { window.hideOverlay = value; } };
+            setWallpaperOverlayHideOtherApps: value => { window.hideOverlay = value; },
+            getWallpaperOverlaySimplified: () => window.simpleOverlay,
+            setWallpaperOverlaySimplified: value => { window.simpleOverlay = value; } };
         window.emitMotion = (x, y) => { const event = new Event('devicemotion'); Object.defineProperty(event, 'accelerationIncludingGravity', { value: { x, y, z: 9.80665 } }); Object.defineProperty(event, 'rotationRate', { value: { alpha: 0, beta: 0, gamma: 0 } }); window.dispatchEvent(event); };
     });
     const mmd = fs.readFileSync(path.join(dir, 'js/display-mmd.js'), 'utf8');
@@ -46,10 +48,14 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await page.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await page.$eval('#wallpaperControls', node => node.hidden), false);
     assert.equal(await page.$eval('#wallpaperOverlayHideOtherApps', node => node.checked && !node.disabled), true);
+    assert.equal(await page.$eval('#wallpaperOverlaySimplified', node => node.checked && !node.disabled), true);
+    await page.$eval('#wallpaperOverlaySimplified', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
+    assert.equal(await page.evaluate(() => window.simpleOverlay), false);
     await page.$eval('#wallpaperOverlayHideOtherApps', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     assert.equal(await page.evaluate(() => window.hideOverlay), false);
     await page.evaluate(() => window.dispatchEvent(new Event('aasc-wallpaper-mode')));
     assert.equal(await page.$eval('#wallpaperOverlayHideOtherApps', node => node.checked), false);
+    assert.equal(await page.$eval('#wallpaperOverlaySimplified', node => node.checked), false);
     assert.equal(await page.$eval('#wallpaperHologramModel', node => node.checked), false);
     assert.equal(await page.$eval('#wallpaperHologramCamera', node => node.checked), false);
     await page.$eval('#wallpaperHologramModel', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
@@ -265,6 +271,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await restored.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await restored.$eval('#wallpaperContentInteraction', node => node.checked), false);
     assert.equal(await restored.$eval('#wallpaperOverlayHideOtherApps', node => node.disabled), true, '旧 APK 不支持该设置');
+    assert.equal(await restored.$eval('#wallpaperOverlaySimplified', node => node.disabled), true, '旧 APK 不支持简略浮窗设置');
     assert.equal(await restored.$eval('#wallpaperHologramCamera', node => node.checked), true);
     assert.equal(await restored.$eval('#wallpaperHologramMove', node => node.checked), false);
     assert.deepEqual(await restored.evaluate(() => window.restoredPreference), { key: 'aasc.hologram.move', value: 'false' });
