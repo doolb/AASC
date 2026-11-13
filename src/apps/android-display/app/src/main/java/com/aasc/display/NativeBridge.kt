@@ -48,6 +48,16 @@ class NativeBridge(
     fun isWallpaperActive(): Boolean = WallpaperDisplayCoordinator.wallpaperActive
 
     @JavascriptInterface
+    fun getWallpaperOverlayHideOtherApps(): Boolean = webView.context.applicationContext
+        .getSharedPreferences("aasc_display", Context.MODE_PRIVATE).getBoolean("wallpaper_overlay_hide_other_apps", true)
+
+    @JavascriptInterface
+    fun setWallpaperOverlayHideOtherApps(value: Boolean) {
+        webView.context.applicationContext.getSharedPreferences("aasc_display", Context.MODE_PRIVATE)
+            .edit().putBoolean("wallpaper_overlay_hide_other_apps", value).apply()
+    }
+
+    @JavascriptInterface
     fun openWallpaperPreview() {
         mainHandler.post { WallpaperDisplayCoordinator.openWallpaperPreview() }
     }

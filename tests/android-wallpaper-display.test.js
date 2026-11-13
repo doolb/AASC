@@ -56,11 +56,12 @@ test('系统壁纸浮窗有权限保护，并随壁纸生命周期移除', () =>
     const activity = read('src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt');
     assert.match(manifest, /android.permission.SYSTEM_ALERT_WINDOW/);
     assert.match(activity, /Settings\.ACTION_MANAGE_OVERLAY_PERMISSION/);
-    assert.match(service, /if \(!isPreview && WallpaperDesktopTracker\.isDesktop != false\) overlayVisibility\.requestShow\(\)/);
-    assert.match(service, /if \(desktop == false\) overlayVisibility\.hideNow\(\)/);
-    assert.match(service, /onVisibilityChanged[\s\S]*?overlayVisibility\.hideNow\(\)/);
+    assert.match(service, /onVisibilityChanged[\s\S]*?refreshOverlayVisibility\(\)/);
+    assert.match(service, /registerOnSharedPreferenceChangeListener\(overlayPreferenceListener\)/);
+    assert.match(service, /unregisterOnSharedPreferenceChangeListener\(overlayPreferenceListener\)/);
+    assert.match(service, /if \(canShowOverlay\(\)\) overlayVisibility\.requestShow\(\) else overlayVisibility\.hideNow\(\)/);
     assert.match(service, /private fun releaseRenderer\(\) \{\s*overlayVisibility\.hideNow\(\)/);
-    assert.match(service, /WallpaperDesktopTracker\.isDesktop != false[\s\S]*?webView\?\.takeIf \{ it\.parent === container \}\?\.let \{ overlay\.show\(it\) \}/);
+    assert.match(service, /if \(canShowOverlay\(\)\)[\s\S]*?webView\?\.takeIf \{ it\.parent === container \}\?\.let \{ overlay\.show\(it\) \}/);
     assert.match(service, /hide = \{ overlay\.hide\(\) \}/);
     assert.match(overlay, /Settings\.canDrawOverlays\(context\)/);
     assert.match(overlay, /TYPE_APPLICATION_OVERLAY/);

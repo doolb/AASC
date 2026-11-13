@@ -13,6 +13,7 @@
     const volumeValue = get('wallpaperVolumeValue');
     const fps = get('wallpaperShowFps');
     const time = get('wallpaperShowTime');
+    const hideOverlay = get('wallpaperOverlayHideOtherApps');
     const contentInteraction = get('wallpaperContentInteraction');
     const hologramModel = get('wallpaperHologramModel');
     const hologramCamera = get('wallpaperHologramCamera');
@@ -189,6 +190,11 @@
         const hasSystemOverlay = typeof root.NativeDisplay?.openWallpaperPreview === 'function';
         box.hidden = !root.NativeDisplay || (active && hasSystemOverlay);
         get('wallpaperOpenPreview').hidden = !hasSystemOverlay;
+        try {
+            hideOverlay.disabled = typeof root.NativeDisplay?.getWallpaperOverlayHideOtherApps !== 'function' || typeof root.NativeDisplay?.setWallpaperOverlayHideOtherApps !== 'function';
+            hideOverlay.title = hideOverlay.disabled ? '请更新 Android 应用后使用' : '';
+            if (!hideOverlay.disabled) hideOverlay.checked = root.NativeDisplay.getWallpaperOverlayHideOtherApps() !== false;
+        } catch (_) { hideOverlay.disabled = true; hideOverlay.title = '无法读取设置'; }
         if (!box.hidden) {
             try {
                 const value = Number(root.NativeDisplay?.getWallpaperMediaVolume?.());
@@ -212,6 +218,12 @@
     contentInteraction.addEventListener('change', () => {
         savePreference('aasc.wallpaper.contentInteraction', contentInteraction.checked);
         updateOptions();
+    });
+    hideOverlay.addEventListener('change', () => {
+        try {
+            root.NativeDisplay.setWallpaperOverlayHideOtherApps(hideOverlay.checked);
+            hideOverlay.checked = root.NativeDisplay.getWallpaperOverlayHideOtherApps() !== false;
+        } catch (_) { hideOverlay.checked = true; hideOverlay.disabled = true; hideOverlay.title = '无法保存设置'; }
     });
     hologramModel.addEventListener('change', () => { savePreference('aasc.hologram.model', hologramModel.checked); updateHologram(); });
     for (const [input, key, other, otherKey] of [
