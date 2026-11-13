@@ -68,6 +68,18 @@ class NativeBridge(
     }
 
     @JavascriptInterface
+    fun getWallpaperOverlayCollapseSeconds(): Int = WallpaperOverlayCollapsePolicy.normalize(
+        webView.context.applicationContext.getSharedPreferences("aasc_display", Context.MODE_PRIVATE)
+            .getInt("wallpaper_overlay_collapse_seconds", 2)
+    )
+
+    @JavascriptInterface
+    fun setWallpaperOverlayCollapseSeconds(value: Int) {
+        webView.context.applicationContext.getSharedPreferences("aasc_display", Context.MODE_PRIVATE)
+            .edit().putInt("wallpaper_overlay_collapse_seconds", WallpaperOverlayCollapsePolicy.normalize(value)).apply()
+    }
+
+    @JavascriptInterface
     fun openWallpaperPreview() {
         mainHandler.post { WallpaperDisplayCoordinator.openWallpaperPreview() }
     }

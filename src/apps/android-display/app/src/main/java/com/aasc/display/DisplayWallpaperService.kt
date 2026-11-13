@@ -41,6 +41,7 @@ class DisplayWallpaperService : WallpaperService() {
         private val overlayPreferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "wallpaper_overlay_hide_other_apps") refreshOverlayVisibility()
             if (key == "wallpaper_overlay_simplified") overlay.setSimplified(overlayPreferences.getBoolean(key, true))
+            if (key == "wallpaper_overlay_collapse_seconds") overlay.setCollapseSeconds(overlayPreferences.getInt(key, 2))
         }
         private val overlay = WallpaperOverlay(this@DisplayWallpaperService)
         private val overlayHandler = Handler(Looper.getMainLooper())

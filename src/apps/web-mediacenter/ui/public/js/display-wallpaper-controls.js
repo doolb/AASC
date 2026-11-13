@@ -15,6 +15,7 @@
     const time = get('wallpaperShowTime');
     const hideOverlay = get('wallpaperOverlayHideOtherApps');
     const simplifiedOverlay = get('wallpaperOverlaySimplified');
+    const collapseSeconds = get('wallpaperOverlayCollapseSeconds');
     const contentInteraction = get('wallpaperContentInteraction');
     const hologramModel = get('wallpaperHologramModel');
     const hologramCamera = get('wallpaperHologramCamera');
@@ -198,6 +199,11 @@
                 if (!input.disabled) input.checked = root.NativeDisplay[getter]() !== false;
             } catch (_) { input.disabled = true; input.title = '无法读取设置'; }
         }
+        try {
+            collapseSeconds.disabled = typeof root.NativeDisplay?.getWallpaperOverlayCollapseSeconds !== 'function' || typeof root.NativeDisplay?.setWallpaperOverlayCollapseSeconds !== 'function';
+            collapseSeconds.title = collapseSeconds.disabled ? '请更新 Android 应用后使用' : '';
+            if (!collapseSeconds.disabled) collapseSeconds.value = String(root.NativeDisplay.getWallpaperOverlayCollapseSeconds());
+        } catch (_) { collapseSeconds.disabled = true; collapseSeconds.title = '无法读取设置'; }
         if (!box.hidden) {
             try {
                 const value = Number(root.NativeDisplay?.getWallpaperMediaVolume?.());
@@ -229,6 +235,15 @@
     for (const [input, getter, setter] of overlayPreferences) input.addEventListener('change', () => {
         try { root.NativeDisplay[setter](input.checked); input.checked = root.NativeDisplay[getter]() !== false; }
         catch (_) { input.checked = true; input.disabled = true; input.title = '无法保存设置'; }
+    });
+    collapseSeconds.addEventListener('change', () => {
+        try {
+            const value = collapseSeconds.value.trim();
+            if (value !== '' && Number.isFinite(Number(value))) {
+                root.NativeDisplay.setWallpaperOverlayCollapseSeconds(Math.max(0, Math.min(3600, Math.round(Number(value)))));
+            }
+            collapseSeconds.value = String(root.NativeDisplay.getWallpaperOverlayCollapseSeconds());
+        } catch (_) { collapseSeconds.disabled = true; collapseSeconds.title = '无法保存设置'; }
     });
     hologramModel.addEventListener('change', () => { savePreference('aasc.hologram.model', hologramModel.checked); updateHologram(); });
     for (const [input, key, other, otherKey] of [

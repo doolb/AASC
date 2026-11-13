@@ -9,4 +9,12 @@ internal object WallpaperOverlayHitTest {
         val dy = y - height / 2f
         return dx * dx + dy * dy <= radius * radius
     }
+
+    fun containsHalf(width: Int, height: Int, x: Float, y: Float, edge: Int): Boolean {
+        if (edge == 0 || width <= 0 || height <= 0) return false
+        val radius = height / 2f
+        val dx = x - if (edge < 0) 0f else width.toFloat()
+        val dy = y - radius
+        return x >= 0f && x <= width && y >= 0f && y <= height && dx * dx + dy * dy <= radius * radius
+    }
 }

@@ -67,7 +67,7 @@ test('系统壁纸浮窗有权限保护，并随壁纸生命周期移除', () =>
     assert.match(overlay, /TYPE_APPLICATION_OVERLAY/);
     assert.match(overlay, /handler\.removeCallbacks\(refresh\)/);
     assert.match(overlay, /handler\.removeCallbacks\(collapse\)/);
-    assert.match(overlay, /postDelayed\(collapse, 5000\)/);
+    assert.match(overlay, /postDelayed\(collapse, delay\)/);
     assert.match(overlay, /overlaySnapshot/);
     assert.match(overlay, /overlayAction/);
 });

@@ -38,13 +38,15 @@ class WallpaperOverlay(private val context: Context) {
     private var page: WebView? = null
     private var params: WindowManager.LayoutParams? = null
     private var content: LinearLayout? = null
-    private var handle: TextView? = null
+    private var handle: VoiceCircle? = null
     private var status: TextView? = null
     private var voice: VoiceCircle? = null
     private var mode: TextView? = null
     private var voiceRow: FrameLayout? = null
     private var simplified = context.getSharedPreferences("aasc_display", Context.MODE_PRIVATE)
         .getBoolean("wallpaper_overlay_simplified", true)
+    private var collapseSeconds = WallpaperOverlayCollapsePolicy.normalize(context.getSharedPreferences("aasc_display", Context.MODE_PRIVATE)
+        .getInt("wallpaper_overlay_collapse_seconds", 2))
     private val transition = WallpaperOverlayTransition()
     private var edge: Int = 0
     private var collapsed = false
@@ -100,7 +102,7 @@ class WallpaperOverlay(private val context: Context) {
         }
         val saved = loadPosition()
         edge = saved?.edge ?: 0
-        collapsed = saved?.collapsed == true && edge != 0
+        collapsed = saved?.collapsed == true && edge != 0 && collapseSeconds > 0
         params = windowParams
         val outer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val expanded = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
@@ -118,14 +120,14 @@ class WallpaperOverlay(private val context: Context) {
         row.addView(modeDot, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.RIGHT or Gravity.BOTTOM).apply { bottomMargin = dp(5) })
         expanded.addView(label)
         expanded.addView(row, LinearLayout.LayoutParams(dp(108), dp(72)))
-        val tab = TextView(context).apply {
-            text = "语"; setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(12)); gravity = Gravity.CENTER; contentDescription = "展开语音浮窗"
-            includeFontPadding = false
+        val tab = VoiceCircle(context).apply {
+            halfEdge = edge
+            contentDescription = "展开语音浮窗"
             visibility = View.GONE
             setOnClickListener { setCollapsed(false) }
         }
         outer.addView(expanded)
-        outer.addView(tab, LinearLayout.LayoutParams(dp(28), dp(30)))
+        outer.addView(tab, LinearLayout.LayoutParams(dp(16), dp(32)))
         expanded.visibility = if (collapsed) View.GONE else View.VISIBLE
         tab.visibility = if (collapsed) View.VISIBLE else View.GONE
         root = outer; content = expanded; handle = tab; status = label; voice = circle; mode = modeDot; voiceRow = row
@@ -210,6 +212,11 @@ class WallpaperOverlay(private val context: Context) {
         row.requestLayout()
     }
 
+    fun setCollapseSeconds(value: Int) {
+        collapseSeconds = WallpaperOverlayCollapsePolicy.normalize(value)
+        if (collapseSeconds == 0 && collapsed) setCollapsed(false) else restartCollapse()
+    }
+
     private fun render(data: JSONObject) {
         val theme = data.optJSONObject("theme") ?: JSONObject()
         val panelColor = parseColor(theme.optString("panel"), 0xff273548.toInt())
@@ -223,14 +230,14 @@ class WallpaperOverlay(private val context: Context) {
             setTextColor(textColor)
             background = rounded(panelColor, dp(20).toFloat())
         }
-        handle?.apply { setTextColor(textColor); background = rounded(panelColor, dp(12).toFloat()) }
-        voice?.apply {
+        for (circle in listOfNotNull(voice, handle)) circle.apply {
             state = data.optString("state", "stopped")
             baseColor = primary
+            accentColor = accent
             vadActive = data.optBoolean("vadActive")
             vadRms = data.optDouble("vadRms", 0.0).toFloat().coerceIn(0f, 1f)
             vadThreshold = data.optDouble("vadThreshold", 0.0).toFloat().coerceIn(0f, 1f)
-            contentDescription = data.optString("actionLabel", "语音操作")
+            contentDescription = if (this === handle) "展开语音浮窗" else data.optString("actionLabel", "语音操作")
             isEnabled = true
             invalidate()
         }
@@ -291,13 +298,15 @@ class WallpaperOverlay(private val context: Context) {
 
     private fun restartCollapse() {
         handler.removeCallbacks(collapse)
-        if (edge != 0 && !collapsed && root != null) handler.postDelayed(collapse, 5000)
+        val delay = WallpaperOverlayCollapsePolicy.delayMillis(collapseSeconds) ?: return
+        if (edge != 0 && !collapsed && root != null) handler.postDelayed(collapse, delay)
     }
 
     private fun setCollapsed(value: Boolean) {
         if (root == null || edge == 0) return
         handler.removeCallbacks(collapse)
         collapsed = value
+        handle?.apply { halfEdge = edge; invalidate() }
         savePosition()
         content?.visibility = if (value) View.GONE else View.VISIBLE
         handle?.visibility = if (value) View.VISIBLE else View.GONE
@@ -327,7 +336,6 @@ class WallpaperOverlay(private val context: Context) {
             setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(14))
             maxWidth = (screenWidth() - dp(24)).coerceAtLeast(dp(80))
         }
-        handle?.setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(12))
         val originalView = root ?: return
         if (!attached) return
         originalView.post { if (root === originalView && attached) { constrainPosition(); savePosition() } }
@@ -413,26 +421,34 @@ class WallpaperOverlay(private val context: Context) {
 
     /** 与网页语音圆钮使用同一状态颜色，内圈显示语音活动及阈值。 */
     private class VoiceCircle(context: Context) : View(context) {
-        var state = "stopped"; var baseColor = Color.BLACK
+        var state = "stopped"; var baseColor = Color.BLACK; var accentColor = 0xff00d2ff.toInt()
+        var halfEdge = 0
         var vadActive = false; var vadRms = 0f; var vadThreshold = 0f
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (event.actionMasked == MotionEvent.ACTION_DOWN && halfEdge != 0 &&
+                !WallpaperOverlayHitTest.containsHalf(width, height, event.x, event.y, halfEdge)) return false
+            return super.onTouchEvent(event)
+        }
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val colors = mapOf("stopped" to 0xff64748b.toInt(), "idle" to 0xff3b82f6.toInt(), "listening" to 0xff16a34a.toInt(), "recognizing" to 0xfff59e0b.toInt(), "thinking" to 0xff8b5cf6.toInt(), "speaking" to 0xff06b6d4.toInt())
             val color = colors[state] ?: colors.getValue("stopped")
-            val radius = width.coerceAtMost(height) / 2f
-            paint.color = color; canvas.drawCircle(width / 2f, height / 2f, radius, paint)
-            paint.color = blend(color, baseColor, 0.22f); canvas.drawCircle(width / 2f, height / 2f, radius * 0.78f, paint)
+            val radius = if (halfEdge == 0) width.coerceAtMost(height) / 2f else height / 2f
+            val centerX = when { halfEdge < 0 -> 0f; halfEdge > 0 -> width.toFloat(); else -> width / 2f }
+            val centerY = height / 2f
+            paint.color = accentColor; canvas.drawCircle(centerX, centerY, radius, paint)
+            paint.color = blend(color, baseColor, 0.22f); canvas.drawCircle(centerX, centerY, radius * 0.78f, paint)
             if (vadActive) {
                 canvas.save(); val inner = radius * 0.74f
-                val path = android.graphics.Path().apply { addCircle(width / 2f, height / 2f, inner, android.graphics.Path.Direction.CW) }
+                val path = android.graphics.Path().apply { addCircle(centerX, centerY, inner, android.graphics.Path.Direction.CW) }
                 canvas.clipPath(path)
                 paint.color = blend(color, Color.WHITE, 0.45f)
-                val bottom = height / 2f + inner
-                canvas.drawRect(width / 2f - inner, bottom - inner * 2 * vadRms, width / 2f + inner, bottom, paint)
+                val bottom = centerY + inner
+                canvas.drawRect(centerX - inner, bottom - inner * 2 * vadRms, centerX + inner, bottom, paint)
                 paint.color = 0xffef4444.toInt()
                 val threshold = bottom - inner * 2 * vadThreshold
-                canvas.drawRect(width / 2f - inner, threshold - 1, width / 2f + inner, threshold + 1, paint)
+                canvas.drawRect(centerX - inner, threshold - 1, centerX + inner, threshold + 1, paint)
                 canvas.restore()
             }
         }

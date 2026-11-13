@@ -10,7 +10,7 @@ function loadControls(native) {
     const events = new Map();
     const element = id => {
         if (!nodes.has(id)) nodes.set(id, {
-            checked: false, hidden: false, disabled: false, style: {}, textContent: '',
+            checked: false, hidden: false, disabled: false, value: '', style: {}, textContent: '',
             handlers: {}, addEventListener(type, handler) { this.handlers[type] = handler; },
             setAttribute() {}, getBoundingClientRect() { return { top: 0 }; }
         });
@@ -47,4 +47,22 @@ test('旧 APK 没有简略浮窗桥时禁用设置', () => {
     const input = element('wallpaperOverlaySimplified');
     assert.equal(input.disabled, true);
     assert.match(input.title, /更新/);
+    assert.equal(element('wallpaperOverlayCollapseSeconds').disabled, true);
+});
+
+test('自动收起时间支持零、规范化与保持本机值', () => {
+    let seconds = 2;
+    const { element, events } = loadControls({ isWallpaperActive: () => false,
+        getWallpaperOverlayCollapseSeconds: () => seconds,
+        setWallpaperOverlayCollapseSeconds: value => { seconds = value; } });
+    const input = element('wallpaperOverlayCollapseSeconds');
+    assert.equal(input.value, '2');
+    input.value = '0'; input.handlers.change();
+    assert.equal(seconds, 0);
+    input.value = '9999'; input.handlers.change();
+    assert.equal(seconds, 3600);
+    input.value = ''; input.handlers.change();
+    assert.equal(seconds, 3600);
+    events.get('aasc-wallpaper-mode')();
+    assert.equal(input.value, '3600');
 });
