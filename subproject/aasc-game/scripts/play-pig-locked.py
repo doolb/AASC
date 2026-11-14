@@ -14,10 +14,13 @@ ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location('locked_pig_auto', ROOT / 'scripts/auto-pig-levels.py')
 app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)
+pig_cage = app.cage_vision
 
 
 def validate_plan(data, require_complete=True):
     """独立重放所有动作，禁止提前操作锁猪或接受不完整终态。"""
+    if data.get('ducks') and data.get('dynamic_cages'):
+        raise ValueError('动态铁笼与鸭子混合尚未验证')
     ids = {pig['id'] for pig in data['pigs']}
     scissors = set(data.get('scissors', []))
     ropes = set(data.get('ropes', []))
@@ -41,6 +44,7 @@ def validate_plan(data, require_complete=True):
             exits += int(action['exited']) + len(action.get('duck_departures', ()))
         return locks
     pigs, grid = data['pigs'], data['grid']
+    cages = data.get('dynamic_cages', [])
     state, directions = app.player.solver.prepare(pigs, grid[3], grid[4])
     state = list(state)
     locks = {int(key): int(value) for key, value in data.get('locks', {}).items()}
@@ -49,6 +53,17 @@ def validate_plan(data, require_complete=True):
     lengths = [pig.get('length', 2) for pig in pigs]
     widths = [pig.get('width', 1) for pig in pigs]
     blockers = app.player.solver.validate_blockers(data.get('blockers', ()), state, directions, lengths, grid[3], grid[4], (), widths)
+    checked_cages = []
+    for cage in cages:
+        threshold = cage.get('unlock_exits')
+        cells = cage.get('cells')
+        if type(threshold) is not int or threshold < 1 or not isinstance(cells, list) or not cells:
+            raise ValueError('铁笼解锁计数或占格无效')
+        points = {tuple(cell) for cell in cells}
+        if len(points) != len(cells) or any(len(cell) != 2 or any(type(v) is not int for v in cell)
+                                           or not (0 <= cell[0] < grid[3] and 0 <= cell[1] < grid[4]) for cell in points):
+            raise ValueError('铁笼占格重复或越界')
+        checked_cages.append((threshold, points))
     exits = 0
     for action in data['actions']:
         index = action['index']
@@ -57,11 +72,14 @@ def validate_plan(data, require_complete=True):
         pig = pigs[index]
         if exits < locks.get(pig['id'], 0):
             raise ValueError('锁猪尚未解锁')
+        active_cage = set().union(*(cells for threshold, cells in checked_cages if exits < threshold))
+        if active_cage.intersection(app.player.solver.cells(state[index], directions[index], lengths[index], widths[index])):
+            raise ValueError('铁笼内的小猪尚未解锁')
         destination = tuple(action['to']) if action['to'] is not None else None
         candidate = (action['exited'], index, destination, action['travel_cells'])
         if (type(action['exited']) is not bool or action['pig_id'] != pig['id']
                 or action['direction'] != directions[index] or tuple(action['from']) != state[index]
-                or candidate not in app.player.solver.actions(state, directions, grid[3], grid[4], blockers=blockers, lengths=lengths, widths=widths)):
+                or candidate not in app.player.solver.actions(state, directions, grid[3], grid[4], blockers=set(blockers) | active_cage, lengths=lengths, widths=widths)):
             raise ValueError('计划动作不合法')
         state[index] = destination
         exits += int(action['exited'])
@@ -133,6 +151,23 @@ def match_scissors_frame(image, board, pigs, state, directions, grid, scissors, 
     return matched
 
 
+def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells, unknown=()):
+    """每次核对笼体轮廓及全部笼外猪；笼内识别片段不得成为点击目标。"""
+    if app.auto.ui_state(image) != 'unknown':
+        return None
+    cages = pig_cage.detect(image, board)
+    if pig_cage.cells(cages, grid) != {tuple(cell) for cell in expected_cells}:
+        return None
+    detected, _, _ = app.player.extract.identify(image, board)
+    detected = [pig for pig in detected if not any(pig_cage.contains(cage, pig['center']) for cage in cages)]
+    for item in unknown:
+        matches = [pig for pig in detected if math.dist(pig['center'], item['center']) < grid[2] * .3]
+        if len(matches) != 1:
+            return None
+        detected.remove(matches[0])
+    return app.player.match_expected(detected, state, directions, grid, [pig.get('length', 2) for pig in pigs])
+
+
 def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
     partial = data.get('status') == 'partial'
     locks = validate_plan(data, require_complete=not partial)
@@ -148,6 +183,12 @@ def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
     special_ids = set(data.get('scissors', ())) | set(data.get('ropes', ()))
     ordinary = [pig for pig in pigs if pig['id'] not in locks and pig['id'] not in special_ids]
     marked = app.player.extract.annotate(image, ordinary, board, [])
+    for col, row in data.get('cage_cells', []):
+        # 标记用于碰撞计算的实际格子，避免把外观边框当成阻挡范围。
+        cx, cy = grid[0] + col * grid[2], grid[1] + row * grid[2]
+        half = grid[2] / 2
+        cv2.rectangle(marked, (round(cx-half), round(cy-half)),
+                      (round(cx+half), round(cy+half)), (255, 180, 0), 1)
     for pig in pigs:
         if pig['id'] in locks or pig['id'] in special_ids:
             x, y = (round(v) for v in pig['center'])
@@ -170,7 +211,9 @@ def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
                         if len(observed) != len(expected_entities) or any(math.dist(a['bbox'][:2], b['bbox'][:2]) > 8
                                                                            for a, b in zip(observed, expected_entities)):
                             raise ValueError('未知物件位置或外观发生变化')
-                    if data.get('scissors') or data.get('ropes'):
+                    if data.get('cage_cells'):
+                        matched = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()))
+                    elif data.get('scissors') or data.get('ropes'):
                         matched = match_scissors_frame(latest, board, pigs, state, directions, grid,
                                                        set(data.get('scissors', ())), set(data.get('ropes', ())),
                                                        ducks if tracks_ducks else None)
@@ -210,7 +253,9 @@ def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
             for _ in range(35):
                 latest = adapter.capture()
                 try:
-                    if data.get('scissors') or data.get('ropes'):
+                    if data.get('cage_cells'):
+                        final_match = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()))
+                    elif data.get('scissors') or data.get('ropes'):
                         final_match = match_scissors_frame(latest, board, pigs, state, directions, grid,
                                                            set(data.get('scissors', ())), set(data.get('ropes', ())),
                                                            ducks if tracks_ducks else None)

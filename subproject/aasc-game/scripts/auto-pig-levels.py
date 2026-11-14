@@ -6,7 +6,9 @@ import importlib.util
 import json
 import math
 import random
+import shutil
 import time
+from types import SimpleNamespace
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +28,8 @@ auto = load_module('pig_auto_helpers', 'pig_level_auto.py')
 fast = load_module('pig_fast_candidate', 'pig_fast_candidate.py')
 locked_candidate = load_module('pig_locked_candidate', 'pig_locked_candidate.py')
 ocr = load_module('pig_ocr_bridge', 'pig_ocr.py')
+special_vision = load_module('pig_special_vision', 'pig_special.py')
+cage_vision = load_module('pig_cage_vision', 'pig_cage.py')
 # 覆盖已观察到的第二、三关棋盘；不能包含下方道具按钮。
 player.extract.DEFAULT_BOARD = (74, 205, 391, 602)
 
@@ -169,7 +173,7 @@ def save_or_error(path, image):
     player.save_png(path, image)
 
 
-def await_victory(adapter, output, retries=30):
+def await_victory(adapter, output, retries=120):
     """等待并识别已观察的领奖和排名弹窗；未确认的画面不进行点击。"""
     screenshots = {'reward': 0, 'ranking': 0}
     latest = None
@@ -200,15 +204,30 @@ def duck_cells(ducks, grid):
 
 
 def filter_yellow_candidates(ducks, grid, pigs):
-    """显式复核时排除网格外或与已识别猪重叠的黄色画面候选。"""
+    """显式复核时过滤无效候选，并合并同格且外框高度重叠的重复检测。"""
     occupied = {tuple(cell) for pig in pigs if pig.get('grid') for cell in pig['grid']['cells']}
     kept, excluded = [], []
+    by_cell = {}
     for duck in ducks:
         try:
-            if duck_cells([duck], grid) & occupied:
+            cell = next(iter(duck_cells([duck], grid)))
+            if cell in occupied:
                 excluded.append(duck)
-            else:
-                kept.append(duck)
+                continue
+            # 不同检测器可能重复标出同一个物件，只有外框明显重叠才合并。
+            x, y, width, height = duck['bbox']
+            duplicate = False
+            for previous in by_cell.get(cell, []):
+                px, py, pw, ph = previous['bbox']
+                overlap = max(0, min(x + width, px + pw) - max(x, px)) * max(0, min(y + height, py + ph) - max(y, py))
+                if overlap >= 0.4 * min(width * height, pw * ph):
+                    duplicate = True
+                    break
+            if duplicate:
+                excluded.append(duck)
+                continue
+            kept.append(duck)
+            by_cell.setdefault(cell, []).append(duck)
         except ValueError:
             excluded.append(duck)
     return kept, excluded
@@ -285,6 +304,24 @@ def run_level(adapter, output, level, initial=None, max_states=100000, timeout=1
             title = (ocr_summary.get('title') or {}).get('recognized')
             if title and title['value'] != level:
                 raise ValueError(f"OCR 识别关卡 {title['value']} 与目标关卡 {level} 不一致")
+        if cage_vision.detect(image, board):
+            # 笼内外观暂不可确定时，只把笼体视作障碍，搜索笼外阶段。
+            cage_stage = load_module('pig_cage_stages', 'pig_cage_stage.py')
+            try:
+                status = cage_stage.run(SimpleNamespace(**globals()), adapter, image, board, output, ocr_options, wait_seconds, level)
+            except (Exception, KeyboardInterrupt) as error:
+                # 已执行阶段的截图和待确认动作来自对应子目录，不把首屏冒充当前画面。
+                evidence = sorted(output.rglob('interrupted.png'))
+                stage_results = sorted(output.rglob('play/result.json'))
+                pending = None
+                if stage_results:
+                    pending = json.loads(stage_results[-1].read_text(encoding='utf-8')).get('pending_action')
+                player.write_json(output / 'result.json', {'status': 'interrupted', 'level': level,
+                                  'confirmed': len(list(output.rglob('action-*.json'))), 'pending_action': pending,
+                                  'reason': str(error), 'screenshot': str(evidence[-1].relative_to(output)) if evidence else 'original.png'})
+                raise
+            player.write_json(output / 'result.json', {'status': status, 'level': level, 'execution': 'cage-stage'})
+            return status, image
         if special_layout is not None:
             # 特殊外观遮挡猪身，先以复核布局及蓝色标记核对整盘，再生成独立重放的计划。
             special = json.loads(Path(special_layout).read_text(encoding='utf-8'))
@@ -303,8 +340,82 @@ def run_level(adapter, output, level, initial=None, max_states=100000, timeout=1
             return status, image
         markers = small_blue_markers(image, board)
         if markers:
-            player.write_json(output / 'blue-markers.json', {'status': 'unreviewed', 'boxes': markers})
-            raise ValueError('发现未复核的蓝色特殊标记，需核对剪刀和绳索布局')
+            candidates = special_vision.detect(image, board, player.extract)
+            player.write_json(output / 'blue-markers.json', {'status': 'candidates', 'boxes': markers, 'candidates': candidates})
+            if locked_pigs or auto.find_blue_elephants(image, board):
+                raise ValueError('特殊猪与计数锁或未知物件混合，需复核')
+            if any(not any(math.dist((x + w / 2, y + h / 2), item['center']) < 30 * image.shape[1] / 530
+                           for item in candidates) for x, y, w, h in markers):
+                raise ValueError('存在未归属的蓝色特殊标记')
+            special = None
+            last_error = None
+            recognition_source = 'live'
+            for attempt in range(4):
+                first = image if attempt == 0 else adapter.capture()
+                frames = []
+                for _ in range(3):
+                    time.sleep(.4)
+                    frames.append(adapter.capture())
+                try:
+                    special = special_vision.build_layout(first, board, player.extract, auto, player, frames)
+                    break
+                except ValueError as error:
+                    last_error = error
+            if special is None:
+                # 本机关卡首屏可提供动画遮挡前的头部证据；之后仍必须逐帧核对整盘。
+                previous = sorted(output.parent.glob(f'level-{level:02d}-run-*/original.png'), reverse=True)
+                for path in previous[:6]:
+                    if path.parent == output:
+                        continue
+                    prior = cv2.imread(str(path))
+                    if prior is None or prior.shape != image.shape:
+                        continue
+                    try:
+                        special = special_vision.build_layout(prior, board, player.extract, auto, player, frames)
+                        recognition_source = str(path)
+                        break
+                    except ValueError as error:
+                        last_error = error
+            if special is None:
+                raise ValueError('特殊猪多帧识别失败：' + str(last_error))
+            if filter_yellow_candidates(ducks, special['grid'], special['pigs'])[0]:
+                raise ValueError('特殊猪与未复核黄色物件混合')
+            executor = locked_candidate.locked_module()
+            state, directions = player.solver.prepare(special['pigs'], special['grid'][3], special['grid'][4])
+            for frame in frames:
+                current = special_vision.detect(frame, board, player.extract)
+                if len(current) != len(candidates) or any(sum(
+                        other['kind'] == item['kind'] and other['direction'] == item['direction'] and
+                        math.dist(other['center'], item['center']) < 10 * image.shape[1] / 530
+                        for other in current) != 1 for item in candidates):
+                    raise ValueError('特殊猪方向或位置多帧不一致')
+                if executor.match_scissors_frame(frame, board, special['pigs'], state, directions, special['grid'],
+                                                  set(special['scissors']), set(special['ropes']), []) is None:
+                    raise ValueError('特殊猪与整幅棋盘多帧不一致')
+            player.write_json(output / 'special-auto-layout.json', special)
+            player.write_json(output / 'recognition-source.json', {'source': recognition_source})
+            stages = load_module('pig_auto_stage_helper', 'play-pig-lock-stages.py')
+            original_special = special
+            all_actions = []
+            original_indices = {pig['id']: index for index, pig in enumerate(original_special['pigs'])}
+            for number in range(1, 101):
+                solution = locked_candidate.solve(special, seeds=(17, 1, 2, 4, 5, 6, 7, 8, 9), allow_partial=True)
+                stage_output = output / f'special-stage-{number:03d}'
+                status = executor.run(adapter, solution, board, stage_output, wait=wait_seconds)
+                confirmed = [json.loads(path.read_text(encoding='utf-8'))['action'] for path in sorted(stage_output.glob('action-*.json'))]
+                all_actions.extend(dict(action, index=original_indices[action['pig_id']]) for action in confirmed)
+                if status == 'victory':
+                    executor.validate_plan(dict(original_special, actions=all_actions))
+                    shutil.copyfile(stage_output / 'victory.png', output / 'victory.png')
+                    save_or_error(output / 'solution-order.png', auto.render_solution(image, original_special['pigs'], all_actions))
+                    player.write_json(output / 'solution-order.json', {'status': 'victory_verified', 'steps': all_actions})
+                    player.write_json(output / 'result.json', {'status': 'victory', 'execution': str(stage_output.name)})
+                    return status, image
+                if status != 'stage_complete':
+                    raise ValueError('特殊猪阶段未确认完成')
+                special = stages.apply_stage(special, confirmed)
+                player.write_json(output / f'special-layout-{number:03d}.json', special)
+            raise ValueError('特殊猪阶段数达到上限')
         lock_boxes = {tuple(lock['bbox']) for lock in locked_pigs}
         ducks = [duck for duck in ducks if tuple(duck['bbox']) not in lock_boxes]
         unknown_entities = auto.find_blue_elephants(image, board)

@@ -31,6 +31,28 @@ def candidate():
 
 
 class AutoTest(unittest.TestCase):
+    def test_yellow_candidates_merge_only_overlapping_boxes_in_same_cell(self):
+        grid = (0, 0, 30, 4, 4)
+        ducks = [
+            {'center': [30, 30], 'bbox': [20, 20, 20, 20]},
+            {'center': [31, 31], 'bbox': [21, 21, 20, 20]},
+            {'center': [32, 32], 'bbox': [39, 39, 3, 3]},
+        ]
+        kept, excluded = app.filter_yellow_candidates(ducks, grid, [])
+        self.assertEqual(kept, [ducks[0], ducks[2]])
+        self.assertEqual(excluded, [ducks[1]])
+        with self.assertRaises(ValueError):
+            app.duck_cells(kept, grid)
+
+    def test_victory_title_small_animation_still_requires_next_button(self):
+        path = REF / 'play-runs/level-50-complete-verified/victory.png'
+        if not path.exists():
+            self.skipTest('本地第 50 关通关画面不可用')
+        frame = image(path)
+        self.assertEqual(app.auto.ui_state(frame), 'victory')
+        frame[680:770, 165:365] = 0
+        self.assertNotEqual(app.auto.ui_state(frame), 'victory')
+
     def test_saturated_gold_lock_candidates_on_level_43(self):
         path = REF / 'play-runs/level-43-run-20261113-214824-156938/original.png'
         if not path.exists():

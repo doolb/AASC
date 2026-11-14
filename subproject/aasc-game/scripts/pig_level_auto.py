@@ -238,7 +238,15 @@ def ui_match(image, name):
     area = gray[y:y + height, x:x + width]
     if area.shape[0] < template.shape[0] or area.shape[1] < template.shape[1]:
         return 0.0
-    return float(cv2.matchTemplate(area, template, cv2.TM_CCOEFF_NORMED).max())
+    if name != 'victory_title':
+        return float(cv2.matchTemplate(area, template, cv2.TM_CCOEFF_NORMED).max())
+    # 成功标题会轻微缩放；仍须由 ui_state 同时验证下一关按钮。
+    scores = []
+    for ratio in (.90, .925, .95, .975, 1.0, 1.025, 1.05):
+        sample = cv2.resize(template, None, fx=ratio, fy=ratio, interpolation=cv2.INTER_AREA)
+        if sample.shape[0] <= area.shape[0] and sample.shape[1] <= area.shape[1]:
+            scores.append(float(cv2.matchTemplate(area, sample, cv2.TM_CCOEFF_NORMED).max()))
+    return max(scores, default=0.0)
 
 
 def ui_state(image):

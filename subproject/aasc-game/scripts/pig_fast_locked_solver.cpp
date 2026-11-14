@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -18,8 +19,12 @@ struct Move {
   uint64_t rank;
 };
 int n, w, h, seed;
+int forbidden_first_id = -1;
+int target_exits = 0;
 vector<Pig> pigs;
 vector<int> pos, duckpos, fixedpos;
+struct Cage { int unlock; vector<int> cells; };
+vector<Cage> cages;
 vector<Move> path;
 vector<Move> best_path;
 int best_exits = 0;
@@ -80,8 +85,14 @@ bool dfs(int depth, uint64_t mask) {
           pigcells[(y + (pigs[i].dy != 0 ? k : j)) * w + x +
                    (pigs[i].dx != 0 ? k : j)] = true;
     }
+  // 笼体的格子与笼内猪可以重合；离场计数达到阈值后才移除笼体。
+  bool cagecells[300] = {};
+  for (const auto &cage : cages)
+    if (n - remain < cage.unlock)
+      for (int at : cage.cells)
+        cagecells[at] = pigcells[at] = true;
   mask = close_ducks(mask, pigcells);
-  if (!remain && !mask)
+  if ((!remain && !mask) || (target_exits > 0 && n - remain >= target_exits))
     return true;
   string key;
   key.resize(n + 8);
@@ -102,6 +113,15 @@ bool dfs(int depth, uint64_t mask) {
   for (int i = 0; i < n; i++)
     if (pos[i] >= 0 && (!pigs[i].rope || scissors_left == 0) && n - remain + int(duckpos.size()) - __builtin_popcountll(mask) >= pigs[i].unlock) {
       auto p = pigs[i];
+      if (depth == 0 && p.id == forbidden_first_id)
+        continue;
+      bool caged = false;
+      for (int k = 0; k < p.len; k++)
+        for (int j = 0; j < p.width; j++)
+          if (cagecells[pos[i] + (p.dy != 0 ? k * w + j : j * w + k)])
+            caged = true;
+      if (caged)
+        continue;
       int x = pos[i] % w, y = pos[i] / w;
       if (p.dx > 0)
         x += p.len - 1;
@@ -168,8 +188,16 @@ int main(int argc, char **argv) {
   seed = argc > 1 ? atoi(argv[1]) : 1;
   if (argc > 2)
     max_states = max(1LL, atoll(argv[2]));
-  int count, fixed_count;
-  cin >> n >> w >> h >> count >> fixed_count;
+  if (argc > 3)
+    forbidden_first_id = atoi(argv[3]);
+  if (argc > 4)
+    target_exits = max(0, atoi(argv[4]));
+  int count, fixed_count, cage_count = 0;
+  string header;
+  getline(cin, header);
+  istringstream fields(header);
+  fields >> n >> w >> h >> count >> fixed_count;
+  fields >> cage_count;
   if (w * h > 300 || count > 63)
     return 2;
   string dir;
@@ -189,6 +217,17 @@ int main(int argc, char **argv) {
     int x, y;
     cin >> x >> y;
     fixedpos.push_back(y * w + x);
+  }
+  for (int i = 0; i < cage_count; i++) {
+    Cage cage;
+    int count_cells;
+    cin >> cage.unlock >> count_cells;
+    for (int j = 0; j < count_cells; j++) {
+      int x, y;
+      cin >> x >> y;
+      cage.cells.push_back(y * w + x);
+    }
+    cages.push_back(cage);
   }
   uint64_t mask = (1ULL << count) - 1;
   seen.reserve(900000);
