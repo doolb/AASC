@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """只搜索可见的笼外猪；每个阶段都保留图片、OCR 和动作证据。"""
+import json
 import math
 from pathlib import Path
 import shutil
@@ -40,6 +41,44 @@ def read_counters(app, image, cages, output, options):
     return sorted(counters)
 
 
+def exclude_lock_yellow(app, yellow, image, output, grid):
+    """已确认的数字锁标（counters/locks）本身带黄色底色，将其从黄色鸭子候选排除。"""
+    if not yellow:
+        return yellow, []
+    lock_boxes = []
+    for ocr_dir in (output / 'ocr', output.parent / 'ocr'):
+        res_file = ocr_dir / 'result.json'
+        if res_file.exists():
+            try:
+                data = json.loads(res_file.read_text(encoding='utf-8'))
+                for item in data.get('locks', []):
+                    if 'bbox' in item:
+                        lock_boxes.append(item['bbox'])
+            except Exception:
+                pass
+        for cage_file in ocr_dir.glob('cage-*.json'):
+            try:
+                data = json.loads(cage_file.read_text(encoding='utf-8'))
+                if 'bbox' in data:
+                    lock_boxes.append(data['bbox'])
+            except Exception:
+                pass
+
+    cell_pixels = grid[2] if isinstance(grid, (list, tuple)) and len(grid) >= 3 else 30.0
+    tol = max(2.0, float(cell_pixels) * 1.5)
+
+    kept, excluded = [], []
+    for candidate in yellow:
+        cx, cy = candidate['center']
+        near_ocr = any(math.hypot(cx - (bx + bw / 2.0), cy - (by + bh / 2.0)) < tol for bx, by, bw, bh in lock_boxes)
+        looks_lock = bool(hasattr(app, 'ocr') and hasattr(app.ocr, 'looks_like_lock') and app.ocr.looks_like_lock(image, candidate))
+        if near_ocr or looks_lock:
+            excluded.append(candidate)
+        else:
+            kept.append(candidate)
+    return kept, excluded
+
+
 def prepare(app, image, board, output, options, frames=()):
     """先定位铁笼并裁剪计数；笼内未知猪不参与点击搜索。"""
     pig_cage = app.cage_vision
@@ -75,13 +114,27 @@ def prepare(app, image, board, output, options, frames=()):
         raise ValueError('铁笼轮廓与笼外猪占格冲突')
     yellow = app.auto.find_yellow_ducks(image, board)
     yellow = [p for p in yellow if not any(pig_cage.contains(c, p['center']) for c in cages)]
+    yellow, excluded_locks = exclude_lock_yellow(app, yellow, image, output, grid)
+    if excluded_locks:
+        # 锁标可能遮住整只猪；仅排除黄色候选会让搜索把真实阻挡当成空格。
+        # 在支持可靠重建锁猪占格及倒计时前，保留证据并停止。
+        app.player.write_json(output / 'cage-lock-candidates.json', {'candidates': excluded_locks})
+        raise ValueError('铁笼关卡含未建模锁猪候选，保留现场等待复核')
     yellow, _ = app.filter_yellow_candidates(yellow, grid, raw)
+    # 笼外小黄鸭按已验证规则参与求解：转换为网格格子并传入搜索器。
+    duck_grid_cells = []
     if yellow:
-        raise ValueError('铁笼关卡含未确认的黄色物件')
+        try:
+            duck_grid_cells = [list(cell) for cell in sorted(app.duck_cells(yellow, grid))]
+        except ValueError as error:
+            raise ValueError(f'铁笼关卡笼外鸭子网格位置异常: {error}') from error
+        app.player.write_json(output / 'cage-ducks.json', {'ducks': duck_grid_cells, 'candidates': yellow})
+        print(f'铁笼阶段：识别到 {len(duck_grid_cells)} 只笼外小黄鸭，格子 {duck_grid_cells}', flush=True)
     markers = app.small_blue_markers(image, board)
     if any(not any(pig_cage.contains(c, (x + w/2, y + h/2)) for c in cages) for x, y, w, h in markers):
         raise ValueError('铁笼关卡混合蓝色特殊物件，需复核')
     data = {'grid': list(grid), 'board': list(board), 'pigs': pigs, 'locks': {},
+            'ducks': duck_grid_cells,
             'blockers': [list(c) for c in sorted(cage_cells | static)],
             'cage_cells': [list(c) for c in sorted(cage_cells)], 'cage_unknown': unknown,
             'cage_counters': counters}

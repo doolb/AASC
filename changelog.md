@@ -14867,3 +14867,7 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-11-13] 将 HIE、retop 和 remote-gamepad 迁入 `subproject/`，保留独立 Git 历史及未提交内容；增加 HIE 游戏任务证据桥接。桥接及分层测试 8 项通过，HIE build 通过。
 
 - ✅ [2026-11-13] HIE、retop、remote-gamepad 与 aasc-game 统一归属 AASC 主仓库；排除模型、本机采集、运行记录和构建产物，工作文件保留。
+### 个人 Agent
+
+- ✅ [2026-11-15] 新增独立 Agent 第一阶段骨架。
+  - `subproject/aasc-agent` 实现方括号 CSV、角色权限、模型接口、委派与注入式 HIE 能力；新增设计、伪代码与任务文档。专项自测 2 项通过；真实 HIE 与模型尚未接入。

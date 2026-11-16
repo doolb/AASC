@@ -185,7 +185,9 @@
         "temperature": 0.7,
         "contextCount": 5,
         "apiKey": "",
-        "protocol": "openai-responses"
+        "protocol": "openai-responses",
+        "supportsImageUpload": true,
+        "supportsVideoUpload": false
       },
       {
         "name": "qwen3.5",
@@ -197,7 +199,9 @@
         "contextCount": 10,
         "apiKey": "",
         "promptFormat": "raw",
-        "mode": "llm"
+        "mode": "llm",
+        "supportsImageUpload": true,
+        "supportsVideoUpload": false
       }
     ],
     "codexProxy": "http://127.0.0.1:7899",
@@ -209,6 +213,21 @@
       "tiersByProvider": {
         "qwen": "flash",
         "doubaochat": "mini"
+      }
+    },
+    "imageSelection": {
+      "providerId": "glm",
+      "model": "glm-image-fast"
+    },
+    "videoSelection": {
+      "providerId": "glm",
+      "model": "glm-video"
+    },
+    "subAi": {
+      "motion": {
+        "enabled": false,
+        "providerId": "glm",
+        "model": "GLM-Flash"
       }
     }
   },
@@ -254,5 +273,10 @@
         "params": {}
       }
     ]
+  },
+  "chat2api": {
+    "remoteLogin": {
+      "fps": 30
+    }
   }
 }

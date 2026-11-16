@@ -73,6 +73,23 @@ def find_yellow_ducks(image, board):
         if all(math.dist((cx, cy), duck['center']) > 12 * scale for duck in ducks):
             ducks.append({'kind': 'yellow_duck_candidate', 'center': [round(cx, 1), round(cy, 1)],
                           'bbox': [x + bx, y + by, bw, bh], 'pixel_area': area, 'detection_source': 'saturated_gold'})
+    # 数字锁的金色方块可能通过细线与猪身或背景粘连，原始连通域因此超高。
+    # 横向开运算只用于生成候选，保留后续锁标和鸭子的独立复核。
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(3, round(9 * scale)), max(1, round(3 * scale))))
+    separated = cv2.morphologyEx(gold, cv2.MORPH_OPEN, kernel)
+    count, _, stats, centers = cv2.connectedComponentsWithStats(separated)
+    for index in range(1, count):
+        bx, by, bw, bh, area = (int(value) for value in stats[index])
+        if not (140 * scale * scale <= area <= 1000 * scale * scale and
+                18 * scale <= bw <= 35 * scale and 16 * scale <= bh <= 35 * scale and
+                0.75 <= bw / bh <= 1.4):
+            continue
+        cx, cy = (float(value) for value in centers[index])
+        cx, cy = cx + x, cy + y
+        if all(math.dist((cx, cy), duck['center']) > 12 * scale for duck in ducks):
+            ducks.append({'kind': 'yellow_duck_candidate', 'center': [round(cx, 1), round(cy, 1)],
+                          'bbox': [x + bx, y + by, bw, bh], 'pixel_area': area,
+                          'detection_source': 'separated_gold'})
     # 沙色背景可能与黄色鸭子连成一个大区域；用已观察鸭子模板补充漏检。
     size = max(1, round(29 * scale))
     region = image[y:y + height, x:x + width]

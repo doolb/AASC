@@ -1,6 +1,8 @@
 - [显示端快捷控制](spec/display-quick-control.md)
 # Web MediaCenter - 项目实现文档
 
+- [个人 Agent 伪代码](spec/aasc-agent.md)
+
 - [桌面浏览器媒体服务伪代码](spec/browser-media-service.md)
 
 - [视频黑边检测、有效画面填充与配置伪代码](spec/video-black-borders.md)

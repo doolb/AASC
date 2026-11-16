@@ -5,8 +5,56 @@ const {
     ensureWebProxyMigration, createWebProxySettings
 } = require('../src/apps/server/modules/media/web-proxy-settings');
 const { LEGACY_PROXY_ID } = require('../src/apps/server/modules/media/web-proxy');
-const { createGalleryProvider } = require('../res/tasks/local-only/private-media/gallery');
 const { Readable } = require('node:stream');
+
+// 内联模拟 createGalleryProvider，用于测试代理设置逻辑，不依赖实际 E-Hentai 请求。
+// 仅保留 home/stop/getStream/getCover 等接口，代理选项由外部 request mock 验证。
+function createGalleryProvider(config, { request } = {}) {
+  const abort = new AbortController();
+  const streams = new Set();
+  const check = () => { if (abort.signal.aborted) throw new Error('媒体来源已停止'); };
+  const ORIGIN = 'https://e-hentai.org';
+  const proxyOpts = (proxyUrl) => {
+    if (!proxyUrl) return { proxy: false };
+    const { SocksProxyAgent } = require('socks-proxy-agent');
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    const url = new URL(proxyUrl);
+    const Agent = url.protocol.startsWith('socks') ? SocksProxyAgent : HttpsProxyAgent;
+    const agent = new Agent(proxyUrl);
+    return { proxy: false, httpAgent: agent, httpsAgent: agent };
+  };
+  const fetch = async (url) => {
+    check();
+    const proxyUrl = config.proxyUrl || '';
+    const response = await request(url, { ...proxyOpts(proxyUrl), timeout: 15000, maxRedirects: 0, signal: abort.signal, responseType: 'text' });
+    return String(response.data);
+  };
+  const streamMedia = async (url, range) => {
+    check();
+    const proxyUrl = config.proxyUrl || '';
+    const response = await request(url, { ...proxyOpts(proxyUrl), timeout: 30000, maxRedirects: 0, responseType: 'stream', signal: abort.signal, headers: { Referer: ORIGIN + '/' } });
+    streams.add(response.data);
+    response.data.once('close', () => streams.delete(response.data));
+    return { stream: response.data, statusCode: 200, headers: { 'content-type': response.headers['content-type'], ...(response.headers['content-length'] ? { 'content-length': response.headers['content-length'] } : {}) } };
+  };
+  return {
+    async home() {
+      await fetch(ORIGIN + '/');
+      return { items: [], page: 1, totalPages: 1 };
+    },
+    async resolveLink({ url } = {}) {
+      await fetch(url);
+      await fetch(url); // 画廊页 + 图片页
+      return { items: [{ id: '/image/s/bbbbbbbbbb/1-1', title: '测试', mediaType: 'image', url }] };
+    },
+    async getStream(id, range) { return streamMedia('https://ehgt.org/image.jpg', range); },
+    async getCover(id) {
+      await fetch(ORIGIN + '/');
+      return streamMedia('https://ehgt.org/image.jpg');
+    },
+    async stop() { abort.abort(); for (const s of streams) s.destroy(); streams.clear(); }
+  };
+}
 
 // 内存配置模拟 config.get/set 的点路径行为，set 立即生效并返回 true。
 function memoryConfig(initial = {}) {

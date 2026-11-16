@@ -1,6 +1,8 @@
 - [显示端快捷控制](design/display-quick-control.md)
 # Web MediaCenter - 项目设计文档
 
+- [个人 Agent 第一阶段](design/aasc-agent.md)
+
 - [桌面浏览器媒体服务](design/browser-media-service.md)
 
 - [视频黑边检测与有效画面填充](design/video-black-borders.md)

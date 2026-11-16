@@ -23,6 +23,48 @@ REF = ROOT / 'docs/references/pig-game/play-runs'
 
 
 class CageTest(unittest.TestCase):
+    def test_cage_frame_checks_locked_pig_and_keeps_it_hidden(self):
+        executor = pig_locked_candidate.locked_module()
+        image = np.zeros((100, 100, 3), dtype=np.uint8)
+        image[35:55, 35:55] = (0, 200, 255)
+        pigs = [{'id': 1, 'center': [45, 45], 'direction': 'east',
+                 'grid': {'col': 1, 'row': 1, 'cells': [[1, 1], [2, 1]]}}]
+        grid = [10, 10, 20, 4, 4]
+        with patch.object(executor.app.auto, 'ui_state', return_value='unknown'), \
+             patch.object(executor.pig_cage, 'detect', return_value=[]), \
+             patch.object(executor.pig_cage, 'cells', return_value=set()), \
+             patch.object(executor.app.player.extract, 'identify', return_value=([], None, [])):
+            self.assertEqual(executor.match_cage_frame(image, [0, 0, 100, 100], pigs, [(1, 1)],
+                             ['east'], grid, [], locks={1: 3}, exits=0), {})
+            image[:] = 0
+            self.assertIsNone(executor.match_cage_frame(image, [0, 0, 100, 100], pigs, [(1, 1)],
+                              ['east'], grid, [], locks={1: 3}, exits=0))
+            self.assertIsNone(executor.match_cage_frame(image, [0, 0, 100, 100], pigs, [(1, 1)],
+                              ['east'], grid, [], locks={1: 3}, exits=3))
+
+    def test_connected_gold_lock_at_board_edge_is_detected(self):
+        path = REF / 'level-59-run-20261115-003612-758516/cage-stage-006/play/interrupted.png'
+        if not path.exists():
+            self.skipTest('本地锁标粘连样本不可用')
+        image = cv2.imread(str(path))
+        board = app.player.extract.valid_board(image, None)
+        candidates = app.auto.find_yellow_ducks(image, board)
+        self.assertTrue(any(abs(p['center'][0] - 87) < 5 and abs(p['center'][1] - 659) < 5
+                            and p.get('detection_source') == 'separated_gold' for p in candidates))
+
+    def test_cage_outside_lock_candidate_stops_before_search(self):
+        path = REF / 'level-59-run-20261115-003612-758516/cage-stage-006/play/original.png'
+        if not path.exists():
+            self.skipTest('本地铁笼和锁猪混合样本不可用')
+        image = cv2.imread(str(path))
+        board = app.player.extract.valid_board(image, None)
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(pig_cage_stage, 'read_counters', return_value=[30]), \
+                 patch.object(pig_cage_stage, 'exclude_lock_yellow', return_value=([], [{'center': [86, 664]}])):
+                with self.assertRaisesRegex(ValueError, '未建模锁猪'):
+                    pig_cage_stage.prepare(app, image, board, Path(directory), {})
+            self.assertTrue((Path(directory) / 'cage-lock-candidates.json').exists())
+
     def test_observed_cage_shapes(self):
         for name in ('level-51-cage-initial/original.png', 'level-52-cages-initial/original.png',
                      'level-53-run-20261114-083705-516303/original.png'):

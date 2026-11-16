@@ -151,21 +151,32 @@ def match_scissors_frame(image, board, pigs, state, directions, grid, scissors, 
     return matched
 
 
-def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells, unknown=()):
+def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells, unknown=(), locks=None, exits=0):
     """每次核对笼体轮廓及全部笼外猪；笼内识别片段不得成为点击目标。"""
     if app.auto.ui_state(image) != 'unknown':
         return None
     cages = pig_cage.detect(image, board)
     if pig_cage.cells(cages, grid) != {tuple(cell) for cell in expected_cells}:
         return None
+    locks = locks or {}
+    hidden = [i for i, pig in enumerate(pigs) if state[i] is not None and exits < locks.get(pig['id'], 0)]
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    for i in hidden:
+        x, y = (round(value) for value in pigs[i]['center'])
+        sample = hsv[max(0, y-20):min(image.shape[0], y+20), max(0, x-20):min(image.shape[1], x+20)]
+        if cv2.countNonZero(cv2.inRange(sample, (10, 160, 140), (40, 255, 255))) < 80:
+            return None
     detected, _, _ = app.player.extract.identify(image, board)
     detected = [pig for pig in detected if not any(pig_cage.contains(cage, pig['center']) for cage in cages)]
+    detected = [pig for pig in detected if all(math.dist(pig['center'], pigs[i]['center']) > grid[2] * .7 for i in hidden)]
     for item in unknown:
         matches = [pig for pig in detected if math.dist(pig['center'], item['center']) < grid[2] * .3]
         if len(matches) != 1:
             return None
         detected.remove(matches[0])
-    return app.player.match_expected(detected, state, directions, grid, [pig.get('length', 2) for pig in pigs])
+    visible = [i for i in range(len(pigs)) if i not in hidden]
+    return app.player.match_expected(detected, [state[i] for i in visible], [directions[i] for i in visible],
+                                     grid, [pigs[i].get('length', 2) for i in visible])
 
 
 def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
@@ -212,7 +223,7 @@ def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
                                                                            for a, b in zip(observed, expected_entities)):
                             raise ValueError('未知物件位置或外观发生变化')
                     if data.get('cage_cells'):
-                        matched = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()))
+                        matched = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()), locks, exits)
                     elif data.get('scissors') or data.get('ropes'):
                         matched = match_scissors_frame(latest, board, pigs, state, directions, grid,
                                                        set(data.get('scissors', ())), set(data.get('ropes', ())),
@@ -254,7 +265,7 @@ def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
                 latest = adapter.capture()
                 try:
                     if data.get('cage_cells'):
-                        final_match = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()))
+                        final_match = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()), locks, exits)
                     elif data.get('scissors') or data.get('ropes'):
                         final_match = match_scissors_frame(latest, board, pigs, state, directions, grid,
                                                            set(data.get('scissors', ())), set(data.get('ropes', ())),
