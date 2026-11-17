@@ -343,6 +343,10 @@ const WebSocketManager = {
             if (window.CpuAffinitySettings) {
                 window.CpuAffinitySettings.handleConfigChanged(data.cpuAffinity);
             }
+        } else if (data.type === 'backgroundMediaChanged') {
+            if (data.displayId === window.currentDisplayId) window.BackgroundMediaControl?.render(data.backgroundMedia);
+        } else if (data.type === 'backgroundMediaError') {
+            if (data.displayId === window.currentDisplayId) showToast(data.message, 'error');
         } else if (data.type === 'displayState') {
             console.log('[WS] displayState 收到, displayId:', data.displayId, 'currentDisplayId:', window.currentDisplayId);
             
@@ -355,6 +359,7 @@ const WebSocketManager = {
             }
             
             if (data.displayId === window.currentDisplayId) {
+                window.BackgroundMediaControl?.render(data.state.backgroundMedia);
                 window.Controls?.setAutoBlackBorders?.(data.state.autoBlackBorders);
                 window.Controls?.setBlackBorderTransition?.(data.state.blackBorderTransition);
                 window.ControlMediaLoop?.restore(data.displayId, data.state);

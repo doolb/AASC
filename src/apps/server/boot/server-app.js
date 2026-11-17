@@ -2189,9 +2189,12 @@ function normalizeDynamicFitConfig(value) {
     };
 }
 
+const { updateBackgroundMedia } = require('../modules/media/background-media');
+
 function createDisplayState() {
     return {
         currentMedia: null,
+        backgroundMedia: null,
         showStatusBar: true,
         mmdVisible: true,
         currentMediaProgress: null,
@@ -11806,6 +11809,18 @@ async function handleControlMessageFallback(data, ws) {
                     }
                     sendToDisplay(displayId, data.media);
                 } else if (data.type === 'control') {
+                    if (data.action === 'backgroundMedia') {
+                        const backgroundMedia = updateBackgroundMedia(displayData.state.backgroundMedia, data.value);
+                        if (!backgroundMedia) {
+                            ws.send(JSON.stringify({ type: 'backgroundMediaError', displayId, message: '背景媒体地址或参数无效' }));
+                            return;
+                        }
+                        displayData.state.backgroundMedia = backgroundMedia;
+                        persistDisplayState(displayData, { backgroundMedia });
+                        sendToDisplay(displayId, { type: 'control', action: 'backgroundMedia', value: backgroundMedia });
+                        broadcastToControls({ type: 'backgroundMediaChanged', displayId, backgroundMedia });
+                        return;
+                    }
                     if (mediaLoopService.handle(displayData, data)) return;
                     if (videoBlackBordersControl.handle(displayData, data)) return;
                     if (data.action === 'mmdVisibility') {

@@ -319,6 +319,20 @@
                 </div>
 
                 <div class="control-item">
+                    <label>背景媒体</label>
+                    <input id="backgroundMediaUrl" type="text" placeholder="音频或视频地址（也可从媒体库选择）" aria-label="背景媒体地址">
+                    <div class="control-buttons">
+                        <select id="backgroundMediaType" aria-label="背景媒体类型"><option value="audio">音频</option><option value="video">视频</option></select>
+                        <button class="control-btn" onclick="BackgroundMediaControl.start()">播放</button>
+                        <button class="control-btn" onclick="BackgroundMediaControl.change({playing:false})">暂停</button>
+                        <button class="control-btn" onclick="BackgroundMediaControl.change({url:'',playing:false})">停止</button>
+                    </div>
+                    <label><input id="backgroundMediaLoop" type="checkbox" checked onchange="BackgroundMediaControl.change({loop:this.checked})"> 循环</label>
+                    <label>音量 <output id="backgroundMediaVolumeValue">50</output>% <input id="backgroundMediaVolume" type="range" min="0" max="100" value="50" onchange="BackgroundMediaControl.change({volume:Number(this.value)})"></label>
+                    <div id="backgroundMediaStatus" role="status">背景媒体已停止</div>
+                </div>
+
+                <div class="control-item">
                     <label>文本模式</label>
                     <div class="control-buttons">
                         <button class="control-btn" id="textModeSettingsBtn" onclick="Controls.showTextModePanel()" title="设置文本字体、行间距和页边距">文本模式</button>
@@ -1333,6 +1347,7 @@
     <script src="js/temp-playlist-preview.js"></script>
     <script src="js/upload.js"></script>
     <script src="js/quark-cache-progress.js"></script>
+    <script src="js/background-media-control.js"></script>
     <script src="js/media-library.js"></script>
     <script src="js/device-list.js"></script>
     <script src="js/server-list.js"></script>

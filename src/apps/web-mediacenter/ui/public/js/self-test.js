@@ -39,6 +39,23 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'background_media_controls',
+            name: '背景媒体控制',
+            description: '只读检查独立背景通道控件和显示端资源，不改变播放',
+            category: '播放控制',
+            run: async () => {
+                try {
+                    const ids = ['backgroundMediaUrl', 'backgroundMediaType', 'backgroundMediaLoop', 'backgroundMediaVolume'];
+                    const response = await fetch('/display.html', { cache: 'no-store' });
+                    const html = await response.text();
+                    const valid = response.ok && ids.every(id => document.getElementById(id))
+                        && typeof window.BackgroundMediaControl?.change === 'function'
+                        && html.includes('backgroundMediaVideo') && html.includes('backgroundMediaAudio');
+                    return { success: !!valid, message: valid ? '背景媒体控件和播放节点已加载' : '背景媒体资源不完整', details: '只检查结构，实际解码及声音输出需在设备上验证' };
+                } catch (error) { return { success: false, message: `检查背景媒体失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'browser_media_api_auth',
             name: '浏览器媒体接口保护',
             description: '不使用凭据检查浏览器接口保护；不启动浏览器或验证站点允许列表',

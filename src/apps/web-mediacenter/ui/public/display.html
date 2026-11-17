@@ -71,6 +71,8 @@
     </div>
 
     <div id="mediaContainer">
+        <video id="backgroundMediaVideo" playsinline preload="auto"></video>
+        <audio id="backgroundMediaAudio" preload="auto"></audio>
         <div id="waitingMessage">
             <h2>等待媒体...</h2>
             <p>请在上传端选择图片或视频</p>
@@ -796,6 +798,7 @@
     <script src="js/text-media-player.js"></script>
     <!-- 弹幕渲染器必须先于主内联脚本加载，确保 window.BilibiliDanmaku 已注册。 -->
     <script src="/js/bilibili-danmaku.js"></script>
+    <script src="js/display-background-media.js"></script>
     <script src="js/display-media-library.js"></script>
     <script src="js/display-quick-control.js"></script>
     <script src="js/ui-theme.js"></script>
@@ -5917,6 +5920,10 @@
         }
 
         function handleControl(data) {
+            if (data.action === 'backgroundMedia') {
+                window.DisplayBackgroundMedia?.apply(data.value);
+                return;
+            }
             switch (data.action) {
                 case 'blackBorderTransition':
                     blackBorderTransition = VideoBlackBorders.normalizeEnabled(data.value);
@@ -6311,6 +6318,7 @@
         function applySleepState(state) {
             const prev = sleepState;
             sleepState = state;
+            window.DisplayBackgroundMedia?.setSleeping(state === 'sleep' || state === 'deep');
             mediaSleepOverlay.style.display = state === 'sleep' ? 'block' : 'none';
             uiSleepOverlay.style.display = state === 'deep' ? 'block' : 'none';
             if (state === 'sleep' || state === 'deep') {
@@ -6903,6 +6911,7 @@
                         handleReminder(data);
                         sendCommandAck('reminder', true, data.action);
                     } else if (data.type === 'restoreState') {
+                        window.DisplayBackgroundMedia?.apply(data.state.backgroundMedia);
                         handleRestoreState(data.state);
                         window.DisplayQuickControl?.update(data);
                         sendCommandAck('restoreState', true, 'state restored');
