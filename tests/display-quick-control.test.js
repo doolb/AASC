@@ -30,6 +30,8 @@ test('显示端快捷面板操作、状态同步与返回关闭', { skip: !fs.ex
     await page.setViewport({ width: 390, height: 700 });
     await page.setContent($.html());
     await page.addStyleTag({ path: path.join(root, 'css/display-quick-control.css') });
+    await page.addStyleTag({ path: path.join(root, 'css/theme.css') });
+    await page.addStyleTag({ path: path.join(root, 'css/display-ui.css') });
     await page.addScriptTag({ path: path.join(root, 'js/display-quick-control.js') });
     await page.evaluate(() => {
         window.sent = [];

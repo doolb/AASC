@@ -96,6 +96,7 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/display.html`);
+    for (const css of ['theme.css', 'display.css', 'display-mmd.css', 'display-media-library.css', 'display-ui.css']) await page.addStyleTag({ path: path.join(publicDir, 'css', css) });
     await page.addScriptTag({ path: path.join(publicDir, 'js/display-media-library.js') });
     await page.evaluate(() => {
         window.sent = [];

@@ -214,3 +214,4 @@
 - [聊天附件上传](design/chat-attachments.md)
 
 - [HIE 子工程与游戏任务桥接](design/subprojects-hie.md)
+- [显示端界面优化](design/display-ui.md)
