@@ -39,6 +39,25 @@ body {
 
 /* 横屏空间允许时固定设备列表在左，窄屏和竖屏沿文档顺序上下排列。 */
 .device-column-layout, .device-column-content { min-width: 0; }
+
+/* 其他面板按功能分栏；保留原 DOM 顺序，旋转到竖屏时自然恢复单列。 */
+.responsive-panel-grid > *, #panel-reminder > .section > * { min-width: 0; }
+@media (orientation: landscape) and (min-width: 720px) {
+    .responsive-panel-grid, #panel-reminder > .section {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        align-items: start;
+    }
+    .responsive-panel-grid > .section,
+    .responsive-panel-grid > .voiceprint-card { margin: 0; }
+    /* 设置卡片原有行内上边距只用于单列，双列时需要顶端对齐。 */
+    #panel-settings .responsive-panel-grid > .section { margin-top: 0 !important; }
+    #panel-search .responsive-panel-grid > .section:first-child,
+    #panel-logs .responsive-panel-grid > .log-section,
+    #panel-reminder > .section > h2 { grid-column: 1 / -1; }
+    #panel-reminder .reminder-form { margin-bottom: 0 !important; }
+}
 @media (orientation: landscape) and (min-width: 720px) {
     .device-column-layout { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); gap: 12px; align-items: start; }
     .device-column { position: sticky; top: 12px; }
