@@ -16,27 +16,28 @@ function createContour3D(){
     const b=bounds(m),epsilon=b.diagonal*b.diagonal*1e-14,degenerate=t.data.filter(d=>d.area<=epsilon).length,nonmanifold=[...t.edges.values()].filter(e=>e.faces.length>2).length;
     return {vertices:m.vertices.length,faces:m.faces.length,triangles:m.faces.reduce((s,f)=>s+f.length-2,0),quads:m.faces.filter(f=>f.length===4).length,boundaryLoops,boundaryEdges:[...t.edges.values()].filter(e=>e.faces.length===1).length,nonmanifold,nonmanifoldVertices,degenerate,orientationConflicts,components:components.length,euler:components.map(c=>c.euler).sort((a,b)=>a-b),area:t.data.reduce((s,d)=>s+d.area,0),volume,diagonal:b.diagonal,finite:m.vertices.every(p=>p.every(Number.isFinite)),valid:!degenerate&&!nonmanifold&&!nonmanifoldVertices&&!orientationConflicts};
   }
-  function validate(input){if(!input||!Array.isArray(input.vertices)||!Array.isArray(input.faces)||!input.vertices.length||!input.faces.length)throw Error('需要 vertices 与 faces 数组的非空网格。');if(input.vertices.length>120000||input.faces.length>180000)throw Error('本版上限12万顶点、18万面，请先按部件导出。');for(const p of input.vertices)if(!Array.isArray(p)||p.length!==3||!p.every(Number.isFinite))throw Error('顶点必须是三个有限数值。');for(const f of input.faces)if(!Array.isArray(f)||f.length<3||f.length>128||new Set(f).size!==f.length||f.some(i=>!Number.isInteger(i)||i<0||i>=input.vertices.length))throw Error('面索引无效、重复或超过128边。');const m=copy(input);if(bounds(m).diagonal<1e-12)throw Error('物体尺寸为零。');return m;}
+  function validate(input){if(!input||!Array.isArray(input.vertices)||!Array.isArray(input.faces)||!input.vertices.length||!input.faces.length)throw Error('需要 vertices 与 faces 数组的非空网格。');if(input.vertices.length>2000000||input.faces.length>3500000)throw Error('本版上限200万顶点、350万面，请先按部件导出。');for(const p of input.vertices)if(!Array.isArray(p)||p.length!==3||!p.every(Number.isFinite))throw Error('顶点必须是三个有限数值。');for(const f of input.faces)if(!Array.isArray(f)||f.length<3||f.length>128||new Set(f).size!==f.length||f.some(i=>!Number.isInteger(i)||i<0||i>=input.vertices.length))throw Error('面索引无效、重复或超过128边。');const m=copy(input);if(bounds(m).diagonal<1e-12)throw Error('物体尺寸为零。');return m;}
   function orient(m){m=copy(m);const t=topology(m),flips=new Map();for(let start=0;start<m.faces.length;start++)if(!flips.has(start)){const queue=[start];flips.set(start,false);for(let q=0;q<queue.length;q++){const fi=queue[q],f=m.faces[fi];for(let j=0;j<f.length;j++){const a=f[j],b=f[(j+1)%f.length],e=t.edges.get(key(a,b));if(e.faces.length!==2)continue;const other=e.faces.find(x=>x!==fi),of=m.faces[other],k=of.indexOf(a),same=of[(k+1)%of.length]===b,want=flips.get(fi)!==same;if(flips.has(other)){if(flips.get(other)!==want)throw Error('网格不可定向。');}else{flips.set(other,want);queue.push(other);}}}const volume=queue.reduce((s,fi)=>{const f=flips.get(fi)?m.faces[fi].slice().reverse():m.faces[fi];for(let i=1;i<f.length-1;i++)s+=dot(m.vertices[f[0]],cross(m.vertices[f[i]],m.vertices[f[i+1]]))/6;return s;},0);const closed=queue.every(fi=>m.faces[fi].every((v,j)=>t.edges.get(key(v,m.faces[fi][(j+1)%m.faces[fi].length])).faces.length===2));for(const fi of queue)if(flips.get(fi)!==(closed&&volume<0))m.faces[fi].reverse();}return m;}
   function frame(m){const t=topology(m),total=t.data.reduce((s,d)=>s+d.area,0),center=t.data.reduce((s,d)=>add(s,mul(d.center,d.area/total)),[0,0,0]),cov=Array.from({length:3},()=>[0,0,0]),weights=m.vertices.map(()=>0);m.faces.forEach((f,i)=>f.forEach(v=>weights[v]+=t.data[i].area/f.length));m.vertices.forEach((p,i)=>{const d=sub(p,center);for(let a=0;a<3;a++)for(let b=0;b<3;b++)cov[a][b]+=weights[i]*d[a]*d[b]/total;});const v=[[1,0,0],[0,1,0],[0,0,1]];for(let n=0;n<32;n++){let a=0,b=1;for(let i=0;i<3;i++)for(let j=i+1;j<3;j++)if(Math.abs(cov[i][j])>Math.abs(cov[a][b])){a=i;b=j;}if(Math.abs(cov[a][b])<1e-14*total)break;const angle=.5*Math.atan2(2*cov[a][b],cov[b][b]-cov[a][a]),c=Math.cos(angle),s=Math.sin(angle);for(let k=0;k<3;k++){const x=cov[k][a],y=cov[k][b];cov[k][a]=c*x-s*y;cov[k][b]=s*x+c*y;}for(let k=0;k<3;k++){const x=cov[a][k],y=cov[b][k];cov[a][k]=c*x-s*y;cov[b][k]=s*x+c*y;const x2=v[k][a],y2=v[k][b];v[k][a]=c*x2-s*y2;v[k][b]=s*x2+c*y2;}}
-    const order=[0,1,2].sort((a,b)=>cov[b][b]-cov[a][a]),axes=order.map(i=>v.map(row=>row[i]));for(let k=0;k<2;k++){let best=0,projection=0;for(const p of m.vertices){const q=dot(sub(p,center),axes[k]);if(Math.abs(q)>best){best=Math.abs(q);projection=q;}}if(projection<0)axes[k]=mul(axes[k],-1);}axes[2]=unit(cross(axes[0],axes[1]));const local=m.vertices.map(p=>axes.map(a=>dot(sub(p,center),a))),scale=Math.max(...[0,1,2].map(k=>Math.max(...local.map(p=>p[k]))-Math.min(...local.map(p=>p[k]))));return {center,axes,scale,local,weights,toWorld:p=>add(center,axes.reduce((s,a,i)=>add(s,mul(a,p[i])),[0,0,0]))};
+    const order=[0,1,2].sort((a,b)=>cov[b][b]-cov[a][a]),axes=order.map(i=>v.map(row=>row[i]));for(let k=0;k<2;k++){let best=0,projection=0;for(const p of m.vertices){const q=dot(sub(p,center),axes[k]);if(Math.abs(q)>best){best=Math.abs(q);projection=q;}}if(projection<0)axes[k]=mul(axes[k],-1);}axes[2]=unit(cross(axes[0],axes[1]));const local=m.vertices.map(p=>axes.map(a=>dot(sub(p,center),a)));let scale=0;for(let k=0;k<3;k++){let mn=Infinity,mx=-Infinity;for(const p of local){if(p[k]<mn)mn=p[k];if(p[k]>mx)mx=p[k];}if(mx-mn>scale)scale=mx-mn;}return {center,axes,scale,local,weights,toWorld:p=>add(center,axes.reduce((s,a,i)=>add(s,mul(a,p[i])),[0,0,0]))};
   }
   function box(m,trim=.005){const f=frame(m),lo=[],hi=[];for(let k=0;k<3;k++){const values=f.local.map((p,i)=>[p[k],f.weights[i]]).sort((a,b)=>a[0]-b[0]),total=values.reduce((s,p)=>s+p[1],0),quantile=q=>{let sum=0;for(const [v,w]of values){sum+=w;if(sum>=q*total)return v;}return values.at(-1)[0];};lo[k]=quantile(trim);hi[k]=quantile(1-trim);}const vertices=Array.from({length:8},(_,i)=>f.toWorld([i&1?hi[0]:lo[0],i&2?hi[1]:lo[1],i&4?hi[2]:lo[2]])),faces=[[0,2,3,1],[4,5,7,6],[0,1,5,4],[2,6,7,3],[0,4,6,2],[1,3,7,5]];return {...orient({vertices,faces}),method:'面积主方向包围长方体',trim};}
   function weightedMedian(items){items=items.slice().sort((a,b)=>a[0]-b[0]);const half=items.reduce((s,x)=>s+x[1],0)/2;let total=0;for(const [v,w]of items){total+=w;if(total>=half)return v;}return items.at(-1)?.[0]??0;}
   function detect(m,options={},progress=()=>{}){
     const t=topology(m),f=frame(m),scale=f.scale,ratio=options.areaRatio??1.8,change=options.curvatureDifference??.35,floor=options.curvatureFloor??.5,divisions=[1,4,16,64],faceCurvature=t.data.map(()=>0),faceWeight=t.data.map(()=>0),hinges=new Map();
     for(const [k,e]of t.edges)if(e.faces.length===2){const [a,b]=e.faces,angle=Math.acos(clamp(dot(t.data[a].normal,t.data[b].normal),-1,1)),width=dist(t.data[a].center,t.data[b].center),h=angle*scale/Math.max(width,scale*1e-8);hinges.set(k,h);for(const fi of e.faces){faceCurvature[fi]+=h*t.data[fi].area;faceWeight[fi]+=t.data[fi].area;}}
-    faceCurvature.forEach((v,i)=>faceCurvature[i]=v/(faceWeight[i]||1));const candidates=[...t.edges.entries()].filter(([k,e])=>e.faces.length===2&&Math.max(...e.faces.map(i=>t.data[i].area))/Math.max(1e-30,Math.min(...e.faces.map(i=>t.data[i].area)))>=ratio),levels=[];let visits=0;
+    faceCurvature.forEach((v,i)=>faceCurvature[i]=v/(faceWeight[i]||1));let candidates=[...t.edges.entries()].filter(([k,e])=>e.faces.length===2&&Math.max(...e.faces.map(i=>t.data[i].area))/Math.max(1e-30,Math.min(...e.faces.map(i=>t.data[i].area)))>=ratio);const denseSculptFilter=m.faces.length>12000&&candidates.length>4000;if(denseSculptFilter){candidates=candidates.filter(([,e])=>dot(t.data[e.faces[0]].normal,t.data[e.faces[1]].normal)<0.9397).sort(([,ea],[,eb])=>(Math.max(t.data[eb.faces[0]].area,t.data[eb.faces[1]].area)/Math.max(1e-30,Math.min(t.data[eb.faces[0]].area,t.data[eb.faces[1]].area)))-(Math.max(t.data[ea.faces[0]].area,t.data[ea.faces[1]].area)/Math.max(1e-30,Math.min(t.data[ea.faces[0]].area,t.data[ea.faces[1]].area)))).slice(0,2500);}const levels=[];let visits=0;
     const symmetry=options._symmetry,mirror=symmetry?.halfEligible?symmetry.mapping.vertices:null;let mirroredNeighborhoods=0;
-    const localCenters=t.data.map(d=>f.axes.map(a=>dot(sub(d.center,f.center),a)));
-    for(const division of divisions){const accepted=[],unknown=[],metrics={},width=scale/division,evaluated=new Map();
-      for(const [edgeKey,e]of candidates){const paired=mirror?key(mirror[e.a],mirror[e.b]):null;if(paired!==edgeKey&&evaluated.has(paired)){const prior=evaluated.get(paired);if(prior===null)unknown.push(edgeKey);else{metrics[edgeKey]={...structuredClone(prior.metrics),mirroredFrom:paired};if(prior.accepted)accepted.push(edgeKey);}evaluated.set(edgeKey,prior);mirroredNeighborhoods++;continue;}const origin=mul(add(m.vertices[e.a],m.vertices[e.b]),.5),normal=unit(add(...e.faces.map(i=>t.data[i].normal))),across=unit(cross(normal,sub(m.vertices[e.b],m.vertices[e.a]))),originLocal=f.axes.map(a=>dot(sub(origin,f.center),a)),cube=originLocal.map(x=>Math.floor(x/width)*width+width/2),sides=[];
-        for(const seed of e.faces){const sign=Math.sign(dot(sub(t.data[seed].center,origin),across));if(!sign){sides.push(null);continue;}const queue=[seed],seen=new Set(queue),pool=[];let truncated=false;for(let q=0;q<queue.length;q++){if(pool.length>=256){truncated=true;break;}if(++visits>4000000)throw Error('边界邻域访问超过400万，请分部件或提高面积比阈值。');const i=queue[q],d=t.data[i];if(i!==seed&&(dot(d.normal,t.data[seed].normal)<.5||dot(sub(d.center,origin),across)*sign<=0||division!==1&&localCenters[i].some((v,k)=>Math.abs(v-cube[k])>width*1.5)))continue;pool.push(i);for(const j of t.adj[i])if(!seen.has(j)&&dist(t.data[j].center,origin)<(division===1?scale*3:width*3)){seen.add(j);queue.push(j);}}
+    const localCenters=t.data.map(d=>f.axes.map(a=>dot(sub(d.center,f.center),a))),visitCap=m.faces.length>12000?2500000:4000000,gracefulDenseCap=m.faces.length>12000;
+    for(const division of divisions){let accepted=[],unknown=[],metrics={},width=scale/division,evaluated=new Map();
+      for(const [edgeKey,e]of candidates){if(gracefulDenseCap&&visits>=visitCap){unknown.push(edgeKey);continue;}const paired=mirror?key(mirror[e.a],mirror[e.b]):null;if(paired!==edgeKey&&evaluated.has(paired)){const prior=evaluated.get(paired);if(prior===null)unknown.push(edgeKey);else{metrics[edgeKey]={...structuredClone(prior.metrics),mirroredFrom:paired};if(prior.accepted)accepted.push(edgeKey);}evaluated.set(edgeKey,prior);mirroredNeighborhoods++;continue;}const origin=mul(add(m.vertices[e.a],m.vertices[e.b]),.5),normal=unit(add(...e.faces.map(i=>t.data[i].normal))),across=unit(cross(normal,sub(m.vertices[e.b],m.vertices[e.a]))),originLocal=f.axes.map(a=>dot(sub(origin,f.center),a)),cube=originLocal.map(x=>Math.floor(x/width)*width+width/2),sides=[];
+        for(const seed of e.faces){const sign=Math.sign(dot(sub(t.data[seed].center,origin),across));if(!sign){sides.push(null);continue;}const queue=[seed],seen=new Set(queue),pool=[];let truncated=false;for(let q=0;q<queue.length;q++){if(pool.length>=256){truncated=true;break;}if(++visits>visitCap){if(gracefulDenseCap){truncated=true;break;}throw Error('边界邻域访问超过上限，请分部件或提高面积比阈值。');}const i=queue[q],d=t.data[i];if(i!==seed&&(dot(d.normal,t.data[seed].normal)<.5||dot(sub(d.center,origin),across)*sign<=0||division!==1&&localCenters[i].some((v,k)=>Math.abs(v-cube[k])>width*1.5)))continue;pool.push(i);for(const j of t.adj[i])if(!seen.has(j)&&dist(t.data[j].center,origin)<(division===1?scale*3:width*3)){seen.add(j);queue.push(j);}}
           const ids=new Set(pool),internal=[];for(const i of pool){const face=m.faces[i];for(let j=0;j<face.length;j++){const k=key(face[j],face[(j+1)%face.length]),edge=t.edges.get(k);if(k!==edgeKey&&edge.faces.length===2&&edge.faces.every(x=>ids.has(x))&&i===edge.faces[0])internal.push(k);}}
           if(truncated||pool.length<3||!internal.length){sides.push(null);continue;}const axis=unit(sub(m.vertices[m.faces[seed][1]],m.vertices[m.faces[seed][0]])),second=unit(cross(t.data[seed].normal,axis));let aa=0,ab=0,bb=0;const weights=pool.map(i=>{const delta=sub(t.data[i].center,t.data[seed].center),x=dot(delta,axis),y=dot(delta,second),w=t.data[i].area*Math.exp(-(dist(t.data[i].center,origin)**2)/(Math.max(width*.9,scale*.01)**2));aa+=w*x*x;ab+=w*x*y;bb+=w*y*y;return [i,w];});if(aa*bb-ab*ab<=1e-8*(aa+bb)**2){sides.push(null);continue;}const rep=weightedMedian(weights.map(([i,w])=>[t.data[i].area,w])),sum=internal.reduce((s,k)=>s+t.edges.get(k).faces.reduce((s,i)=>s+t.data[i].area,0),0),curvature=internal.reduce((s,k)=>s+hinges.get(k)*t.edges.get(k).faces.reduce((s,i)=>s+t.data[i].area,0),0)/(sum||1);sides.push({area:rep,curvature,faces:pool.length,hinges:internal.length});
         }
         if(sides.some(s=>!s)){unknown.push(edgeKey);evaluated.set(edgeKey,null);continue;}const areaRatio=Math.max(...sides.map(s=>s.area))/Math.max(1e-30,Math.min(...sides.map(s=>s.area))),hi=Math.max(...sides.map(s=>s.curvature)),lo=Math.min(...sides.map(s=>s.curvature)),difference=(hi-lo)/Math.max(hi,floor);metrics[edgeKey]={areaRatio,curvatureDifference:difference,sideCurvatures:sides.map(s=>s.curvature),sideFaces:sides.map(s=>s.faces)};const passed=areaRatio>=ratio&&difference>=change&&hi>=floor;if(passed)accepted.push(edgeKey);evaluated.set(edgeKey,{metrics:metrics[edgeKey],accepted:passed});
       }
+      if(denseSculptFilter&&accepted.length){const filtered=structuralRuns(m,accepted,.08).keys;accepted=filtered.length>=8?filtered:[];}
       const groups=new Int32Array(m.faces.length).fill(-1),barrier=new Set(accepted);let count=0;for(let i=0;i<m.faces.length;i++)if(groups[i]<0){const queue=[i];groups[i]=count;for(let q=0;q<queue.length;q++){const fi=queue[q],face=m.faces[fi];for(let j=0;j<face.length;j++){const k=key(face[j],face[(j+1)%face.length]);if(barrier.has(k))continue;for(const other of t.edges.get(k).faces)if(groups[other]<0){groups[other]=count;queue.push(other);}}}count++;}
       levels.push({division,accepted,unknown,metrics,groups:Array.from(groups),groupCount:count});progress('边界窗口 '+division+' / 64');
     }
@@ -46,6 +47,155 @@ function createContour3D(){
   class Heap{constructor(){this.a=[];}push(v){const a=this.a;a.push(v);let i=a.length-1;while(i){const j=(i-1)>>1;if(a[j].cost<=v.cost)break;a[i]=a[j];i=j;}a[i]=v;}pop(){const a=this.a;if(!a.length)return null;const v=a[0],last=a.pop();if(a.length){let i=0;while(i*2+1<a.length){let j=i*2+1;if(j+1<a.length&&a[j+1].cost<a[j].cost)j++;if(a[j].cost>=last.cost)break;a[i]=a[j];i=j;}a[i]=last;}return v;}}
   const qAdd=(a,b)=>a.map((v,i)=>v+b[i]),qValue=(q,p)=>{const v=[...p,1];return q.reduce((s,x,i)=>s+x*v[i>>2]*v[i%4],0);};
   function solve3(a,b){const m=a.map((r,i)=>[...r,b[i]]);for(let i=0;i<3;i++){let best=i;for(let j=i+1;j<3;j++)if(Math.abs(m[j][i])>Math.abs(m[best][i]))best=j;if(Math.abs(m[best][i])<1e-12)return null;[m[i],m[best]]=[m[best],m[i]];const v=m[i][i];for(let k=i;k<4;k++)m[i][k]/=v;for(let j=0;j<3;j++)if(j!==i){const x=m[j][i];for(let k=i;k<4;k++)m[j][k]-=x*m[i][k];}}return m.map(r=>r[3]);}
+  // 清理原始雕刻高模：焊接零面积狭长面片最短边（避免破洞），去重与多余非流形边面
+  function cleanSculptMesh(input,scale=bounds(input).diagonal){
+    const verts=input.vertices,tris=[];
+    for(const f of input.faces){if(f.length===3)tris.push(f);else for(let i=1;i<f.length-1;i++)tris.push([f[0],f[i],f[i+1]]);}
+    const parent=Int32Array.from({length:verts.length},(_,i)=>i),find=x=>{while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;};
+    const epsA2=(scale*scale*1e-13)**2,dist2=(a,b)=>{const u=verts[a],v=verts[b];return (u[0]-v[0])**2+(u[1]-v[1])**2+(u[2]-v[2])**2;};
+    let weldedSlivers=0;
+    for(let fi=0;fi<tris.length;fi++){
+      const f=tris[fi],i0=find(f[0]),i1=find(f[1]),i2=find(f[2]);
+      if(i0===i1||i1===i2||i2===i0)continue;
+      const a=verts[i0],b=verts[i1],c=verts[i2];
+      const nx=(b[1]-a[1])*(c[2]-a[2])-(b[2]-a[2])*(c[1]-a[1]),ny=(b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2]),nz=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+      if(nx*nx+ny*ny+nz*nz<=epsA2){
+        weldedSlivers++;const d01=dist2(i0,i1),d12=dist2(i1,i2),d20=dist2(i2,i0);
+        if(d01<=d12&&d01<=d20)parent[Math.max(i0,i1)]=Math.min(i0,i1);
+        else if(d12<=d20)parent[Math.max(i1,i2)]=Math.min(i1,i2);
+        else parent[Math.max(i2,i0)]=Math.min(i2,i0);
+      }
+    }
+    const stride=Math.max(1,verts.length+1),eKey=(a,b)=>a<b?a*stride+b:b*stride+a;
+    const fSet=new Set(),edgeMap=new Map(),tempF=[];
+    for(let fi=0;fi<tris.length;fi++){
+      const f=tris[fi],a=find(f[0]),b=find(f[1]),c=find(f[2]);
+      if(a===b||b===c||c===a)continue;
+      const m0=Math.min(a,b,c),m2=Math.max(a,b,c),m1=a+b+c-m0-m2,fk=`${m0}:${m1}:${m2}`;
+      if(fSet.has(fk))continue;fSet.add(fk);const id=tempF.length;tempF.push([a,b,c]);
+      for(const [u,v]of [[a,b],[b,c],[c,a]]){const k=eKey(u,v);let l=edgeMap.get(k);if(!l){l=[];edgeMap.set(k,l);}l.push(id);}
+    }
+    const drop=new Uint8Array(tempF.length);let droppedNonManifold=0;
+    for(const l of edgeMap.values())if(l.length>2)for(let i=2;i<l.length;i++)if(!drop[l[i]]){drop[l[i]]=1;droppedNonManifold++;}
+    const remap=new Int32Array(verts.length).fill(-1),outV=[],outF=[];
+    for(let fi=0;fi<tempF.length;fi++){if(drop[fi])continue;const f=tempF[fi];outF.push(f.map(v=>{if(remap[v]<0){remap[v]=outV.length;outV.push(verts[v].slice());}return remap[v];}));}
+    return {mesh:{vertices:outV,faces:outF},stats:{inputFaces:tris.length,cleanedFaces:outF.length,weldedSlivers,droppedNonManifold}};
+  }
+  // 高性能类型化数组 QEM 三角网格减面（适用于十万至百万级高模）
+  function fastQEM(mesh,targetTris,scale=bounds(mesh).diagonal,options={}){
+    const cosLimit=options.cosLimit??0.05,maxError=options.maxError??0.25,lockedKeys=options.lockedKeys||[];
+    const tri=mesh.faces.every(f=>f.length===3)?mesh:triangulate(mesh);
+    const V=tri.vertices.length,F=tri.faces.length,px=new Float64Array(V),py=new Float64Array(V),pz=new Float64Array(V);
+    for(let i=0;i<V;i++){px[i]=tri.vertices[i][0];py[i]=tri.vertices[i][1];pz[i]=tri.vertices[i][2];}
+    const q=new Float64Array(V*10),vVer=new Int32Array(V),vDead=new Uint8Array(V),vLocked=new Uint8Array(V),vFaces=Array.from({length:V},()=>[]);
+    for(const k of lockedKeys){const [a,b]=k.split(':').map(Number);if(Number.isInteger(a)&&a>=0&&a<V)vLocked[a]=1;if(Number.isInteger(b)&&b>=0&&b<V)vLocked[b]=1;}
+    const f0=new Int32Array(F),f1=new Int32Array(F),f2=new Int32Array(F),fDead=new Uint8Array(F);
+    for(let fi=0;fi<F;fi++){
+      const [a,b,c]=tri.faces[fi];f0[fi]=a;f1[fi]=b;f2[fi]=c;vFaces[a].push(fi);vFaces[b].push(fi);vFaces[c].push(fi);
+      const ux=px[b]-px[a],uy=py[b]-py[a],uz=pz[b]-pz[a],vx=px[c]-px[a],vy=py[c]-py[a],vz=pz[c]-pz[a];
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,l=Math.hypot(nx,ny,nz);
+      if(l<=1e-24){fDead[fi]=1;continue;}
+      const area=0.5*l,inv=1/l,Nx=nx*inv,Ny=ny*inv,Nz=nz*inv,D=-(Nx*px[a]+Ny*py[a]+Nz*pz[a]);
+      const aa=area*Nx*Nx,ab=area*Nx*Ny,ac=area*Nx*Nz,ad=area*Nx*D,bb=area*Ny*Ny,bc=area*Ny*Nz,bd=area*Ny*D,cc=area*Nz*Nz,cd=area*Nz*D,dd=area*D*D;
+      for(const vi of [a,b,c]){const o=vi*10;q[o]+=aa;q[o+1]+=ab;q[o+2]+=ac;q[o+3]+=ad;q[o+4]+=bb;q[o+5]+=bc;q[o+6]+=bd;q[o+7]+=cc;q[o+8]+=cd;q[o+9]+=dd;}
+    }
+    const stride=Math.max(1,V+1),eCount=new Map();
+    for(let fi=0;fi<F;fi++){
+      if(fDead[fi])continue;const vs=[f0[fi],f1[fi],f2[fi]];
+      for(let j=0;j<3;j++){let a=vs[j],b=vs[(j+1)%3];if(a>b){const t=a;a=b;b=t;}const k=a*stride+b;eCount.set(k,(eCount.get(k)||0)+1);}
+    }
+    for(const [k,c]of eCount)if(c===1){vLocked[Math.floor(k/stride)]=1;vLocked[k%stride]=1;}
+    let hLen=0,hCap=Math.max(64,F*3+16);
+    let hA=new Int32Array(hCap),hB=new Int32Array(hCap),hAv=new Int32Array(hCap),hBv=new Int32Array(hCap);
+    let hX=new Float64Array(hCap),hY=new Float64Array(hCap),hZ=new Float64Array(hCap),hCost=new Float64Array(hCap);
+    const ensureHeap=()=>{if(hLen<hCap)return;hCap=Math.floor(hCap*1.5);const gi=a=>{const b=new Int32Array(hCap);b.set(a);return b;},gf=a=>{const b=new Float64Array(hCap);b.set(a);return b;};hA=gi(hA);hB=gi(hB);hAv=gi(hAv);hBv=gi(hBv);hX=gf(hX);hY=gf(hY);hZ=gf(hZ);hCost=gf(hCost);};
+    const swap=(i,j)=>{let t=hA[i];hA[i]=hA[j];hA[j]=t;t=hB[i];hB[i]=hB[j];hB[j]=t;t=hAv[i];hAv[i]=hAv[j];hAv[j]=t;t=hBv[i];hBv[i]=hBv[j];hBv[j]=t;let tf=hX[i];hX[i]=hX[j];hX[j]=tf;tf=hY[i];hY[i]=hY[j];hY[j]=tf;tf=hZ[i];hZ[i]=hZ[j];hZ[j]=tf;tf=hCost[i];hCost[i]=hCost[j];hCost[j]=tf;};
+    const push=(a,b,av,bv,x,y,z,cost)=>{ensureHeap();let i=hLen++;hA[i]=a;hB[i]=b;hAv[i]=av;hBv[i]=bv;hX[i]=x;hY[i]=y;hZ[i]=z;hCost[i]=cost;while(i>0){const p=(i-1)>>1;if(hCost[p]<=hCost[i])break;swap(p,i);i=p;}};
+    const pop=()=>{const out=[hA[0],hB[0],hAv[0],hBv[0],hX[0],hY[0],hZ[0]];const last=--hLen;if(last>0){hA[0]=hA[last];hB[0]=hB[last];hAv[0]=hAv[last];hBv[0]=hBv[last];hX[0]=hX[last];hY[0]=hY[last];hZ[0]=hZ[last];hCost[0]=hCost[last];let i=0;while(i*2+1<hLen){let j=i*2+1;if(j+1<hLen&&hCost[j+1]<hCost[j])j++;if(hCost[i]<=hCost[j])break;swap(i,j);i=j;}}return out;};
+    const evalQ=(o0,o1,x,y,z)=>{const aa=q[o0]+q[o1],ab=q[o0+1]+q[o1+1],ac=q[o0+2]+q[o1+2],ad=q[o0+3]+q[o1+3],bb=q[o0+4]+q[o1+4],bc=q[o0+5]+q[o1+5],bd=q[o0+6]+q[o1+6],cc=q[o0+7]+q[o1+7],cd=q[o0+8]+q[o1+8],dd=q[o0+9]+q[o1+9];return Math.max(0,aa*x*x+bb*y*y+cc*z*z+dd+2*(ab*x*y+ac*x*z+ad*x+bc*y*z+bd*y+cd*z));};
+    const addCandidate=(a,b)=>{
+      if(a>b){const t=a;a=b;b=t;}
+      if(vDead[a]||vDead[b]||(vLocked[a]&&vLocked[b]))return;
+      const o0=a*10,o1=b*10,mx=0.5*(px[a]+px[b]),my=0.5*(py[a]+py[b]),mz=0.5*(pz[a]+pz[b]);
+      let bx,by,bz,bc;
+      if(vLocked[a]){bx=px[a];by=py[a];bz=pz[a];bc=evalQ(o0,o1,bx,by,bz);}
+      else if(vLocked[b]){bx=px[b];by=py[b];bz=pz[b];bc=evalQ(o0,o1,bx,by,bz);}
+      else{
+        bx=mx;by=my;bz=mz;bc=evalQ(o0,o1,mx,my,mz);
+        const ca=evalQ(o0,o1,px[a],py[a],pz[a]);if(ca<bc){bc=ca;bx=px[a];by=py[a];bz=pz[a];}
+        const cb=evalQ(o0,o1,px[b],py[b],pz[b]);if(cb<bc){bc=cb;bx=px[b];by=py[b];bz=pz[b];}
+        const a00=q[o0]+q[o1],a01=q[o0+1]+q[o1+1],a02=q[o0+2]+q[o1+2],b0=-(q[o0+3]+q[o1+3]),a11=q[o0+4]+q[o1+4],a12=q[o0+5]+q[o1+5],b1=-(q[o0+6]+q[o1+6]),a22=q[o0+7]+q[o1+7],b2=-(q[o0+8]+q[o1+8]);
+        const det=a00*(a11*a22-a12*a12)-a01*(a01*a22-a12*a02)+a02*(a01*a12-a11*a02);
+        if(Math.abs(det)>1e-18*((a00+a11+a22)**3+1e-30)){
+          const sx=(b0*(a11*a22-a12*a12)-a01*(b1*a22-a12*b2)+a02*(b1*a12-a11*b2))/det,sy=(a00*(b1*a22-a12*b2)-b0*(a01*a22-a12*a02)+a02*(a01*b2-b1*a02))/det,sz=(a00*(a11*b2-b1*a12)-a01*(a01*b2-b1*a02)+b0*(a01*a12-a11*a02))/det;
+          const el=Math.hypot(px[b]-px[a],py[b]-py[a],pz[b]-pz[a]);
+          if(Math.hypot(sx-mx,sy-my,sz-mz)<el*1.1){const cs=evalQ(o0,o1,sx,sy,sz);if(cs<bc){bc=cs;bx=sx;by=sy;bz=sz;}}
+        }
+      }
+      push(a,b,vVer[a],vVer[b],bx,by,bz,bc);
+    };
+    for(const [k,c]of eCount)if(c===2)addCandidate(Math.floor(k/stride),k%stride);
+    let liveTris=F;for(let i=0;i<F;i++)if(fDead[i])liveTris--;
+    const epsArea2=(scale*scale*1e-14)**2,maxErr=scale*maxError,nbrA=new Set(),nbrB=new Set(),futureKeys=new Set();
+    while(liveTris>targetTris&&hLen>0){
+      const [a,b,av,bv,nx,ny,nz]=pop();
+      if(vDead[a]||vDead[b]||vVer[a]!==av||vVer[b]!==bv)continue;
+      if(Math.hypot(nx-px[a],ny-py[a],nz-pz[a])>maxErr||Math.hypot(nx-px[b],ny-py[b],nz-pz[b])>maxErr)continue;
+      const fa=vFaces[a],fb=vFaces[b];nbrA.clear();nbrB.clear();let pairCount=0;
+      for(let i=0;i<fa.length;i++){const fi=fa[i];if(fDead[fi])continue;const x=f0[fi],y=f1[fi],z=f2[fi];if(x===b||y===b||z===b)pairCount++;if(x!==a)nbrA.add(x);if(y!==a)nbrA.add(y);if(z!==a)nbrA.add(z);}
+      for(let i=0;i<fb.length;i++){const fi=fb[i];if(fDead[fi])continue;const x=f0[fi],y=f1[fi],z=f2[fi];if(x!==b)nbrB.add(x);if(y!==b)nbrB.add(y);if(z!==b)nbrB.add(z);}
+      let shared=0;for(const v of nbrA)if(nbrB.has(v))shared++;
+      if(pairCount!==2||shared!==2)continue;
+      let ok=true;futureKeys.clear();
+      for(const list of [fa,fb]){
+        for(let i=0;i<list.length;i++){
+          const fi=list[i];if(fDead[fi])continue;const x=f0[fi],y=f1[fi],z=f2[fi];
+          if((x===a||y===a||z===a)&&(x===b||y===b||z===b))continue;
+          const rx=x===b?a:x,ry=y===b?a:y,rz=z===b?a:z,m0=Math.min(rx,ry,rz),m2=Math.max(rx,ry,rz),m1=rx+ry+rz-m0-m2,fk=`${m0}:${m1}:${m2}`;
+          if(futureKeys.has(fk)){ok=false;break;}futureKeys.add(fk);
+          const Ax=x===a||x===b?nx:px[x],Ay=x===a||x===b?ny:py[x],Az=x===a||x===b?nz:pz[x];
+          const Bx=y===a||y===b?nx:px[y],By=y===a||y===b?ny:py[y],Bz=y===a||y===b?nz:pz[y];
+          const Cx=z===a||z===b?nx:px[z],Cy=z===a||z===b?ny:py[z],Cz=z===a||z===b?nz:pz[z];
+          const ux=Bx-Ax,uy=By-Ay,uz=Bz-Az,vx=Cx-Ax,vy=Cy-Ay,vz=Cz-Az,cnx=uy*vz-uz*vy,cny=uz*vx-ux*vz,cnz=ux*vy-uy*vx,cl=Math.hypot(cnx,cny,cnz);
+          if(cl*cl<epsArea2){ok=false;break;}
+          const ox1=px[y]-px[x],oy1=py[y]-py[x],oz1=pz[y]-pz[x],ox2=px[z]-px[x],oy2=py[z]-py[x],oz2=pz[z]-pz[x],onx=oy1*oz2-oz1*oy2,ony=oz1*ox2-ox1*oz2,onz=ox1*oy2-oy1*ox2,ol=Math.hypot(onx,ony,onz);
+          if((cnx*onx+cny*ony+cnz*onz)/(cl*(ol||1))<cosLimit){ok=false;break;}
+        }
+        if(!ok)break;
+      }
+      if(!ok)continue;
+      px[a]=nx;py[a]=ny;pz[a]=nz;if(vLocked[b])vLocked[a]=1;
+      const o0=a*10,o1=b*10;for(let k=0;k<10;k++)q[o0+k]+=q[o1+k];vDead[b]=1;
+      const nextFa=[];
+      for(let i=0;i<fa.length;i++){const fi=fa[i];if(fDead[fi])continue;if(f0[fi]===b||f1[fi]===b||f2[fi]===b){fDead[fi]=1;liveTris--;}else nextFa.push(fi);}
+      for(let i=0;i<fb.length;i++){const fi=fb[i];if(fDead[fi])continue;if(f0[fi]===a||f1[fi]===a||f2[fi]===a){fDead[fi]=1;liveTris--;}else{if(f0[fi]===b)f0[fi]=a;if(f1[fi]===b)f1[fi]=a;if(f2[fi]===b)f2[fi]=a;nextFa.push(fi);}}
+      vFaces[a]=nextFa;vFaces[b]=[];vVer[a]++;
+      for(const v of nbrA)if(!vDead[v])addCandidate(a,v);
+      for(const v of nbrB)if(!vDead[v]&&!nbrA.has(v))addCandidate(a,v);
+    }
+    const map=new Int32Array(V).fill(-1),outV=[],outF=[];
+    for(let fi=0;fi<F;fi++){if(fDead[fi])continue;outF.push([f0[fi],f1[fi],f2[fi]].map(v=>{if(map[v]<0){map[v]=outV.length;outV.push([px[v],py[v],pz[v]]);}return map[v];}));}
+    return {vertices:outV,faces:outF,simplification:{target:targetTris,actual:outF.length,metTarget:outF.length<=targetTris}};
+  }
+  function prepareWorkingSource(original,progress=()=>{}){
+    const rawTris=original.faces.reduce((s,f)=>s+f.length-2,0),diag=bounds(original).diagonal;
+    if(original.vertices.length<=120000&&original.faces.length<=180000){
+      try{
+        const oriented=orient(original),h=audit(oriented);
+        if(h.valid)return {source:oriented,health:h,analysisProxy:false,cleanStats:null,rawStats:{vertices:original.vertices.length,faces:original.faces.length,triangles:rawTris}};
+      }catch(e){if(e?.message!=='网格不可定向')throw e;}
+      progress('清理原网格零面积狭长面与非流形边');
+      const cleaned=cleanSculptMesh(original,diag),source=orient(cleaned.mesh),h=audit(source);
+      if(!h.valid)throw Error('源网格存在退化面、非流形边或定向冲突，请先清理；原件未改。');
+      return {source,health:h,analysisProxy:true,cleanStats:cleaned.stats,rawStats:{vertices:original.vertices.length,faces:original.faces.length,triangles:rawTris}};
+    }
+    progress('清理高模退化片并构建工作分析副本');
+    const cleaned=cleanSculptMesh(original,diag),oriented=orient(cleaned.mesh),targetProxy=30000;
+    const proxy=cleaned.mesh.faces.length>targetProxy?orient(fastQEM(oriented,targetProxy,diag,{cosLimit:0.05,maxError:0.25})):oriented;
+    const h=audit(proxy);
+    if(!h.valid)throw Error('高模工作副本清理失败，请先在建模软件清理非流形结构。');
+    return {source:proxy,health:h,analysisProxy:true,cleanStats:cleaned.stats,rawStats:{vertices:original.vertices.length,faces:original.faces.length,triangles:rawTris}};
+  }
   function simplify(source,target,protectedKeys=[],options={}){
     const input=triangulate(source),vertices=input.vertices.map(p=>({p:p.slice(),q:Array(16).fill(0),faces:new Set(),alive:true,version:0,locked:false,source:new Set()})),faces=input.faces.map((v,i)=>({v,alive:true,source:input.source[i]})),scale=bounds(source).diagonal,protectedVertices=new Set(protectedKeys.flatMap(k=>k.split(':').map(Number))),heap=new Heap();let count=faces.length;
     const st=topology(source);for(const e of st.edges.values())if(e.faces.length===1){protectedVertices.add(e.a);protectedVertices.add(e.b);}for(const i of protectedVertices)vertices[i].locked=true;
@@ -60,6 +210,50 @@ function createContour3D(){
   }
   function pairQuads(m,angle=18){const t=topology(m),used=new Set(),pairs=[];for(const e of t.edges.values())if(e.faces.length===2){const [a,b]=e.faces;if(m.faces[a].length!==3||m.faces[b].length!==3||dot(t.data[a].normal,t.data[b].normal)<Math.cos(angle*Math.PI/180))continue;const fa=m.faces[a],fb=m.faces[b],ring=[];for(const f of [fa,fb])for(let i=0;i<3;i++)if(key(f[i],f[(i+1)%3])!==key(e.a,e.b))ring.push([f[i],f[(i+1)%3]]);const loop=[ring[0][0]];for(let i=0;i<3;i++){const edge=ring.find(p=>p[0]===loop.at(-1));if(!edge)break;loop.push(edge[1]);}if(loop.length!==4||new Set(loop).size!==4)continue;const first=loop.indexOf(e.a);loop.push(...loop.splice(0,first));const ps=loop.map(i=>m.vertices[i]),normal=unit(add(t.data[a].normal,t.data[b].normal));if(ps.some((p,i)=>dot(cross(sub(ps[(i+1)%4],p),sub(ps[(i+2)%4],ps[(i+1)%4])),normal)<=1e-12))continue;const lengths=ps.map((p,i)=>dist(p,ps[(i+1)%4]));if(Math.max(...lengths)>Math.min(...lengths)*5)continue;pairs.push({a,b,loop,cost:1-dot(t.data[a].normal,t.data[b].normal)+Math.max(...lengths)/Math.min(...lengths)*.01});}
     const faces=[],faceSources=[];for(const p of pairs.sort((a,b)=>a.cost-b.cost))if(!used.has(p.a)&&!used.has(p.b)){used.add(p.a);used.add(p.b);faces.push(p.loop);faceSources.push(m.faceSources?.[p.a]??p.a);}m.faces.forEach((f,i)=>{if(!used.has(i)){faces.push(f.slice());faceSources.push(m.faceSources?.[i]??i);}});return {...m,faces,faceSources};
+  }
+  // Edmonds 最大匹配凸四边合并：保持精确三角面总预算不变，优先保留近似矩形特征四边环
+  function matchQuads(input,angle=38,maxAspect=4.5){
+    const m=input.faces.every(f=>f.length===3)?copy(input):triangulate(input),t=topology(m),n=m.faces.length;
+    const graph=Array.from({length:n},()=>[]),loops=new Map(),minCos=Math.cos(angle*Math.PI/180);
+    for(const e of t.edges.values())if(e.faces.length===2){
+      const [a,b]=e.faces;if(m.faces[a].length!==3||m.faces[b].length!==3)continue;
+      const cos=dot(t.data[a].normal,t.data[b].normal);if(cos<minCos)continue;
+      const edges=[];for(const fi of [a,b]){const f=m.faces[fi];for(let j=0;j<3;j++)if(key(f[j],f[(j+1)%3])!==key(e.a,e.b))edges.push([f[j],f[(j+1)%3]]);}
+      const loop=[edges[0][0]];while(loop.length<4){const next=edges.find(p=>p[0]===loop.at(-1));if(!next)break;loop.push(next[1]);}
+      if(loop.length!==4||new Set(loop).size!==4)continue;
+      const normal=unit(add(t.data[a].normal,t.data[b].normal)),ps=loop.map(i=>m.vertices[i]);
+      if(ps.some((p,i)=>dot(cross(sub(ps[(i+1)%4],p),sub(ps[(i+2)%4],ps[(i+1)%4])),normal)<=1e-12))continue;
+      const lens=ps.map((p,i)=>dist(p,ps[(i+1)%4]));if(Math.max(...lens)>Math.min(...lens)*maxAspect)continue;
+      const at=loop.indexOf(e.a),ring=[...loop.slice(at),...loop.slice(0,at)];if(ring[2]!==e.b)continue;
+      loops.set(key(a,b),ring);
+      let cosSum=0;for(let i=0;i<4;i++){const u=unit(sub(ps[(i+1)%4],ps[i])),v=unit(sub(ps[(i+3)%4],ps[i]));cosSum+=Math.abs(dot(u,v));}
+      const cost=(1-cos)+cosSum*0.25+(Math.max(...lens)/Math.min(...lens)-1)*0.05;
+      graph[a].push({v:b,cost});graph[b].push({v:a,cost});
+    }
+    graph.forEach(a=>a.sort((x,y)=>x.cost-y.cost));
+    const match=Array(n).fill(-1),parent=Array(n),base=Array(n),used=Array(n),blossom=Array(n);
+    const lca=(a,b)=>{const path=new Set();while(true){a=base[a];path.add(a);if(match[a]===-1)break;a=parent[match[a]];}while(true){b=base[b];if(path.has(b))return b;b=parent[match[b]];}};
+    const mark=(v,b,child)=>{while(base[v]!==b){blossom[base[v]]=blossom[base[match[v]]]=true;parent[v]=child;child=match[v];v=parent[match[v]];}};
+    function augment(root){
+      used.fill(false);parent.fill(-1);for(let i=0;i<n;i++)base[i]=i;
+      const queue=[root];used[root]=true;
+      for(let q=0;q<queue.length;q++){
+        const v=queue[q];
+        for(const item of graph[v]){
+          const u=item.v;if(base[v]===base[u]||match[v]===u)continue;
+          if(u===root||match[u]!==-1&&parent[match[u]]!==-1){const b=lca(v,u);blossom.fill(false);mark(v,b,u);mark(u,b,v);for(let i=0;i<n;i++)if(blossom[base[i]]){base[i]=b;if(!used[i]){used[i]=true;queue.push(i);}}}
+          else if(parent[u]===-1){parent[u]=v;if(match[u]===-1){let cur=u;while(cur!==-1){const p=parent[cur],next=p===-1?-1:match[p];if(p!==-1){match[cur]=p;match[p]=cur;}cur=next;}return true;}const nx=match[u];used[nx]=true;queue.push(nx);}
+        }
+      }
+      return false;
+    }
+    for(let i=0;i<n;i++)if(match[i]===-1)augment(i);
+    const faces=[],faceSources=[];
+    for(let i=0;i<n;i++){
+      if(match[i]>i){faces.push(loops.get(key(i,match[i])));faceSources.push(m.faceSources?.[i]??i);}
+      else if(match[i]===-1){faces.push(m.faces[i].slice());faceSources.push(m.faceSources?.[i]??i);}
+    }
+    return {...m,faces,faceSources};
   }
   function quadShell(input){
     const tr=triangulate(input),m={...input,vertices:tr.vertices,faces:tr.faces,faceSources:tr.source.map(i=>input.faceSources?.[i]??i)},t=topology(m),n=m.faces.length,graph=Array.from({length:n},()=>[]),loops=new Map();
@@ -95,9 +289,9 @@ function createContour3D(){
   function measure(source,candidate){const sample=(m,max=180)=>{const step=Math.max(1,Math.ceil(m.vertices.length/max));return m.vertices.filter((_,i)=>i%step===0);},a=nearestDistance(candidate,sample(source)),b=nearestDistance(source,sample(candidate)),scale=bounds(source).diagonal,sort=[...a,...b].sort((a,b)=>a-b);return {sampleCount:sort.length,maximum:sort.at(-1),maxRelative:sort.at(-1)/scale,p95Relative:sort[Math.floor(sort.length*.95)]/scale,method:'双向顶点抽样到真实三角面距离；非严格Hausdorff上界'};}
   function structuralRuns(m,keys,minimum=.035){const adjacency=new Map(),seen=new Set(),kept=[],runs=[],scale=bounds(m).diagonal;for(const k of keys){const [a,b]=k.split(':').map(Number);for(const [v,w]of [[a,b],[b,a]]){if(!adjacency.has(v))adjacency.set(v,[]);adjacency.get(v).push([w,k]);}}for(const root of adjacency.keys())if(!seen.has(root)){const queue=[root],edges=new Set();seen.add(root);for(let q=0;q<queue.length;q++)for(const [other,k]of adjacency.get(queue[q])){edges.add(k);if(!seen.has(other)){seen.add(other);queue.push(other);}}const length=[...edges].reduce((s,k)=>{const [a,b]=k.split(':').map(Number);return s+dist(m.vertices[a],m.vertices[b]);},0);if(length>=minimum*scale){kept.push(...edges);runs.push({edges:[...edges],lengthRelative:length/scale});}}return {keys:kept,runs,rejected:keys.length-kept.length};}
   function settingsFor(settings={}){
-    const options={areaRatio:1.8,curvatureDifference:.35,curvatureFloor:.5,lowSubdivisions:1,lowFaceBudget:500,legacyLowSubdivisions:1,midSubdivisions:1,fitIterations:4,fitStrength:.85,turboIterations:1,turboLimitSurface:true,turboBoundary:'ALL',bevelWidth:.004,trim:.005,guideTolerance:.003,guideVectorTolerance:.006,guideCornerAngle:55,guideJoinGaps:true,guideJoinDistance:.02,guideRegularization:.01,guideFieldPartition:true,guideFieldStrength:1,guideSilhouetteMatch:true,guideSilhouetteTolerance:.012,surfaceSmoothing:.6,internalCSISmoothing:.5,symmetryMode:'auto',symmetryTolerance:.001,guideBoundaryLocalScale:true,guideCurveFairing:true,useCurvatureNetwork:true,curveNetworkLines:3,...settings};
-    options.lowTriangleBudget=settings.lowTriangleBudget??(settings.lowFaceBudget!==undefined?settings.lowFaceBudget*2:1000);options.lowFaceBudget=Math.floor(options.lowTriangleBudget/2);
-    const integers=[['lowTriangleBudget',48,65536],['curveNetworkLines',1,7],['lowFaceBudget',24,32768],['lowSubdivisions',1,3],['legacyLowSubdivisions',1,3],['midSubdivisions',1,2],['fitIterations',1,8],['turboIterations',1,3]];
+    const options={areaRatio:1.8,curvatureDifference:.35,curvatureFloor:.5,lowSubdivisions:1,legacyLowSubdivisions:1,midSubdivisions:1,fitIterations:4,fitStrength:.85,turboIterations:1,turboLimitSurface:true,turboBoundary:'ALL',bevelWidth:.004,trim:.005,guideTolerance:.003,guideVectorTolerance:.006,guideCornerAngle:55,guideJoinGaps:true,guideJoinDistance:.02,guideRegularization:.01,guideFieldPartition:true,guideFieldStrength:1,guideSilhouetteMatch:true,guideSilhouetteTolerance:.012,surfaceSmoothing:.6,internalCSISmoothing:.5,symmetryMode:'auto',symmetryTolerance:.001,guideBoundaryLocalScale:true,guideCurveFairing:true,useCurvatureNetwork:true,curveNetworkLines:3,...settings};
+    options.lowTriangleBudget=settings.lowTriangleBudget??(settings.lowFaceBudget!==undefined?settings.lowFaceBudget*2:1000);delete options.lowFaceBudget;
+    const integers=[['lowTriangleBudget',48,65536],['curveNetworkLines',1,7],['lowSubdivisions',1,3],['legacyLowSubdivisions',1,3],['midSubdivisions',1,2],['fitIterations',1,8],['turboIterations',1,3]];
     if(!['areaRatio','curvatureDifference','curvatureFloor','fitStrength','bevelWidth','trim'].every(k=>Number.isFinite(options[k]))||options.areaRatio<1.01||options.curvatureDifference<=0||options.curvatureDifference>1||options.curvatureFloor<=0||options.fitStrength<.1||options.fitStrength>1||options.bevelWidth<0||options.bevelWidth>.05||options.trim<0||options.trim>.05||integers.some(([k,min,max])=>!Number.isInteger(options[k])||options[k]<min||options[k]>max))throw Error('细分、拟合或边界参数超出范围。');
     if(!Number.isFinite(options.internalCSISmoothing)||options.internalCSISmoothing<0||options.internalCSISmoothing>1)throw Error('内部CSI平顺须为0～100%。');
     if(!['auto','off'].includes(options.symmetryMode)||!Number.isFinite(options.symmetryTolerance)||options.symmetryTolerance<.00001||options.symmetryTolerance>.01)throw Error('对称识别参数无效。');
@@ -106,19 +300,73 @@ function createContour3D(){
     if(typeof options.guideSilhouetteMatch!=='boolean'||!Number.isFinite(options.guideSilhouetteTolerance)||options.guideSilhouetteTolerance<.004||options.guideSilhouetteTolerance>.03)throw Error('轮廓匹配容差须为0.4%～3%。');
     if(typeof options.turboLimitSurface!=='boolean'||!['ALL','PRESERVE_CORNERS'].includes(options.turboBoundary))throw Error('极限曲面或开放边规则无效。');delete options.lowRatio;delete options.midRatio;return options;
   }
+  // 当CSI四边分区暂不支持（如闭合高亏格角色或多分支体）时，保留结构特征的QEM减面并结合Blossom匹配生成四边优先低模
+  function buildMixedSimplifyFallback(source,guides,options,reason,progress){
+    progress('混合拓扑 · 特征保留QEM与四边匹配');
+    const targetTris=options.lowTriangleBudget,diag=bounds(source).diagonal;
+    const manual=options.manualEdges||[],locked=manual.length*2<=targetTris*0.4?manual:[];
+    let triMesh=fastQEM(source,targetTris,diag,{cosLimit:0.05,maxError:0.25,lockedKeys:locked});
+    if(triMesh.faces.length>targetTris)triMesh=fastQEM(triMesh,targetTris,diag,{cosLimit:-0.25,maxError:0.5});
+    const mixed=orient(matchQuads(triMesh,38,4.5)),a=audit(mixed);
+    mixed.method='混合拓扑特征保留减面（四边优先）';
+    mixed.csiReport={
+      supported:false,fallback:true,mixedTopology:true,
+      fallbackMode:'feature-preserving-quad-dominant-simplify',reason,
+      budget:{unit:'triangles',requested:targetTris,used:a.triangles,faces:a.faces,quads:a.quads,tris:a.faces-a.quads,withinBudget:a.triangles<=targetTris},
+      structureGrid:{version:3,mode:'mixed-simplify-quad-dominant'}
+    };
+    return mixed;
+  }
+  function deriveFallbackMidUltra(source,boundary,low,options,progress){
+    const limit=hierarchyAPI.MAX_TRIANGLES,qLow=hierarchyAPI.quadify(low);
+    if(qLow.faces.length*2>limit)return null;
+    try{
+      let midBase=qLow;
+      if(options.midSubdivisions>=1&&midBase.faces.length*8<=Math.floor(limit/4))midBase=hierarchyAPI.subdivide(midBase,false,{progress});
+      const s=hierarchyAPI.surface(source),keys=[...(boundary?.levels?.[3]?.accepted||[]),...(options.manualEdges||[])],features=hierarchyAPI.featureData(s,keys);
+      const mid=hierarchyAPI.fit(midBase,s,features,{...options,progress});
+      mid.hierarchy={level:'mid',parentLevel:'low',fallbackDerived:true};
+      let steps=Math.min(options.turboIterations||1,3);
+      while(steps>0&&mid.faces.length*2*(4**steps)>limit)steps--;
+      const ultra=steps>0?hierarchyAPI.turboSmooth(mid,steps,{limitSurface:options.turboLimitSurface,boundaryRule:options.turboBoundary,progress}):copy(mid);
+      ultra.hierarchy={level:'ultra',parentLevel:'mid',turboIterations:steps,fallbackDerived:true};
+      if(!audit(mid).valid||!audit(ultra).valid)return null;
+      return {mid,ultra};
+    }catch{return null;}
+  }
   function buildLevels(source,original,boundary,guides,options,far,progress){
     if(!primitiveAPI||!hierarchyAPI)throw Error('解析体或四边细分模块未加载。');
-    progress('构建解析体四边基础');const farMid=hierarchyAPI.quadify(primitiveAPI.fit(source,options,progress)),derived=hierarchyAPI.derive(source,farMid,boundary,{...options,lowSubdivisions:options.legacyLowSubdivisions},progress),low=csiLow(source,guides,options,()=>derived.low,progress),models=[far,farMid,low,derived.mid,derived.ultra],ids=['far','far-mid','low','mid','ultra'],labels=['远 · 长方体','中远 · 解析体大形','中 · 低模','近 · 带卡线中模','超近 · 涡轮平滑'],health=audit(source);
+    progress('构建解析体四边基础');const farMid=hierarchyAPI.quadify(primitiveAPI.fit(source,options,progress)),derived=hierarchyAPI.derive(source,farMid,boundary,{...options,lowSubdivisions:options.legacyLowSubdivisions},progress),low=csiLow(source,guides,options,()=>derived.low,progress);
+    const fbPair=low.csiReport?.fallbackMode==='feature-preserving-quad-dominant-simplify'?deriveFallbackMidUltra(source,boundary,low,options,progress):null;
+    const models=[far,farMid,low,fbPair?fbPair.mid:derived.mid,fbPair?fbPair.ultra:derived.ultra],ids=['far','far-mid','low','mid','ultra'],labels=['远 · 长方体','中远 · 解析体大形','中 · 低模','近 · 带卡线中模','超近 · 涡轮平滑'],health=audit(source);
     if(!low.csiReport.fallback)derived.mid.hierarchy={...derived.mid.hierarchy,parentLevel:'legacy-primitive-low',csiLowIntegrated:false};
-    return models.map((mesh,i)=>{progress('校验 '+labels[i]);if(i!==2||![2,3].includes(mesh.csiReport?.structureGrid?.version))hierarchyAPI.requireQuads(mesh);applyAutoSmooth(mesh,i===4?180:60);const a=audit(mesh),preserved=a.valid&&a.components===health.components&&JSON.stringify(a.euler)===JSON.stringify(health.euler)&&a.boundaryLoops===health.boundaryLoops;return {id:ids[i],label:labels[i],mesh,audit:a,allQuads:a.quads===a.faces,parentTopologyPreserved:i<2?undefined:i===2&&!mesh.csiReport?.fallback?preserved:(()=>{const parent=audit(i===3?derived.low:models[i-1]);return a.components===parent.components&&JSON.stringify(a.euler)===JSON.stringify(parent.euler)&&a.boundaryLoops===parent.boundaryLoops;})(),topologyPreserved:preserved,error:mesh.csiReport?.csiOnly?mesh.csiReport.boundaryError:measure(source,mesh),uv:uvAtlas(mesh),candidate:true};});
+    return models.map((mesh,i)=>{progress('校验 '+labels[i]);if(i!==2||(!mesh.csiReport?.mixedTopology&&![2,3].includes(mesh.csiReport?.structureGrid?.version)))hierarchyAPI.requireQuads(mesh);applyAutoSmooth(mesh,i===4?180:60);const a=audit(mesh),preserved=a.valid&&a.components===health.components&&JSON.stringify(a.euler)===JSON.stringify(health.euler)&&a.boundaryLoops===health.boundaryLoops;return {id:ids[i],label:labels[i],mesh,audit:a,allQuads:a.quads===a.faces,parentTopologyPreserved:i<2?undefined:i===2&&(!mesh.csiReport?.fallback||mesh.csiReport?.fallbackMode==='feature-preserving-quad-dominant-simplify')?preserved:(()=>{const parent=audit(i===3?(fbPair?low:derived.low):models[i-1]);return a.components===parent.components&&JSON.stringify(a.euler)===JSON.stringify(parent.euler)&&a.boundaryLoops===parent.boundaryLoops;})(),topologyPreserved:preserved,error:mesh.csiReport?.csiOnly?mesh.csiReport.boundaryError:measure(source,mesh),uv:uvAtlas(mesh),candidate:true};});
   }
-  function process(raw,settings={},progress=()=>{}){const original=validate(raw),signature=fingerprint(original),source=orient(original),health=audit(source);if(!health.valid)throw Error('源网格存在退化面、非流形边或定向冲突，请先清理；原件未改。');const options=settingsFor(settings);progress('分析同一高模的四档邻域');const boundary=detect(source,options,progress);options.manualEdges=(options.manualEdges||[]).filter(k=>topology(source).edges.has(k));const guides=analyzeBoundaryGuides(original,boundary,options,progress),levels=buildLevels(source,original,boundary,guides,options,box(source,options.trim),progress);if(fingerprint(raw)!==signature)throw Error('原始输入意外改变，停止输出。');return {version:2,processingModel:'csi-low-curvature-network-v3',name:raw.name||'导入模型',source:original,sourceFingerprint:signature,sourceAudit:health,sourceWindingRepaired:fingerprint(source)!==signature,symmetry:guides.symmetry,boundary,guides,settings:options,levels,notice:'中档在固定CSI边界内，以过滤高模的主曲率引导三维经纬控制网，按控制网构面并独立采样布线；原包边剖面保留。经纬模式不逐点贴合高模，不沿用旧铺面的最后轮廓位移；外形可在轮廓检查页复核。不按轮廓分区；近档暂保留旧规则体低模的细分卡线链，超近继续从近档Catmull–Clark平滑。原高模独立只读。候选仍需形体复核，基础UV图集未调用Directional或BFF。'};}
-  function rebuildHierarchy(previous,settings={},progress=()=>{}){const original=validate(previous.source),signature=fingerprint(original),source=orient(original);if(signature!==previous.sourceFingerprint||previous.boundary.sourceFingerprint!==fingerprint(source))throw Error('源模型与缓存边界签名不一致，请重新生成五档。');const previousOptions=settingsFor(previous.settings),options=settingsFor({...previous.settings,...settings});for(const k of ['areaRatio','curvatureDifference','curvatureFloor','trim','lowTriangleBudget','lowFaceBudget','lowSubdivisions','midSubdivisions','fitIterations','fitStrength','turboIterations','turboLimitSurface','turboBoundary','bevelWidth'])if(options[k]!==previousOptions[k])throw Error('几何或边界参数已改动，请重新生成五档。');for(const k of ['manualEdges','excludedEdges'])if(JSON.stringify(options[k])!==JSON.stringify(previousOptions[k]))throw Error('手动边已改动，请重新生成五档。');const guides=structuredClone(previous.guides),levels=buildLevels(source,original,previous.boundary,guides,options,copy(previous.levels[0].mesh),progress);if(fingerprint(previous.source)!==signature)throw Error('源模型意外改变。');return {...previous,version:2,processingModel:'csi-low-curvature-network-v3',settings:options,guides,symmetry:guides.symmetry,levels};}
+  function process(raw,settings={},progress=()=>{}){
+    const original=validate(raw),signature=fingerprint(original),options=settingsFor(settings);
+    const work=prepareWorkingSource(original,progress),source=work.source,health=work.health;
+    progress('分析同一高模的四档邻域');const boundary=detect(source,options,progress);
+    options.manualEdges=(options.manualEdges||[]).filter(k=>topology(source).edges.has(k));
+    const guideSource=work.analysisProxy?source:original;
+    const guides=analyzeBoundaryGuides(guideSource,boundary,options,progress),levels=buildLevels(source,guideSource,boundary,guides,options,box(source,options.trim),progress);
+    if(fingerprint(raw)!==signature)throw Error('原始输入意外改变，停止输出。');
+    return {version:2,processingModel:'csi-low-curvature-network-v3',name:raw.name||'导入模型',source:original,sourceFingerprint:signature,sourceAudit:health,analysisSource:work.analysisProxy?source:undefined,analysisProxy:work.analysisProxy?{enabled:true,raw:work.rawStats,clean:work.cleanStats,working:{vertices:health.vertices,faces:health.faces,triangles:health.triangles}}:undefined,sourceWindingRepaired:work.analysisProxy?false:fingerprint(source)!==signature,symmetry:guides.symmetry,boundary,guides,settings:options,levels,notice:'中档在固定CSI边界内，以过滤高模的主曲率引导三维经纬控制网，按控制网构面并独立采样布线；原包边剖面保留；复杂封闭高模自动清理并切换混合特征保留减面与Blossom四边匹配（总上限严格按三角面计）。原高模独立只读。候选仍需形体复核，基础UV图集未调用Directional或BFF。'};
+  }
+  function rebuildHierarchy(previous,settings={},progress=()=>{}){
+    const original=validate(previous.source),signature=fingerprint(original),workingRaw=previous.analysisSource||previous.source,source=orient(validate(workingRaw));
+    if(signature!==previous.sourceFingerprint||previous.boundary.sourceFingerprint!==fingerprint(source))throw Error('源模型与缓存边界签名不一致，请重新生成五档。');
+    const previousOptions=settingsFor(previous.settings),options=settingsFor({...previous.settings,...settings});
+    for(const k of ['areaRatio','curvatureDifference','curvatureFloor','trim','lowTriangleBudget','lowSubdivisions','midSubdivisions','fitIterations','fitStrength','turboIterations','turboLimitSurface','turboBoundary','bevelWidth'])if(options[k]!==previousOptions[k])throw Error('几何或边界参数已改动，请重新生成五档。');
+    for(const k of ['manualEdges','excludedEdges'])if(JSON.stringify(options[k])!==JSON.stringify(previousOptions[k]))throw Error('手动边已改动，请重新生成五档。');
+    const guides=structuredClone(previous.guides),levels=buildLevels(source,workingRaw,previous.boundary,guides,options,copy(previous.levels[0].mesh),progress);
+    if(fingerprint(previous.source)!==signature)throw Error('源模型意外改变。');
+    return {...previous,version:2,processingModel:'csi-low-curvature-network-v3',settings:options,guides,symmetry:guides.symmetry,levels};
+  }
   function csiLow(source,guides,options,fallback,progress){
     if(!guides.layers)guides.layers=guideAPI.boundaryLayers(source,guides,{excludedEdges:options.excludedEdges||[]});
     if(guides.layers.policy.low.includes('detail'))throw Error('细小面边界不能作为低模分区输入。');
     if(!csiSurfaceAPI)throw Error('CSI四边补面模块未加载。');const baseProposal={...guides?.scales[2]?.proposal};delete baseProposal.surfaceMatching;delete baseProposal.surfaceFitting;delete baseProposal.structureGrid;delete baseProposal.curvatureNetwork;baseProposal.surfaceLayout={...baseProposal.surfaceLayout,rimSamplingVersion:2};guides.scales[2].proposal=baseProposal;progress('中档CSI拟合后 · 结构对称识别');guides.symmetry=symmetryAPI().detectCSI(source,baseProposal,{mode:options.symmetryMode,tolerance:options.symmetryTolerance});let result=csiSurfaceAPI.generate(source,baseProposal,options,progress);
-    if(!result.supported)throw Error('CSI补面暂不支持：'+result.reason+'。请调整CSI分区；当前结果未替换。');
+    if(!result.supported)return buildMixedSimplifyFallback(source,guides,options,result.reason,progress);
     progress(options.useCurvatureNetwork?'过滤高模细节 · 保留包边剖面':'匹配同分区高模面形 · 保持真实CSI边界');const fitter=(typeof createContourSurfaceFit==='function'?createContourSurfaceFit:require('./surface-fit.js'))(api),surfaceFit=fitter.fit(source,result.mesh,baseProposal,{smoothing:options.surfaceSmoothing,fitBroad:!options.useCurvatureNetwork});guides.scales[2].proposal={...baseProposal,surfaceFitting:surfaceFit.definition};result=csiSurfaceAPI.generate(source,guides.scales[2].proposal,options,progress);
     if(options.guideSilhouetteMatch!==false&&!options.useCurvatureNetwork){progress('最终轮廓匹配 · 保持结构分区与共享CSI');const matcher=(typeof createContourSilhouetteMatch==='function'?createContourSilhouetteMatch:require('./silhouette-match.js'))(api),fit=matcher.fitFinal(surfaceFit.target,result.mesh,{scale:guides.scale,tolerance:options.guideSilhouetteTolerance??.012});if(options.surfaceSmoothing>0){fit.report.detailSmoothing=surfaceFit.report.detailSmoothing;fit.report.geometrySource='detail-filtered same-region proxy silhouettes; original high unchanged';}guides.scales[2].proposal={...guides.scales[2].proposal,surfaceMatching:fit.definition};result=csiSurfaceAPI.generate(source,guides.scales[2].proposal,options,progress);}
     if(options.useCurvatureNetwork){progress('高模主曲率 → 三维经纬CSI控制网');const network=(typeof createContourCurvatureNetwork==='function'?createContourCurvatureNetwork:require('./curvature-network.js'))(api),definition=network.build(surfaceFit.target,result.mesh,baseProposal,{internalLines:options.curveNetworkLines,fairingTolerance:bounds(source).diagonal*options.guideVectorTolerance*(1+options.internalCSISmoothing),internalSmoothing:options.internalCSISmoothing,symmetry:guides.symmetry});definition.originalSourceFingerprint=fingerprint(source);guides.scales[2].proposal={...guides.scales[2].proposal,curvatureNetwork:definition};result.mesh.csiCurveNetwork=structuredClone(definition);result.mesh.csiReport.curvatureNetwork=definition.report;result.mesh=network.applyStripNetworks(result.mesh,definition);}
@@ -135,8 +383,10 @@ function createContour3D(){
     guides.scales[2].proposal=proposal;guides.internalRefit={reusedSourceEvidence:true,reusedFourWayField:true,sourceCornersPreserved:true};return guides;
   }
   function rebuildCSILow(previous,settings={},progress=()=>{}){
-    const original=validate(previous.source),signature=fingerprint(original),source=orient(original);if(signature!==previous.sourceFingerprint||previous.boundary.sourceFingerprint!==fingerprint(source))throw Error('源模型与边界缓存不一致，请重新生成五档。');const previousOptions=settingsFor(previous.settings),options=settingsFor({...previous.settings,...settings});for(const k of ['areaRatio','curvatureDifference','curvatureFloor','trim','lowTriangleBudget','lowFaceBudget','lowSubdivisions','midSubdivisions','fitIterations','fitStrength','turboIterations','turboLimitSurface','turboBoundary','bevelWidth','manualEdges','excludedEdges'])if(JSON.stringify(options[k])!==JSON.stringify(previousOptions[k]))throw Error('几何或边界参数已改动，请重新生成五档。');
-    const guideKeys=['guideTolerance','guideVectorTolerance','guideCornerAngle','guideJoinGaps','guideJoinDistance','guideRegularization','guideFieldPartition','guideFieldStrength','guideBoundaryLocalScale','guideCurveFairing'],reuse=guideKeys.every(k=>JSON.stringify(options[k])===JSON.stringify(previous.settings[k]??(k==='internalCSISmoothing'?0:previousOptions[k]))),guides=reuse?(options.internalCSISmoothing!==(previous.settings.internalCSISmoothing??0)?refitInternalCSI(source,previous.boundary,previous.guides,options,progress):structuredClone(previous.guides)):analyzeBoundaryGuides(original,previous.boundary,options,progress);const mesh=csiLow(source,guides,options,()=>hierarchyAPI.derive(source,previous.levels[1].mesh,previous.boundary,{...options,lowSubdivisions:options.legacyLowSubdivisions},progress).low,progress);if(![2,3].includes(mesh.csiReport?.structureGrid?.version))hierarchyAPI.requireQuads(mesh);applyAutoSmooth(mesh);const a=audit(mesh),health=audit(source),preserved=a.valid&&a.components===health.components&&JSON.stringify(a.euler)===JSON.stringify(health.euler)&&a.boundaryLoops===health.boundaryLoops,levels=previous.levels.slice();levels[2]={...levels[2],mesh,audit:a,allQuads:a.quads===a.faces,parentTopologyPreserved:mesh.csiReport.fallback?levels[2].parentTopologyPreserved:preserved,topologyPreserved:preserved,error:mesh.csiReport?.csiOnly?mesh.csiReport.boundaryError:measure(source,mesh),uv:uvAtlas(mesh)};if(!mesh.csiReport.fallback&&levels[3].mesh.hierarchy?.parentLevel==='low')levels[3]={...levels[3],mesh:{...levels[3].mesh,hierarchy:{...levels[3].mesh.hierarchy,parentLevel:'legacy-primitive-low',csiLowIntegrated:false}}};
+    const original=validate(previous.source),signature=fingerprint(original),workingRaw=previous.analysisSource||previous.source,source=orient(validate(workingRaw));if(signature!==previous.sourceFingerprint||previous.boundary.sourceFingerprint!==fingerprint(source))throw Error('源模型与边界缓存不一致，请重新生成五档。');const previousOptions=settingsFor(previous.settings),options=settingsFor({...previous.settings,...settings});for(const k of ['areaRatio','curvatureDifference','curvatureFloor','trim','lowTriangleBudget','lowSubdivisions','midSubdivisions','fitIterations','fitStrength','turboIterations','turboLimitSurface','turboBoundary','bevelWidth','manualEdges','excludedEdges'])if(JSON.stringify(options[k])!==JSON.stringify(previousOptions[k]))throw Error('几何或边界参数已改动，请重新生成五档。');
+    const guideKeys=['guideTolerance','guideVectorTolerance','guideCornerAngle','guideJoinGaps','guideJoinDistance','guideRegularization','guideFieldPartition','guideFieldStrength','guideBoundaryLocalScale','guideCurveFairing'],reuse=guideKeys.every(k=>JSON.stringify(options[k])===JSON.stringify(previous.settings[k]??(k==='internalCSISmoothing'?0:previousOptions[k]))),guides=reuse?(options.internalCSISmoothing!==(previous.settings.internalCSISmoothing??0)?refitInternalCSI(source,previous.boundary,previous.guides,options,progress):structuredClone(previous.guides)):analyzeBoundaryGuides(workingRaw,previous.boundary,options,progress);const mesh=csiLow(source,guides,options,()=>hierarchyAPI.derive(source,previous.levels[1].mesh,previous.boundary,{...options,lowSubdivisions:options.legacyLowSubdivisions},progress).low,progress);if(!mesh.csiReport?.mixedTopology&&![2,3].includes(mesh.csiReport?.structureGrid?.version))hierarchyAPI.requireQuads(mesh);applyAutoSmooth(mesh);const a=audit(mesh),health=audit(source),preserved=a.valid&&a.components===health.components&&JSON.stringify(a.euler)===JSON.stringify(health.euler)&&a.boundaryLoops===health.boundaryLoops,levels=previous.levels.slice(),fbMode=mesh.csiReport?.fallbackMode==='feature-preserving-quad-dominant-simplify';levels[2]={...levels[2],mesh,audit:a,allQuads:a.quads===a.faces,parentTopologyPreserved:fbMode?preserved:mesh.csiReport.fallback?levels[2].parentTopologyPreserved:preserved,topologyPreserved:preserved,error:mesh.csiReport?.csiOnly?mesh.csiReport.boundaryError:measure(source,mesh),uv:uvAtlas(mesh)};
+    if(fbMode){const fbPair=deriveFallbackMidUltra(source,previous.boundary,mesh,options,progress);if(fbPair)[fbPair.mid,fbPair.ultra].forEach((m2,idx)=>{const li=idx+3;applyAutoSmooth(m2,li===4?180:60);const a2=audit(m2),pr=a2.valid&&a2.components===health.components&&JSON.stringify(a2.euler)===JSON.stringify(health.euler)&&a2.boundaryLoops===health.boundaryLoops,par=idx===0?a:audit(fbPair.mid);levels[li]={...levels[li],mesh:m2,audit:a2,allQuads:a2.quads===a2.faces,parentTopologyPreserved:a2.components===par.components&&JSON.stringify(a2.euler)===JSON.stringify(par.euler)&&a2.boundaryLoops===par.boundaryLoops,topologyPreserved:pr,error:measure(source,m2),uv:uvAtlas(m2)};});}
+    else if(!mesh.csiReport.fallback&&levels[3].mesh.hierarchy?.parentLevel==='low')levels[3]={...levels[3],mesh:{...levels[3].mesh,hierarchy:{...levels[3].mesh.hierarchy,parentLevel:'legacy-primitive-low',csiLowIntegrated:false}}};
     if(fingerprint(previous.source)!==signature)throw Error('源模型意外改变。');return {...previous,processingModel:'csi-low-curvature-network-v3',settings:options,symmetry:guides.symmetry,guides,levels};
   }
   function analyzeBoundaryGuides(raw,boundary,options={},progress=()=>{}){if(!guideAPI)throw Error('边界导线模块未加载。');const original=validate(raw);return {...guideAPI.build(orient(original),boundary,options,progress),originalSourceFingerprint:fingerprint(original)};}
@@ -161,12 +411,23 @@ function createContour3D(){
     const normals=new Map([...sums].map(([root,n])=>[root,len(n)>1e-12?unit(n):null]));return m.faces.map((f,fi)=>f.map((_,j)=>(groups[fi]??1)===0?t.data[fi].normal:(normals.get(find(offsets[fi]+j))||t.data[fi].normal)));
   }
   function obj(level){const raw=level.mesh||level,m=raw.csiPatchGroups?applyAutoSmooth(copy(raw),raw.smoothingAngle??60):raw.smoothingGroups?raw:applyAutoSmooth(copy(raw)),uv=level.uv,normals=cornerNormals(m),lines=['# Contour Lab 3D - candidate geometry','o '+(level.id||'mesh')];for(const p of m.vertices)lines.push('v '+p.join(' '));if(uv)for(const p of uv.uv)lines.push('vt '+p.join(' '));for(const f of normals)for(const n of f)lines.push('vn '+n.join(' '));let last='',lastSmooth=null,normalIndex=1;m.faces.forEach((f,i)=>{const group=m.faceKinds?.[i]||'surface',smooth=m.smoothingGroups?.[i]??1;if(group!==last){lines.push('g '+group);last=group;}if(smooth!==lastSmooth){lines.push('s '+(smooth||'off'));lastSmooth=smooth;}lines.push('f '+f.map((v,j)=>(v+1)+'/'+(uv?uv.indices[i][j]+1:'')+'/'+normalIndex++).join(' '));});return lines.join('\n')+'\n';}
-  function parseOBJ(text){const vertices=[],faces=[];for(const line of text.split(/\r?\n/)){const parts=line.replace(/#.*/, '').trim().split(/\s+/);if(parts[0]==='v')vertices.push(parts.slice(1,4).map(Number));if(parts[0]==='f')faces.push(parts.slice(1).filter(v=>!v.startsWith('#')).map(v=>{const n=Number(v.split('/')[0]);return n<0?vertices.length+n:n-1;}));}return validate({vertices,faces});}
+  function parseOBJ(text){
+    const vertices=[],faces=[];let pos=0,length=text.length;
+    // 使用索引逐行扫描替代整文本 split，降低百兆高模导入内存峰值
+    while(pos<length){
+      let nl=text.indexOf('\n',pos);if(nl<0)nl=length;
+      const raw=text.slice(pos,nl);pos=nl+1;const comment=raw.indexOf('#'),line=(comment>=0?raw.slice(0,comment):raw).trim();
+      if(!line)continue;
+      if(line[0]==='v'&&line[1]===' '){const parts=line.slice(2).trim().split(/\s+/);vertices.push([Number(parts[0]),Number(parts[1]),Number(parts[2])]);}
+      else if(line[0]==='f'&&line[1]===' '){const parts=line.slice(2).trim().split(/\s+/),f=parts.map(v=>{const slash=v.indexOf('/'),n=Number(slash<0?v:v.slice(0,slash));return n<0?vertices.length+n:n-1;}),cleaned=[];for(const id of f)if(!cleaned.length||cleaned.at(-1)!==id)cleaned.push(id);if(cleaned.length>1&&cleaned[0]===cleaned.at(-1))cleaned.pop();if(cleaned.length>=3&&new Set(cleaned).size===cleaned.length)faces.push(cleaned);}
+    }
+    return validate({vertices,faces});
+  }
   function parseSTL(buffer){const view=new DataView(buffer),vertices=[],faces=[],weld=new Map();const vertex=p=>{const k=p.map(v=>Object.is(v,-0)?0:v).join(':');if(!weld.has(k)){weld.set(k,vertices.length);vertices.push(p);}return weld.get(k);};if(buffer.byteLength>=84&&84+view.getUint32(80,true)*50===buffer.byteLength){const count=view.getUint32(80,true);for(let i=0;i<count;i++){const offset=84+i*50+12;faces.push([0,1,2].map(j=>vertex([0,1,2].map(k=>view.getFloat32(offset+j*12+k*4,true)))));}}else{const text=new TextDecoder().decode(buffer),points=[...text.matchAll(/vertex\s+([-+\deE.]+)\s+([-+\deE.]+)\s+([-+\deE.]+)/g)].map(m=>m.slice(1).map(Number));for(let i=0;i<points.length;i+=3)faces.push(points.slice(i,i+3).map(vertex));}return validate({vertices,faces});}
   function cube(){return {name:'硬体方盒 · 手动卡线参考',vertices:[[-1,-.6,-.8],[1,-.6,-.8],[1,.6,-.8],[-1,.6,-.8],[-1,-.6,.8],[1,-.6,.8],[1,.6,.8],[-1,.6,.8]],faces:[[0,3,2,1],[4,5,6,7],[0,1,5,4],[3,7,6,2],[0,4,7,3],[1,2,6,5]]};}
   function torus(){const vertices=[],faces=[],n=40,k=12;for(let i=0;i<n;i++)for(let j=0;j<k;j++){const a=i*2*Math.PI/n,b=j*2*Math.PI/k,r=1+.3*Math.cos(b);vertices.push([r*Math.cos(a),.3*Math.sin(b),r*Math.sin(a)]);}for(let i=0;i<n;i++)for(let j=0;j<k;j++)faces.push([i*k+j,((i+1)%n)*k+j,((i+1)%n)*k+(j+1)%k,i*k+(j+1)%k]);return orient({name:'带孔圆环',vertices,faces});}
   const symmetryAPI=()=> (typeof createContourSymmetry==='function'?createContourSymmetry:require('./symmetry.js'))(api);
-  const api={add,sub,mul,dot,cross,len,unit,dist,clamp,key,copy,bounds,faceData,topology,audit,validate,orient,frame,box,detect,triangulate,simplify,pairQuads,supportEdges,bevel,uvAtlas,rebuildUV,measure,process,rebuildHierarchy,rebuildCSILow,analyzeBoundaryGuides,obj,parseOBJ,parseSTL,cube,torus,fingerprint,structuralRuns,autoSmooth,applyAutoSmooth,cornerNormals,quadShell,primitiveTypes:()=>primitiveAPI?.types||{},primitiveLevel(source,options={}){if(!primitiveAPI)throw Error('解析体模块未加载。');const mesh=hierarchyAPI.quadify(primitiveAPI.fit(orient(validate(source)),options));applyAutoSmooth(mesh);const a=audit(mesh),health=audit(source);return {id:'far-mid',label:'中远 · 解析体大形',mesh,audit:a,topologyPreserved:a.components===health.components&&JSON.stringify(a.euler)===JSON.stringify(health.euler)&&a.boundaryLoops===health.boundaryLoops,error:mesh.csiReport?.csiOnly?mesh.csiReport.boundaryError:measure(source,mesh),uv:uvAtlas(mesh),candidate:true};}};
+  const api={add,sub,mul,dot,cross,len,unit,dist,clamp,key,copy,bounds,faceData,topology,audit,validate,orient,frame,box,detect,triangulate,cleanSculptMesh,fastQEM,simplify,pairQuads,matchQuads,supportEdges,bevel,uvAtlas,rebuildUV,measure,settingsFor,process,rebuildHierarchy,rebuildCSILow,analyzeBoundaryGuides,obj,parseOBJ,parseSTL,cube,torus,fingerprint,structuralRuns,autoSmooth,applyAutoSmooth,cornerNormals,quadShell,primitiveTypes:()=>primitiveAPI?.types||{},primitiveLevel(source,options={}){if(!primitiveAPI)throw Error('解析体模块未加载。');const mesh=hierarchyAPI.quadify(primitiveAPI.fit(orient(validate(source)),options));applyAutoSmooth(mesh);const a=audit(mesh),health=audit(source);return {id:'far-mid',label:'中远 · 解析体大形',mesh,audit:a,topologyPreserved:a.components===health.components&&JSON.stringify(a.euler)===JSON.stringify(health.euler)&&a.boundaryLoops===health.boundaryLoops,error:mesh.csiReport?.csiOnly?mesh.csiReport.boundaryError:measure(source,mesh),uv:uvAtlas(mesh),candidate:true};}};
   if(typeof createContourPrimitives==='function')primitiveAPI=createContourPrimitives(api);else if(typeof require==='function')primitiveAPI=require('./primitives.js')(api);if(typeof createContourHierarchy==='function')hierarchyAPI=createContourHierarchy(api);else if(typeof require==='function')hierarchyAPI=require('./hierarchy.js')(api);if(typeof createContourBoundaryGuides==='function')guideAPI=createContourBoundaryGuides(api);else if(typeof require==='function')guideAPI=require('./boundary-guides.js')(api);if(typeof createContourCSISurface==='function')csiSurfaceAPI=createContourCSISurface(api,hierarchyAPI);else if(typeof require==='function')csiSurfaceAPI=require('./csi-surface.js')(api,hierarchyAPI);return api;
 }
 if(typeof module!=='undefined')module.exports=createContour3D;

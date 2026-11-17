@@ -1,6 +1,8 @@
 - [显示端快捷控制](design/display-quick-control.md)
 # Web MediaCenter - 项目设计文档
 
+- [Retop 肩甲经纬走线（进行中）](design/retop-orthogonal-flow.md)
+
 - [个人 Agent 第一阶段](design/aasc-agent.md)
 
 - [桌面浏览器媒体服务](design/browser-media-service.md)

@@ -1,6 +1,8 @@
 - [显示端快捷控制](spec/display-quick-control.md)
 # Web MediaCenter - 项目实现文档
 
+- [Retop 肩甲经纬走线伪代码（进行中）](spec/retop-orthogonal-flow.md)
+
 - [个人 Agent 伪代码](spec/aasc-agent.md)
 
 - [桌面浏览器媒体服务伪代码](spec/browser-media-service.md)

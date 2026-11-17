@@ -565,3 +565,10 @@ UV页新增“按平滑组重新展开”，正式Worker只替换五档UV，复�
 2. **对齐环带中间排密度与联合横截导线（[curvature-network.js](curvature-network.js)）**：在保留均匀控制网与 C2 整线 `lineFairing` 的前提下，由两侧 `railParameters` 平滑计算中间排参数 `railTransport.midStations`，将实际中间排网格顶点及 UV 对齐到 `[midStations[i], j/V]`；同时通过 `alignAnnularSection` 联合搜索各排单调对齐站位并沿 `evaluate([u(v), v])` 平滑采样横向导线，消除 3 点插值弯折并同步刷新离线版 [dist/index.html](dist/index.html)。
 
 肩甲实测：环带内圈边长比降至 `2.90`，面数由 `114` 减至 `102`（三角面 `36 → 12`），最小内角提升至 `24.83°`，最大边长比降至 `5.28`，横向 `u` 导线最大转角 `≤ 12.85°`；低模保持 `965` 三角面、零穿插与 `7` 个无重叠 UV 岛。验证见 [tests/annular-section-wiring.cjs](tests/annular-section-wiring.cjs) 及无头浏览器多视角/放大对照；仍为候选，未提交、推送或安装依赖。
+
+
+## 2026-11-17：统一三角面预算与百万级角色雕刻混拓四边回退
+
+- **全模块统一按渲染三角面计费**：将 [hierarchy.js](hierarchy.js)（`MAX_TRIANGLES = 65536`）、[csi-surface.js](csi-surface.js)、[structure-grid.js](structure-grid.js)、[engine.js](engine.js) 与界面统一为 `lowTriangleBudget`（`48–65536` 三角面，兼容旧工程 `lowFaceBudget` 按 `2×` 三角面迁移）。
+- **百兆雕刻高模清理与四边优先回退**：[engine.js](engine.js) 放宽导入上限至 `200万顶点 / 350万面`（UI `256MB`），新增流式行扫描、狭长面/非流形清理（`cleanSculptMesh`）、类型化数组 `fastQEM` 与工作副本代理；在 CSI 分区不支持复杂封闭角色时自动启用 `fastQEM + Blossom matchQuads` 生成严格受限混合四边低模，并由低模安全派生 `mid / ultra`。
+- **实测对照**：`HIgh.obj`（`749,794` 顶点、`1,499,592` 有效面、`152.4 MiB`）在单文件 [dist/index.html](dist/index.html) Worker 约 `46.3` 秒完成，目标 `2122` 三角面输出 `1,328` 面（`794` 四边面 + `534` 三角面 = `2,122` 三角面、`P95 = 0.386%`、`Max = 0.86%`）与 `9,544 / 38,176` 全四边派生高档；专项检查见 [tests/triangle-budget-and-sculpt.cjs](tests/triangle-budget-and-sculpt.cjs)。

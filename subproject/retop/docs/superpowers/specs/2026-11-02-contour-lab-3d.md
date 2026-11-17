@@ -517,3 +517,17 @@ UV页新增“按平滑组重新展开”，正式Worker只替换五档UV，复�
 3. **横截转折补线联合对齐并沿曲面平滑采样（`curvature-network.js`）**：在 `if (railTransport)` 分支中取消独立最近邻索引与 3 点 `interpolateLine` 对 `g.points` 的覆盖，改为通过 `alignAnnularSection` 联合搜索各排单调对齐站位 `rowIndices`（兼顾 3D 横截直线度、参数跨度与目标坐标偏移），随后沿连续曲面 `evaluate([u(v), v])` 平滑采样 `g.parameters` 与 `g.points`，保证显示导线与实际网格切分链一致且无 V/U 形弯折。
 
 实际肩甲（`reference/shoulder.json`）在离线单文件 `dist/index.html` 与单元测试下实测：环形组 `Patch 3` 内圈轨道边长极差比降至 `2.90`（`0.822–2.385`），面数 `114 → 102`、三角面 `36 → 12`，最小内角 `5.8° → 24.83°`，最大边长比 `9.13 → 5.28`，全部横向 `u` 导线最大转角 `≤ 12.85°`（`lineFairing` 全接受、`evaluator` 半宽居中误差 `< 1e-8`）；低模共 `965` 三角面（`≤ 1000` 预算）、非邻接三角相交 `0`、`7` 个无重叠 UV 岛，OBJ 导出与原高模不变。专项回归验证见 `tests/annular-section-wiring.cjs` 与无头 Chrome 七视角及局部放大检查；当前仍为独立分区低模候选，未提交、推送或安装依赖。
+
+
+### 2026-11-17：全流程统一三角面预算与百万级角色雕刻清理及四边混合回退
+
+1. **所有面数限制统一按渲染三角面计算**：
+   - 将细分与卡线模块（`hierarchy.js`）上限由 `MAX_FACES = 32768` 替换为 `MAX_TRIANGLES = 65536`，`subdivide`、`supportPlan`、`supportBands`、`derive` 均按三角面数 `65536 / 4^turboIterations` 核算预算；
+   - 将 `csi-surface.js`、`structure-grid.js`（v1/v2/v3）、`engine.js`（`settingsFor` / `rebuildHierarchy` / `rebuildCSILow`）与 `app.js` / `index.html` 全面切换至 `lowTriangleBudget`（`48–65536` 三角面），不再对未混合网格仅按多边形个数计算，并对旧工程 JSON 的 `lowFaceBudget` 自动按 `2×` 三角面迁移并清理旧字段。
+2. **百万级原始雕刻高模导入与特征保留混合四边低模回退**：
+   - 放宽 `engine.js` 导入上限至 `200万顶点 / 350万面`（UI 上传 `256MB`），`parseOBJ` 改为索引逐行扫描并自动跳过折叠重复点零面积面；修复 `frame()` 在百万顶点上展开 `Math.max(...local)` 导致的调用栈溢出。
+   - 新增 `cleanSculptMesh`（狭长零面积片焊接最短边以防破洞、去重与剔除多余非流形边面）、类型化数组版 `fastQEM` 以及 `prepareWorkingSource`：中小干净网格（`≤ 12万顶点 / 18万面`）零改动走原路径；百万级或含轻微退化雕刻件自动清理并构建 `30,000` 三角面流形工作副本，`detect` 在超万面密集碎片边界场景通过 `structuralRuns` 滤除局部减面噪点。
+   - 当 `csiSurface.generate` 因封闭多分支/高亏格暂不支持时，由 `buildMixedSimplifyFallback` 执行严格符合 `lowTriangleBudget` 的 `fastQEM` 减面并接 `matchQuads`（Edmonds Blossom 最大凸四边匹配），同时由 `deriveFallbackMidUltra` 直接从低模派生 `65536` 三角面上限内的全四边 `mid` 与极限曲面 `ultra`；浏览器预览同步支持以 `analysisSource` 安全渲染左侧工作副本并标明 `原高模 · 工作显示副本`。
+3. **验证结果（参考模型 `D:\down\小闪\moxing` `HIgh.obj` / `LOW.obj` 及既有回归）**：
+   - `HIgh.obj`（`749,794` 顶点、`1,499,592` 有效三角面、`152.4 MiB`）在单文件 `dist/index.html` WebWorker 实测 `~46.3` 秒完成：`cleanSculptMesh` 修复 `98` 处狭长片并生成 `30,000` 三角面工作副本；目标 `lowTriangleBudget = 2122` 下生成 `1,328` 面低模（`794` 四边面 + `534` 三角面 = 精确 `2,122` 渲染三角面，`valid = true`、`Euler = -2`，抽样 `P95 = 0.386%`、`Max = 0.86%`），`mid`（`4,772` 四边面 / `9,544` 三角面、`P95 = 0.249%`）、`ultra`（`19,088` 四边面 / `38,176` 三角面）均通过拓扑与预算校验，正/侧/背/顶/斜视多视角对照完整保留角色头身、绑带、兜袋与靴体结构；自动化结果为单一密封特征保留混合网格候选，不同于参考 `LOW.obj` 的手工分件硬边布线。
+   - 既有肩甲（`965` 三角面、`429` 四边面）、方盒、圆环与 `27` 组可运行 `.cjs` 单元测试（含新增 `tests/triangle-budget-and-sculpt.cjs`）全部通过。

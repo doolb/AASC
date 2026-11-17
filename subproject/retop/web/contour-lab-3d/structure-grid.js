@@ -59,9 +59,10 @@ function createContourStructureGrid(E){
     }
     const mesh={...structuredClone(base),vertices,faces,faceSources,csiPatchGroups:groups,csiCharts:charts,csiBaseVertices:baseVertices};delete mesh.smoothingGroups;delete mesh.sharpEdges;delete mesh.smoothingReport;
     const t=E.topology(mesh);for(const [key,e]of t.edges)if(e.faces.length===1)boundaryEdges.push({id:'section-border:'+key,virtual:false,vertices:[e.a,e.b],types:['CSI'],sampling:'independent patch boundary'});
-    mesh.csiEdges=boundaryEdges;mesh.csiBoundaryKeys=boundaryEdges.map(e=>E.key(...e.vertices));mesh.csiReport={...mesh.csiReport,structureGrid:{version:1,mode:definition.mode,patches:reports,independentPatches:true,sharedVertexConstraint:false,wholeSurfaceWatertight:false,highSurfaceQueries:0},referencePatches:mesh.csiReport.patches,patches:reports,centeredRimVertices:[],sharedBoundaryEdges:0,budget:{...mesh.csiReport.budget,used:faces.length}};mesh.method='CSI结构方向 / 独立分区四边面';
+    const limit=options.lowTriangleBudget??(options.lowFaceBudget!==undefined?options.lowFaceBudget*2:1000);
+    mesh.csiEdges=boundaryEdges;mesh.csiBoundaryKeys=boundaryEdges.map(e=>E.key(...e.vertices));mesh.csiReport={...mesh.csiReport,structureGrid:{version:1,mode:definition.mode,patches:reports,independentPatches:true,sharedVertexConstraint:false,wholeSurfaceWatertight:false,highSurfaceQueries:0},referencePatches:mesh.csiReport.patches,patches:reports,centeredRimVertices:[],sharedBoundaryEdges:0,budget:{...mesh.csiReport.budget,limit,used:faces.length*2,unit:'triangles',polygonFaces:faces.length}};mesh.method='CSI结构方向 / 独立分区四边面';
     const contact=contactMesh(mesh),pairs=intersections(contact);mesh.csiReport.intersectionAudit={initialFacePairs:pairs,remainingNonadjacentTrianglePairs:pairs,checkedOnBase:false,method:'new independent patches; coincident copies of the same captured CSI node identified for contact checking; shared-vertex and coplanar contacts excluded'};if(pairs)throw Error('独立结构网格存在'+pairs+'处穿插，保留旧结果。');mesh.csiReport.structureGrid.contactTopology=E.audit(contact);
-    const health=E.audit(mesh);if(!health.valid||faces.some(f=>f.length!==4)||faces.length>(options.lowFaceBudget??500))throw Error('独立结构布线未通过四边面或面数检查。');return mesh;
+    const health=E.audit(mesh);if(!health.valid||faces.some(f=>f.length!==4)||faces.length*2>limit)throw Error('独立结构布线未通过四边面或三角面预算检查。');return mesh;
   }
   function contactMeshSections(mesh){
     const vertices=[],faces=[],registry=new Map(),map=[],D=E.bounds(mesh).diagonal;for(let i=0;i<mesh.vertices.length;i++){const source=mesh.csiBaseVertices?.[i]??i,p=mesh.vertices[i];if(!registry.has(source)){registry.set(source,vertices.length);vertices.push(p.slice());}const id=registry.get(source);if(dist(vertices[id],p)>D*1e-8)throw Error('同一CSI接触节点发生分离。');map[i]=id;}for(const f of mesh.faces)faces.push(f.map(v=>map[v]));return {vertices,faces};
@@ -149,29 +150,30 @@ function createContourStructureGrid(E){
   }
   function generateMixed(base,definition,options={}){
     if(!(definition.version===2&&definition.mode==='independent-structure-mixed'||definition.version===3&&definition.mode==='curvature-curve-network'))throw Error('混合结构布线参数无效。');
-    const triangles=options.lowTriangleBudget!==undefined,countFaces=fs=>fs.reduce((s,f)=>s+(triangles?f.length-2:1),0),limit=triangles?options.lowTriangleBudget:options.lowFaceBudget??500;
-    if(!Number.isInteger(limit)||limit<1)throw Error('低模总面数上限无效。');
+    // 统一以渲染三角面（四边面计2、三角面计1）统计并限制预算；旧参数 lowFaceBudget 兼容折算为 2× 三角面
+    const countTriangles=fs=>fs.reduce((s,f)=>s+f.length-2,0),limit=options.lowTriangleBudget??(options.lowFaceBudget!==undefined?options.lowFaceBudget*2:1000);
+    if(!Number.isInteger(limit)||limit<1)throw Error('低模三角面预算无效。');
     const refs=new Map(),patches=base.csiCharts||[],deferred=[];
     for(const chart of patches){
       if(chart.rim||chart.U<4||chart.V<4){deferred.push({patch:chart.patch,reason:chart.rim?'保留包边结构剖面':'简单小分区保留原网格，不为用满预算加密'});continue;}
       const r=definition.version===3?(typeof createContourCurvatureNetwork==='function'?createContourCurvatureNetwork:require('./curvature-network.js'))(E).reference(base,chart,base.csiCurveNetwork)||reference(base,chart):reference(base,chart);if(r.supported)refs.set(chart.patch,r);else deferred.push({patch:chart.patch,reason:r.reason});
     }
-    const reserved=countFaces(base.faces.filter((_,i)=>!refs.has(base.csiPatchGroups[i]))),available=limit-reserved,projectedArea=[...refs.values()].reduce((s,r)=>s+r.projectedArea,0);
-    if(available<[...refs.values()].reduce((sum,r)=>sum+(triangles?r.borderNodes.length-2:Math.ceil((r.borderNodes.length-2)/2)),0))throw Error('面数预算不足以保留CSI结构分区。');
-    let pitch=refs.size?Math.sqrt(projectedArea*(triangles?2:1)/available):0,out=new Map(),attempts=0;
+    const reserved=countTriangles(base.faces.filter((_,i)=>!refs.has(base.csiPatchGroups[i]))),available=limit-reserved,projectedArea=[...refs.values()].reduce((s,r)=>s+r.projectedArea,0);
+    if(available<[...refs.values()].reduce((sum,r)=>sum+(r.borderNodes.length-2),0))throw Error('三角面预算不足以保留CSI结构分区。');
+    let pitch=refs.size?Math.sqrt(projectedArea*2/available):0,out=new Map(),attempts=0;
     if(refs.size)for(;attempts<32;attempts++){
       out=new Map([...refs].map(([id,r])=>[id,lattice(r,pitch)]));
-      if(reserved+[...out.values()].reduce((s,r)=>s+countFaces(r.faces),0)<=limit)break;
+      if(reserved+[...out.values()].reduce((s,r)=>s+countTriangles(r.faces),0)<=limit)break;
       pitch*=1.10;
     }
-    if(attempts===32)throw Error('面数预算不足以保留CSI边界并局部收线。');
+    if(attempts===32)throw Error('三角面预算不足以保留CSI边界并局部收线。');
     // Phase selection avoids cutting an existing boundary knot into a tiny sliver.
     // It changes only the lattice origin within its own intrinsic structure plane.
     const quality=outputs=>[...outputs.values()].reduce((sum,r)=>{const t=E.topology(r),crease=[...t.edges.values()].filter(e=>e.faces.length===2&&dot(t.data[e.faces[0]].normal,t.data[e.faces[1]].normal)<.5).length;return sum+crease*100+r.faces.reduce((s,f)=>{const lengths=f.map((id,i)=>dist(r.vertices[id],r.vertices[f[(i+1)%f.length]])),ratio=Math.max(...lengths)/Math.min(...lengths);return s+Math.log(Math.max(1,ratio))**2;},0);},0);
     let best=quality(out),phase=[.1732050807568877,.3819660112501051];
     if(refs.size)for(const candidate of [[.37,.61],[.61,.17],[.83,.43],[.43,.83],[.61,.61]]){
       const next=new Map([...refs].map(([id,r])=>[id,lattice(r,pitch,candidate)]));
-      if(reserved+[...next.values()].reduce((s,r)=>s+countFaces(r.faces),0)>limit)continue;
+      if(reserved+[...next.values()].reduce((s,r)=>s+countTriangles(r.faces),0)>limit)continue;
       const score=quality(next);if(score<best-1e-8){out=next;best=score;phase=candidate;}
     }
     const vertices=[],faces=[],faceSources=[],groups=[],charts=[],kinds=[],reports=[],registry=new Map(),sources=[],baseVertices=[];
@@ -192,10 +194,10 @@ function createContourStructureGrid(E){
     for(const k of ['smoothingGroups','sharpEdges','smoothingReport'])delete mesh[k];
     const t=E.topology(mesh),borders=[...t.edges].filter(([,e])=>e.faces.length===1);
     mesh.csiBoundaryKeys=borders.map(([key])=>key);mesh.csiEdges=borders.map(([key,e])=>({id:'mixed-border:'+key,virtual:false,vertices:[e.a,e.b],types:['CSI'],sampling:'independent patch border'}));
-    const structureGrid={version:definition.version,mode:definition.mode,patches:reports,pitch,phase,planningAttempts:attempts+1,independentPatches:true,sharedVertexConstraint:false,wholeSurfaceWatertight:false,highSurfaceQueries:0,quads:faces.filter(f=>f.length===4).length,triangleFaces:faces.filter(f=>f.length===3).length,budgetCounts:triangles?'triangulated faces':'all polygon faces'};
-    mesh.csiReport={...mesh.csiReport,structured:false,mixedTopology:faces.some(f=>f.length===3),structureGrid,referencePatches:mesh.csiReport.referencePatches||mesh.csiReport.patches,centeredRimVertices:[],sharedBoundaryEdges:0,budget:{...mesh.csiReport.budget,used:countFaces(faces),limit,unit:triangles?'triangles':'polygons',polygonFaces:faces.length},patches:reports};
+    const structureGrid={version:definition.version,mode:definition.mode,patches:reports,pitch,phase,planningAttempts:attempts+1,independentPatches:true,sharedVertexConstraint:false,wholeSurfaceWatertight:false,highSurfaceQueries:0,quads:faces.filter(f=>f.length===4).length,triangleFaces:faces.filter(f=>f.length===3).length,budgetCounts:'triangulated faces'};
+    mesh.csiReport={...mesh.csiReport,structured:false,mixedTopology:faces.some(f=>f.length===3),structureGrid,referencePatches:mesh.csiReport.referencePatches||mesh.csiReport.patches,centeredRimVertices:[],sharedBoundaryEdges:0,budget:{...mesh.csiReport.budget,used:countTriangles(faces),limit,unit:'triangles',polygonFaces:faces.length},patches:reports};
     if(definition.version===3){mesh.csiReport.csiOnly=false;mesh.csiReport.geometrySource='saved principal-curvature CSI network with boundary collar';}mesh.method=definition.version===3?'三维经纬CSI曲面 / 独立分区混合布线':'CSI结构直向网格 / 四边面为主、局部三角面收线';
-    const health=E.audit(mesh);if(!health.valid||faces.some(f=>f.length!==3&&f.length!==4)||countFaces(faces)>limit)throw Error('混合结构布线未通过网格或总面数检查。');
+    const health=E.audit(mesh);if(!health.valid||faces.some(f=>f.length!==3&&f.length!==4)||countTriangles(faces)>limit)throw Error('混合结构布线未通过网格或三角面预算检查。');
     const contact=contactMeshMixed(mesh),audit=E.audit(contact),before=E.audit(base);
     if(!audit.valid||audit.components!==before.components||audit.boundaryLoops!==before.boundaryLoops||JSON.stringify(audit.euler)!==JSON.stringify(before.euler))throw Error('独立分区的CSI接触拓扑不一致。');
     const pairs=intersections(contact);mesh.csiReport.intersectionAudit={initialFacePairs:pairs,remainingNonadjacentTrianglePairs:pairs,checkedOnBase:false,method:'new mixed patches; only verified copies on the same captured CSI node/edge identified and split for contact audit; shared-vertex and coplanar contacts excluded'};
