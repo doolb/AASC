@@ -404,6 +404,26 @@ const Upload = {
         return player.toString();
     },
 
+    // 代理 URL 的路径可能没有后缀；仅把嵌套地址用于判断，发送时保留原地址。
+    detectUrlMediaType(value) {
+        try {
+            const outer = new URL(value);
+            if (!['http:', 'https:'].includes(outer.protocol)) return 'html';
+            const isProxy = outer.pathname === '/api/proxy' || /^\/api\/proxy\/media\.[a-z0-9]+$/i.test(outer.pathname);
+            const nested = isProxy ? outer.searchParams.get('url') : null;
+            const media = nested ? new URL(nested) : outer;
+            if (!['http:', 'https:'].includes(media.protocol)) return 'html';
+            const filename = nested && media.searchParams.get('filename');
+            const name = filename && /\.[a-z0-9]+$/i.test(filename) ? filename : decodeURIComponent(media.pathname);
+            const ext = /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase();
+            if (ext === 'gif') return 'gif';
+            if (['jpg', 'jpeg', 'png', 'webp', 'bmp', 'avif'].includes(ext)) return 'image';
+            if (['mp4', 'webm', 'mov', 'avi', 'mkv', 'm3u8'].includes(ext)) return 'video';
+            if (['wav', 'ogg', 'mp3', 'm4a'].includes(ext)) return 'audio';
+            return 'html';
+        } catch { return 'html'; }
+    },
+
     uploadByUrl() {
         const urlInput = document.getElementById('urlInput');
         const url = urlInput.value.trim();
@@ -419,10 +439,8 @@ const Upload = {
             urlInput.value = '';
             return;
         }
-        // URL 输入：detectMediaType 对无扩展名 URL 默认判 image，
-        // 自定义网页地址（如 https://example.com）常不带 .html —— 无已知媒体扩展名时按网页处理
-        let mediaType = bilibiliUrl ? 'html' : this.detectMediaType(url);
-        if (mediaType === 'image') mediaType = 'html';
+        // 原始代理地址保持不变，使用上游媒体地址识别播放器类型。
+        const mediaType = bilibiliUrl ? 'html' : this.detectUrlMediaType(url);
 
         if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
             window.WebSocketManager.sendMedia({

@@ -1,3 +1,8 @@
+### 外部媒体 URL
+
+- ✅ [2026-11-17] 控制端识别无后缀代理链接中的图片、视频和音频地址，按媒体类型发送并沿用原有尺寸探测；保持代理签名和 B 站播放流程不变。目标 Android 显示端仍待实机验证。
+  - `src/apps/web-mediacenter/ui/public/js/upload.js`、`tests/bilibili-url-playback.test.js`、`docs/design/media-url-playback.md`、`docs/spec/media-url-playback.md`。
+
 ### 背景媒体
 
 - ✅ [2026-11-17] 排查 Android 背景无声：8081 服务仍在运行旧进程，已通过 `npm run restart:server` 重启；显示端重连并重新播放后，用户确认已有声音。设备媒体输出当时指向有线耳机。
