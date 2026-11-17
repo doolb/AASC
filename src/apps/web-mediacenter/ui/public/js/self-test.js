@@ -603,6 +603,21 @@ const SelfTest = {
             }
         },
         {
+            id: 'media_masonry_structure',
+            name: '媒体库自适应卡片',
+            description: '只读检查尺寸监听与瀑布流资源',
+            category: '界面布局',
+            run: async () => {
+                try {
+                    const responses = await Promise.all(['/control', '/js/media-masonry.js', '/css/control-workspace.css'].map(url => fetch(url, { cache: 'no-store' })));
+                    if (responses.some(response => !response.ok)) return { success: false, message: '媒体卡片布局资源不可读取' };
+                    const [html, script, style] = await Promise.all(responses.map(response => response.text()));
+                    const valid = html.includes('js/media-masonry.js') && script.includes('loadedmetadata') && script.includes('naturalWidth') && style.includes('.media-masonry-ready');
+                    return { success: valid, message: valid ? '媒体卡片布局资源正常' : '媒体卡片布局资源缺失', details: '尺寸加载、重排与触屏操作由浏览器测试和设备验收覆盖' };
+                } catch (error) { return { success: false, message: `媒体卡片检查失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'share_move_dialog_structure',
             name: '分享移动文件夹弹窗',
             description: '只读检查分享移动弹窗和文件夹选项',
