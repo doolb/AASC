@@ -1,3 +1,5 @@
+- [独立 ASR 伪代码](spec/standalone-asr.md)
+
 - [显示端快捷控制](spec/display-quick-control.md)
 # Web MediaCenter - 项目实现文档
 

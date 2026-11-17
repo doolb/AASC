@@ -238,3 +238,9 @@ AASC OCR 可选接入 := 自动采集默认启用 OCR（可显式关闭） → �
 第 63 关实机 := 首屏人工复核铁笼及两鸭 → 观察三猪两鸭离场后笼计数 35 减至 30 → 开笼画面还原 95 猪 → 从第三步后的状态独立重放 129 步完整路线 → 重开并核对鸭子离场、笼体变化及后续每步 → 胜利后合并 132 步及截图；通用蓝底铁笼与鸭子联合自动流程仍需完善。
 
 第 64～67 关实机 := 第 64 关人工复核 L 形笼和三格猪 → 开笼后还原 91 猪 → 独立重放并实机确认 106 步；第 65 关复核两只计数 40 锁猪 → 105 步通关；第 66 关复核 87 猪、20 鸭和计数 96 锁猪 → 119 步通关；第 67 关首屏与开笼画面还原 93 猪 → 完整路线仍在搜索。
+
+求解机制识别与路由 := profile_level(data) 检查关卡物件与生效机制（鸭子、固定阻挡、剪刀绳索、动态铁笼、计数锁、非四向或宽猪）→ select_solver_profiles(profile) 按特征表选择求解管线：含鸭子/阻挡/剪刀绳索/宽猪或斜向时直接走原生 C++ 搜索；纯四向普通猪优先原生 C++，超限回退启发式；四向含动态铁笼或计数锁先短预算原生 C++，未果依次尝试启发式（auto+heuristic、bestfirst+closure=off、auto+heuristic+deadlock-prune=strict(100)）→ 所有候选动作经独立 Python 重放验证。
+
+蓝底铁笼逐帧匹配兜底 := match_cage_frame(image, board, ..., expected_cells) → pig_cage.detect 未检出笼体且已有复核 expected_cells 时 → 按 grid 与 expected_cells 计算笼格像素边界过滤笼内候选 → 对全部笼外小猪继续严格逐帧匹配。
+
+第 60～70 关网页接入 := 读取 play-runs/ 第 60～70 关已验证初始布局与通关步骤 → 转换猪、锁计数、鸭子与动态铁笼 → 生成 web/pig-level/level-60.json～level-70.json → 注册 app.mjs、index.html、serve-pig-level.js 与 tests/pig-level-web.test.js → 网页引擎完整重放清盘校验。

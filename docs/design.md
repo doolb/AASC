@@ -1,3 +1,5 @@
+- [独立 ASR 日光界面](design/standalone-asr.md)
+
 - [显示端快捷控制](design/display-quick-control.md)
 # Web MediaCenter - 项目设计文档
 

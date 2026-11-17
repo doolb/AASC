@@ -27,7 +27,9 @@ function settleDucks(level, state) {
     for (let x = 0; x < level.columns; x++) { add(x, 0); add(x, level.rows - 1); }
     for (let y = 0; y < level.rows; y++) { add(0, y); add(level.columns - 1, y); }
     for (let i = 0; i < queue.length; i++) for (const [dx, dy] of Object.values(VECTORS)) add(queue[i][0] + dx, queue[i][1] + dy);
+    const before = state.ducks.length;
     state.ducks = state.ducks.filter(cell => !seen.has(cell.join(',')));
+    state.exitCount += before - state.ducks.length;
 }
 
 export function movePig(level, state, id) {

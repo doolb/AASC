@@ -1,0 +1,22 @@
+{
+  "api": {
+    "baseUrl": "http://127.0.0.1:5918/v1",
+    "apiKey": "",
+    "model": "gemini-flash",
+    "timeoutMs": 300000
+  },
+  "defaultRole": "主助手",
+  "roles": [
+    {
+      "name": "主助手",
+      "persona": "你是个人主助手，理解用户意图并清晰回答；涉及实际操作时只通过已授权的专用角色，不声称未执行的操作已完成。",
+      "permissions": []
+    },
+    {
+      "name": "游戏",
+      "persona": "你是游戏专用助手，帮助用户分析游戏问题；如需实际操作，只有在宿主明确接入相关能力时才能执行，不声称未执行的操作已完成。",
+      "permissions": []
+    }
+  ],
+  "commandRoles": []
+}

@@ -270,3 +270,27 @@
 ### 猪了个猪
 
 - ✅ [2026-11-15] 实机通关第 64、65、66 关：分别独立重放并核对 106、105、119 步，保留首屏、顺序图与胜利截图；第 64 关人工复核蓝底 L 形铁笼，第 66 关包含 20 鸭和计数 96 锁猪。第 67 关已开笼，完整路线待搜索。
+
+### 猪了个猪
+
+- ✅ [2026-11-16] 实机通关第 67、68、69、70 关：
+  - 第 67 关：重开后分段执行已独立重放验证的 121 步完整路线（78 步前置 + 1 步开笼 + 42 步开笼后，93 只猪），保存初始布局、顺序图和胜利截图于 `docs/references/pig-game/play-runs/level-67-run-20261115-221312-792782/`。
+  - 第 68 关：分阶段开 30 计数铁笼并结合开笼画面还原 94 只猪与动态笼，启发式搜索并独立重放验证 132 步完整路线（38 步前置 + 1 步开笼 + 93 步开笼后），重开后实机通关并保存完整证据于 `docs/references/pig-game/play-runs/level-68-run-20261116-215323-766300/`。
+  - 第 69 关：复核 97 只猪及 45、50、70 三只计数锁猪，延后 40/90 号猪避开死锁环后求得并独立重放验证 130 步完整路线，实机通关并保存完整证据于 `docs/references/pig-game/play-runs/level-69-locked-20261116-224909-599846/`。
+  - 第 70 关：提取 91 只猪并由原生 C++ 求解器计算且独立重放验证 125 步完整路线，实机通关并保存完整证据于 `docs/references/pig-game/play-runs/level-70-locked-20261116-230023-093387/`。
+
+- ✅ [2026-11-16] 接入第 60～70 关至网页 `web/pig-level/` 并优化通用求解与执行脚本：
+  - 新增 `web/pig-level/level-60.json` ～ `level-70.json`，更新 `app.mjs`、`index.html`、`scripts/serve-pig-level.js`、`tests/pig-level-web.test.js`；修复 `web/pig-level/engine.mjs` 鸭子离场未计入 `exitCount` 的问题；`npm run test:pig-web` 77 项全部通过。
+  - `scripts/pig_locked_candidate.py` 新增 `profile_level` / `select_solver_profiles` 机制识别路由及 `strategy='auto'`，并支持多档启发式策略自动回退；`scripts/play-pig-locked.py` 优化 `match_cage_frame` 在蓝底漏检笼体时回退至已复核 `expected_cells` 边界过滤笼内猪；`npm run test:pig-locked`（8 项）与 `npm run test:pig-heuristic`（4 项）通过。
+  - 在 `/mnt/AASC/goal/pig-game.md` 记录可复用开局提示词与已完成阶段目标。
+
+- ✅ [2026-11-17] 实机通关第 71、72 关：
+  - 第 71 关：复核 106 只猪与 2 只新机制“炸弹猪”（碰撞 3 次引爆），使用 `strategy='auto'` 求得并独立验证 140 步安全路线（炸弹猪碰撞均 ≤ 2 次），实机通关并保存证据于 `docs/references/pig-game/play-runs/level-71-locked-20261117-005010-115675/`。
+  - 第 72 关：复核 93 只猪、3 只剪刀猪与 2 只捆绑猪，启发式求解并独立重放验证 135 步完整路线，实机通关并保存证据于 `docs/references/pig-game/play-runs/level-72-locked-20261117-011443-567073/`。
+  - 第 73 关：复核 104 只猪与 5 只炸弹猪，使用 `strategy='auto'` 求得 129 步安全路线（每只炸弹猪碰撞均 ≤ 2 次），中断后从第 90 步续跑实机通关并合并保存证据于 `docs/references/pig-game/play-runs/level-73-run-20261117-081902-190190/`。
+  - 第 74 关：复核 99 只猪与 3 只炸弹猪（修正 98 号炸弹猪朝向为 `west`），延后 53 号猪重算后半段将 100 号炸弹猪碰撞从 3 次降至 1 次，124 步安全路线实机通关并保存证据于 `docs/references/pig-game/play-runs/level-74-locked-20261117-084100-561849/`。
+  - 第 75 关：复核 97 只猪与 2 只炸弹猪，使用 `strategy='auto'` 求得 112 步安全路线（炸弹猪总碰撞均 ≤ 2 次），实机通关并保存证据于 `docs/references/pig-game/play-runs/level-75-locked-20261117-094536-189387/`。
+  - 第 76 关：还原 90 只猪与 52 计数 L 形动态铁笼，独立重放验证 131 步完整路线（65 步前置 + 1 步开笼 + 65 步开笼后），重开后分段实机通关并保存完整证据于 `docs/references/pig-game/play-runs/level-76-run-20261117-101408-194944/`。
+  - 第 77 关：复核 92 只猪与 4 只炸弹猪（修正 17 号猪朝向为 `east`），延后 44/50 号猪确保炸弹猪总碰撞/滑动次数均 < 3，101 步安全路线实机通关并保存完整证据于 `docs/references/pig-game/play-runs/level-77-run/`。
+  - 第 78 关：复核 89 只猪与 4 只炸弹猪，延后 89 号炸弹猪求得 124 步安全路线（炸弹猪总碰撞/滑动次数均 ≤ 2 次），一次实机通关并保存完整证据于 `docs/references/pig-game/play-runs/level-78-run/`。
+  - 第 79 关：复核 87 只猪、16 只鸭子、5 把计数锁（87/87/93/93/93）、4 只剪刀猪、1 只捆绑猪与 3 只炸弹猪（80/81/82 碰撞均 ≤ 1 次），通过 88 号先滑动挡住 89 号避免形成死锁环，120 步完整路线一次实机通关并保存完整证据于 `docs/references/pig-game/play-runs/level-79-run/`。

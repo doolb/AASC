@@ -2079,3 +2079,19 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 ### Qwen千问创作视频新入口（2026-10-23）
 
 `npm run test:chat-videos` 37/37、`npm run check:chat2api` 419/419；补HTTP/认证边界6/6。用保存账号经正式Node任务服务查询已有视频并保存，627,730字节H.264/1280×720/5.163秒，实际样片双端浏览器2/2。新创建一次返回明确15004（当前余额5、界面费用30），成功创建/参考图最终结果及Android部署后仍待验；测试不写当前AASC聊天。
+
+## 独立 ASR 网页发布（2026-11-16）
+
+静态网页部署到 `https://c.aasc.us/mnt/asr/`，Worker 根据网页目录相对读取 `../aimodel/sensevoice/`；本地服务提供相同 URL 结构。2 项 Node 测试通过；网页、模型、模块与 WASM HTTPS 可访问，远端上传文件 SHA-256 与本地一致；真实麦克风待验收。
+
+## 独立 ASR VAD 红线与模型就绪（2026-11-16）
+
+`/mnt/asr` 的 5 项测试覆盖模型加载失败/重试及录音禁用、静态服务、RMS 与静音倒计时、短语音和 59 秒上限。静态网页已发布，5 个更新文件公网 SHA-256 一致；真实设备的麦克风、VAD 观感和模型加载待验收。
+
+## 独立 ASR 标准 HTTP 缓存（2026-11-16）
+
+本地 `npm test` 5 项通过，包括模型和词表缓存头、ETag 与修改时间 304、ETag 优先和非模型资源。线上 Apache 配置语法检查成功，模型及词表响应带 `public, max-age=0, must-revalidate`，匹配 ETag 返回 304，错误 ETag 返回 200，校验文件及网页未被设置该缓存规则。浏览器大文件实际保留情况未验证。
+
+## 独立 ASR Android 界面同步（2026-11-16）
+
+`npm run build:apk -- --offline --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process` 和 `npm run test:android -- --offline --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process` 成功；VAD 2 项测试覆盖 RMS、倒计时、短语音和最长时长；debug APK v2 签名通过，内置 SenseVoice 模型与词表大小正确。ADB 无连接设备，未验证真实界面、麦克风与模型重试。

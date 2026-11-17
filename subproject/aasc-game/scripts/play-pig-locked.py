@@ -152,11 +152,15 @@ def match_scissors_frame(image, board, pigs, state, directions, grid, scissors, 
 
 
 def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells, unknown=(), locks=None, exits=0):
-    """每次核对笼体轮廓及全部笼外猪；笼内识别片段不得成为点击目标。"""
+    """每次核对笼体轮廓及全部笼外猪；蓝底漏检笼体时回退到已复核笼格边界过滤笼内猪。"""
     if app.auto.ui_state(image) != 'unknown':
         return None
+    expected_set = {tuple(cell) for cell in expected_cells}
     cages = pig_cage.detect(image, board)
-    if pig_cage.cells(cages, grid) != {tuple(cell) for cell in expected_cells}:
+    if cages:
+        if pig_cage.cells(cages, grid) != expected_set:
+            return None
+    elif not expected_set:
         return None
     locks = locks or {}
     hidden = [i for i, pig in enumerate(pigs) if state[i] is not None and exits < locks.get(pig['id'], 0)]
@@ -167,7 +171,15 @@ def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells
         if cv2.countNonZero(cv2.inRange(sample, (10, 160, 140), (40, 255, 255))) < 80:
             return None
     detected, _, _ = app.player.extract.identify(image, board)
-    detected = [pig for pig in detected if not any(pig_cage.contains(cage, pig['center']) for cage in cages)]
+    if cages:
+        detected = [pig for pig in detected if not any(pig_cage.contains(cage, pig['center']) for cage in cages)]
+    else:
+        half = grid[2] / 2
+        cage_boxes = [(grid[0] + col * grid[2] - half, grid[1] + row * grid[2] - half,
+                       grid[0] + col * grid[2] + half, grid[1] + row * grid[2] + half)
+                      for col, row in expected_set]
+        detected = [pig for pig in detected if not any(x0 <= pig['center'][0] <= x1 and y0 <= pig['center'][1] <= y1
+                                                       for x0, y0, x1, y1 in cage_boxes)]
     detected = [pig for pig in detected if all(math.dist(pig['center'], pigs[i]['center']) > grid[2] * .7 for i in hidden)]
     for item in unknown:
         matches = [pig for pig in detected if math.dist(pig['center'], item['center']) < grid[2] * .3]

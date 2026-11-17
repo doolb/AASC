@@ -46,8 +46,61 @@ def build_layout(pigs, grid, locks, board, ducks=()):
     return {'grid': list(grid), 'pigs': result, 'locks': thresholds, 'board': list(board), 'ducks': [list(cell) for cell in ducks]}
 
 
+def profile_level(data):
+    """识别关卡物件与需要生效的机制，供求解路由选择最合适策略。"""
+    pigs = data.get('pigs', [])
+    has_ducks = bool(data.get('ducks'))
+    has_blockers = bool(data.get('blockers'))
+    has_special_tools = bool(data.get('scissors') or data.get('ropes'))
+    has_cages = bool(data.get('dynamic_cages') or data.get('cage_cells'))
+    has_locks = bool(data.get('locks'))
+    has_unreviewed_cage = bool(data.get('cage_unknown') or data.get('cage_cells'))
+    has_non_cardinal_or_wide = any(
+        pig.get('width', 1) != 1 or pig.get('direction') not in ('north', 'south', 'east', 'west')
+        for pig in pigs
+    )
+    heuristic_supported = not (
+        has_ducks or has_blockers or has_special_tools or has_unreviewed_cage or has_non_cardinal_or_wide
+    )
+    return {
+        'pig_count': len(pigs),
+        'has_ducks': has_ducks,
+        'has_blockers': has_blockers,
+        'has_special_tools': has_special_tools,
+        'has_cages': has_cages,
+        'has_locks': has_locks,
+        'heuristic_supported': heuristic_supported,
+    }
+
+
+def select_solver_profiles(profile):
+    """根据关卡机制特征表选择求解管线，避免冗长条件分支。"""
+    if not profile['heuristic_supported']:
+        return [('native', {'seeds': (17, 1, 2, 4, 5, 6, 7, 8, 9)})]
+    if profile['has_cages'] or profile['has_locks']:
+        return [('native', {'seeds': (0, 1, 2)}), ('heuristic', {})]
+    return [('native', {'seeds': (17, 1, 2, 4, 5, 6, 7, 8, 9)}), ('heuristic', {})]
+
+
 def solve(data, seeds=(17, 1, 2, 4, 5, 6, 7, 8, 9), allow_partial=False, forbid_first=None, target_exits=None, strategy="native", time_limit=90):
     """离线遍历后交独立 Python 实现重放；不接受不完整或提前解锁的候选。"""
+    if strategy == 'auto':
+        if forbid_first is not None or target_exits is not None:
+            return solve(data, seeds=seeds, allow_partial=allow_partial, forbid_first=forbid_first,
+                         target_exits=target_exits, strategy='native', time_limit=time_limit)
+        profile = profile_level(data)
+        pipeline = select_solver_profiles(profile)
+        last_error = None
+        for idx, (step_strategy, options) in enumerate(pipeline):
+            step_allow_partial = allow_partial and (idx == len(pipeline) - 1)
+            try:
+                answer = solve(data, seeds=options.get('seeds', seeds), allow_partial=step_allow_partial,
+                               strategy=step_strategy, time_limit=time_limit)
+                answer.setdefault('search_info', {})['level_profile'] = profile
+                return answer
+            except ValueError as error:
+                last_error = error
+        raise last_error or ValueError('自动求解未找到可行路线')
     if strategy == 'heuristic':
         if forbid_first is not None or target_exits is not None:
             raise ValueError('启发式策略暂不支持首步限制或阶段离场目标')
@@ -143,6 +196,25 @@ def solve(data, seeds=(17, 1, 2, 4, 5, 6, 7, 8, 9), allow_partial=False, forbid_
     raise ValueError('锁猪完整搜索达到上限')
 
 
+HEURISTIC_PROFILES = (
+    ('auto_heuristic', ('--mode', 'auto', '--closure', 'heuristic', '--deadlock-prune', 'off',
+                        '--baseline-ratio', '0.2', '--dfs-phase-ratio', '0.35', '--candidate-search', 'dfs',
+                        '--auto-time', '2', '--min-candidate-budget', '0.2', '--max-candidates', '60')),
+    ('bestfirst_fast', ('--mode', 'bestfirst', '--closure', 'off', '--deadlock-prune', 'off')),
+    ('auto_deadlock_prune', ('--mode', 'auto', '--closure', 'heuristic', '--deadlock-prune', 'strict',
+                             '--deadlock-max-nodes', '100')),
+)
+
+
+def _run_heuristic_profile(source, output, profile_args, budget):
+    """在受控子进程中运行单个启发式配置并返回标准化结果。"""
+    command = [sys.executable, str(ROOT / 'scripts/pig_heuristic_solver.py'),
+               '--layout', str(source), '--time', str(budget), *profile_args, '--out', str(output)]
+    subprocess.run(command, check=True, capture_output=True, text=True, timeout=budget + 15)
+    result = json.loads(output.read_text(encoding='utf-8'))
+    return result.get('best') or result
+
+
 def solve_heuristic(data, allow_partial=False, time_limit=90):
     """在受控子进程中搜索，并以项目独立移动规则重新验证每一步。"""
     if isinstance(time_limit, bool) or not isinstance(time_limit, (int, float)) or not math.isfinite(time_limit) or not 0 < time_limit <= 3600:
@@ -165,19 +237,29 @@ def solve_heuristic(data, allow_partial=False, time_limit=90):
         layout['pigs'].append({'id': pig['id'], 'direction': pig['direction'], 'length': pig.get('length', 2),
                                'width': 1, 'cells': position['cells'],
                                'unlock_after_exits': max(locks.get(pig['id'], 0), cage_lock)})
+    best = {}
+    best_score = (-1, -1)
+    used_profile = HEURISTIC_PROFILES[0][0]
     with tempfile.TemporaryDirectory(prefix='aasc-pig-heuristic-') as directory:
         source, output = Path(directory) / 'layout.json', Path(directory) / 'result.json'
         source.write_text(json.dumps(layout, ensure_ascii=False), encoding='utf-8')
-        command = [sys.executable, str(ROOT / 'scripts/pig_heuristic_solver.py'), '--layout', str(source),
-                   '--mode', 'auto', '--closure', 'heuristic', '--deadlock-prune', 'off', '--time', str(time_limit),
-                   '--baseline-ratio', '0.2', '--dfs-phase-ratio', '0.35', '--candidate-search', 'dfs',
-                   '--auto-time', '2', '--min-candidate-budget', '0.2', '--max-candidates', '60', '--out', str(output)]
-        try:
-            subprocess.run(command, check=True, capture_output=True, text=True, timeout=time_limit + 15)
-            result = json.loads(output.read_text(encoding='utf-8'))
-        except (OSError, subprocess.SubprocessError, ValueError) as error:
-            raise ValueError('启发式搜索失败：' + str(error)) from error
-    best = result.get('best') or {}
+        per_budget = max(1.0, float(time_limit) / len(HEURISTIC_PROFILES))
+        last_error = None
+        for idx, (profile_name, profile_args) in enumerate(HEURISTIC_PROFILES):
+            budget = float(time_limit) if idx == 0 and time_limit <= 5 else per_budget
+            try:
+                candidate = _run_heuristic_profile(source, output, profile_args, budget)
+            except (OSError, subprocess.SubprocessError, ValueError) as error:
+                last_error = error
+                continue
+            if candidate.get('complete') is True:
+                best, used_profile = candidate, profile_name
+                break
+            score = (candidate.get('best_removed', 0), len(candidate.get('steps', [])))
+            if not best or score > best_score:
+                best, best_score, used_profile = candidate, score, profile_name
+        if not best and last_error is not None:
+            raise ValueError('启发式搜索失败：' + str(last_error)) from last_error
     complete = best.get('complete') is True
     if not complete and not allow_partial:
         raise ValueError('启发式搜索达到上限，未找到完整解')
@@ -209,22 +291,23 @@ def solve_heuristic(data, allow_partial=False, time_limit=90):
     if not actions:
         raise ValueError('启发式搜索未找到可验证步骤')
     answer = dict(data, actions=actions, status='solved' if complete else 'partial')
-    answer['search_info'] = {'strategy': 'heuristic', 'closure': 'heuristic', 'time_limit': time_limit,
-                             'complete': complete, 'exits': exits}
+    answer['search_info'] = {'strategy': 'heuristic', 'profile': used_profile, 'closure': 'heuristic',
+                             'time_limit': time_limit, 'complete': complete, 'exits': exits}
     module.validate_plan(answer, require_complete=complete)
     return answer
 
 
 def main():
-    parser = argparse.ArgumentParser(description='使用启发式策略计算并独立验证小猪关卡')
+    parser = argparse.ArgumentParser(description='使用机制路由或启发式策略计算并独立验证小猪关卡')
     parser.add_argument('--input', required=True, help='项目格式关卡 JSON')
     parser.add_argument('--output', required=True, help='输出经独立验证的计划 JSON')
+    parser.add_argument('--strategy', choices=('auto', 'heuristic', 'native'), default='heuristic', help='求解策略')
     parser.add_argument('--time', type=float, default=90, help='总搜索秒数')
     parser.add_argument('--allow-partial', action='store_true', help='允许输出已验证的部分路线')
     args = parser.parse_args()
     try:
         data = json.loads(Path(args.input).read_text(encoding='utf-8'))
-        answer = solve(data, strategy='heuristic', time_limit=args.time, allow_partial=args.allow_partial)
+        answer = solve(data, strategy=args.strategy, time_limit=args.time, allow_partial=args.allow_partial)
         Path(args.output).write_text(json.dumps(answer, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         print(f"搜索结果：{answer['status']}，{len(answer['actions'])} 步")
     except (OSError, ValueError, KeyError, TypeError) as error:
