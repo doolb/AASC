@@ -67,10 +67,10 @@ function createContourStructureGrid(E){
   function contactMeshSections(mesh){
     const vertices=[],faces=[],registry=new Map(),map=[],D=E.bounds(mesh).diagonal;for(let i=0;i<mesh.vertices.length;i++){const source=mesh.csiBaseVertices?.[i]??i,p=mesh.vertices[i];if(!registry.has(source)){registry.set(source,vertices.length);vertices.push(p.slice());}const id=registry.get(source);if(dist(vertices[id],p)>D*1e-8)throw Error('同一CSI接触节点发生分离。');map[i]=id;}for(const f of mesh.faces)faces.push(f.map(v=>map[v]));return {vertices,faces};
   }
-  function intersections(mesh){
-    const tr=E.triangulate(mesh),D=E.bounds(mesh).diagonal,eps=D*1e-8,triangles=tr.faces.map(f=>{const p=f.map(i=>tr.vertices[i]);return {f,p,lo:[0,1,2].map(k=>Math.min(...p.map(v=>v[k]))),hi:[0,1,2].map(k=>Math.max(...p.map(v=>v[k])))};}).sort((a,b)=>a.lo[0]-b.lo[0]);
+  function intersections(mesh,changedFaces=null){
+    const tr=E.triangulate(mesh),D=E.bounds(mesh).diagonal,eps=D*1e-8,triangles=tr.faces.map((f,i)=>{const p=f.map(i=>tr.vertices[i]);return {f,p,changed:changedFaces?.has(tr.source[i]),lo:[0,1,2].map(k=>Math.min(...p.map(v=>v[k]))),hi:[0,1,2].map(k=>Math.max(...p.map(v=>v[k])))};}).sort((a,b)=>a.lo[0]-b.lo[0]);
     const segment=(p,q,a,b,c)=>{const x=sub(b,a),y=sub(c,a),n=cross(x,y),d=sub(q,p),den=dot(n,d);if(Math.abs(den)<D**3*1e-12)return false;const t=dot(n,sub(a,p))/den;if(t<=1e-7||t>=1-1e-7)return false;const v=sub(add(p,mul(d,t)),a),xx=dot(x,x),xy=dot(x,y),yy=dot(y,y),vx=dot(v,x),vy=dot(v,y),det=xx*yy-xy*xy;if(det<D**4*1e-20)return false;const s=(vx*yy-vy*xy)/det,u=(vy*xx-vx*xy)/det;return s>=-1e-7&&u>=-1e-7&&s+u<=1+1e-7;};let count=0;
-    for(let i=0;i<triangles.length;i++)for(let j=i+1;j<triangles.length&&triangles[j].lo[0]<=triangles[i].hi[0]+eps;j++){const a=triangles[i],b=triangles[j];if(a.f.some(v=>b.f.includes(v))||a.lo.some((v,k)=>v>b.hi[k]+eps||b.lo[k]>a.hi[k]+eps))continue;if(a.p.some((p,k)=>segment(p,a.p[(k+1)%3],...b.p))||b.p.some((p,k)=>segment(p,b.p[(k+1)%3],...a.p)))count++;}return count;
+    for(let i=0;i<triangles.length;i++)for(let j=i+1;j<triangles.length&&triangles[j].lo[0]<=triangles[i].hi[0]+eps;j++){const a=triangles[i],b=triangles[j];if(changedFaces&&!a.changed&&!b.changed||a.f.some(v=>b.f.includes(v))||a.lo.some((v,k)=>v>b.hi[k]+eps||b.lo[k]>a.hi[k]+eps))continue;if(a.p.some((p,k)=>segment(p,a.p[(k+1)%3],...b.p))||b.p.some((p,k)=>segment(p,b.p[(k+1)%3],...a.p)))count++;}return count;
   }
 
   // A trimmed lattice has no four-sided chart constraint. Only boundary cells
@@ -233,7 +233,7 @@ function createContourStructureGrid(E){
     return [2,3].includes(definition?.version)?generateMixed(base,definition,options):generateSections(base,definition,options);
   }
   function contactMesh(mesh){return mesh.csiContactSources?contactMeshMixed(mesh):contactMeshSections(mesh);}
-  return {generate,sectionPatch,contactMesh,planChart};
+  return {generate,sectionPatch,contactMesh,planChart,intersections};
 }
 if(typeof module!=='undefined')module.exports=createContourStructureGrid;
 if(typeof window!=='undefined')window.createContourStructureGrid=createContourStructureGrid;

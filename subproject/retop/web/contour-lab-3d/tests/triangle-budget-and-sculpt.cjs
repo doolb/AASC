@@ -78,6 +78,7 @@ function subdividedOctahedron(levels = 3) {
 }
 
 test('settingsFor migrates legacy lowFaceBudget to 2x triangles and enforces 65536 triangle max', () => {
+  assert.equal(E.settingsFor().lowTriangleBudget, 500);
   const migrated = E.settingsFor({ lowFaceBudget: 250 });
   assert.equal(migrated.lowTriangleBudget, 500);
   assert.equal('lowFaceBudget' in migrated, false);
@@ -211,6 +212,16 @@ test('E.process falls back cleanly to quad-dominant simplify on unsupported clos
   const rebuiltLow = E.rebuildCSILow(res, { curveNetworkLines: 4 });
   assert.equal(rebuiltLow.levels[2].audit.valid, true);
   assert(rebuiltLow.levels[2].audit.triangles <= 192);
+});
+
+test('low-mesh fallback rejects a candidate above the requested triangle limit', () => {
+  const ring = E.torus(), source = { vertices: [], faces: [] };
+  for (let i = 0; i < 5; i++) {
+    const offset = source.vertices.length;
+    source.vertices.push(...ring.vertices.map(([x, y, z]) => [x + 4 * i, y, z]));
+    source.faces.push(...ring.faces.map(face => face.map(id => id + offset)));
+  }
+  assert.throws(() => E.process(source, { lowTriangleBudget: 48 }), /超过上限 48/);
 });
 
 console.log('ALL PASSED:', cases.length);

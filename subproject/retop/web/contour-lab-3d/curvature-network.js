@@ -100,7 +100,21 @@ function createContourCurvatureNetwork(E){
         const projected=add(chord,mul(normal,dot(sub(p,chord),normal))),t=patch.periodicU?1:clamp(Math.min(s,1-s)*L,0,1),weight=t*t*(3-2*t);return lerp(p,projected,weight);
       };
     }
-    if(patch.kind==='csi-strip-net'&&patch.periodicU&&patch.lineFairing){const rails=[0,1].map(v=>patch.boundary.filter(b=>b.uv[1]===v).sort((a,b)=>a.uv[0]-b.uv[0])),atRail=(i,u)=>{const row=rails[i];let k=1;while(k<row.length-1&&row[k].uv[0]<u)k++;const a=row[k-1],b=row[k],t=clamp((u-a.uv[0])/(b.uv[0]-a.uv[0]||1),0,1);return lerp(a.point,b.point,t);};return uv=>{const [u,v]=uv,p=gordon(patch,u,v),b=cardinal(v,patch.nodes.length);return add(p,add(mul(sub(atRail(0,u),gordon(patch,u,0)),b[0]),mul(sub(atRail(1,u),gordon(patch,u,1)),b.at(-1))));};}
+    if(patch.kind==='csi-strip-net'&&patch.periodicU&&patch.lineFairing){
+      const rails=[0,1].map(v=>patch.boundary.filter(b=>b.uv[1]===v).sort((a,b)=>a.uv[0]-b.uv[0]));
+      const atRail=(i,u)=>{
+        const row=rails[i];let lo=0,hi=row.length-1;
+        while(hi-lo>1){const mid=(lo+hi)>>1;if(row[mid].uv[0]<u)lo=mid;else hi=mid;}
+        const a=row[lo],b=row[hi],t=clamp((u-a.uv[0])/(b.uv[0]-a.uv[0]||1),0,1);
+        return lerp(a.point,b.point,t);
+      };
+      return ([u,v])=>{
+        // 结构轨道本身是插值边界，求值时直接取它的精确点。
+        if(v===0||v===1)return atRail(v,u);
+        const p=gordon(patch,u,v),b=cardinal(v,patch.nodes.length);
+        return add(p,add(mul(sub(atRail(0,u),gordon(patch,u,0)),b[0]),mul(sub(atRail(1,u),gordon(patch,u,1)),b.at(-1))));
+      };
+    }
     const n=patch.boundary.length,delta=patch.boundary.map(b=>sub(b.point,gordon(patch,b.uv[0]/patch.span[0],b.uv[1]/patch.span[1]))),width=Math.min(...patch.span)*.16,eps=Math.max(...patch.span)*1e-10;
     if(patch.boundaryBlend==='mean-value-residual')return uv=>{
       const p=gordon(patch,uv[0]/patch.span[0],uv[1]/patch.span[1]);let nearest=null;
@@ -175,11 +189,363 @@ function createContourCurvatureNetwork(E){
   }
   // Local edge termination permits unequal station counts across a band. The
   // dynamic program compares actual 3D cells instead of forcing corner pairs.
-  function tileAnnularBand(A,B,vertices,coordinates,scale,density=A.length-1){
-    const n=A.length-1,m=B.length-1,cost=Array.from({length:n+1},()=>Array(m+1).fill(Infinity)),from=Array.from({length:n+1},()=>Array(m+1).fill(null));cost[0][0]=0;
+  const annularCellStationSpan=5;
+  function tileAnnularBand(A,B,vertices,coordinates,scale,density=A.length-1,score=null,stations=null){
+    const n=A.length-1,m=B.length-1,band=annularCellStationSpan/density+1e-12;
+    let first=0,last=stations?-1:m;
+    const rows=A.map(id=>{
+      // 周期候选只需要遍历能出现在同一张面里的相邻站位。
+      if(stations){
+        const u=stations.get(id);
+        while(first<=m&&stations.get(B[first])<u-band)first++;
+        while(last<m&&stations.get(B[last+1])<=u+band)last++;
+      }
+      return {first,last,cost:Array(Math.max(0,last-first+1)).fill(Infinity),from:[]};
+    });
+    if(rows[0].first!==0||rows[0].last<0)return null;
+    rows[0].cost[0]=0;
     function energy(ids){const ps=ids.map(id=>vertices[id]),normal=E.faceData({vertices:ps},ps.map((_,i)=>i)).normal;let skew=0,aspect=0,min=1;for(let i=0;i<ps.length;i++){const a=sub(ps[(i+1)%ps.length],ps[i]),b=sub(ps[(i+ps.length-1)%ps.length],ps[i]),la=E.len(a),lb=E.len(b);if(Math.min(la,lb)<scale*1e-9)return Infinity;const cosine=dot(a,b)/(la*lb);skew+=cosine*cosine/ps.length;aspect+=Math.log(la/lb)**2/ps.length;min=Math.min(min,dot(cross(a,b),normal)/(la*lb));}if(min<.015)return Infinity;const uv=ids.map(id=>coordinates.get(id)),span=Math.max(...uv.map(p=>p[0]))-Math.min(...uv.map(p=>p[0]));return skew+.03*aspect+(ids.length===3?.85:0)+.12*(span*density)**2+10*Math.max(0,.25-min)**2;}
-    for(let i=0;i<=n;i++)for(let j=0;j<=m;j++){if(!i&&!j)continue;for(const [a,b]of [[1,1],[1,0],[0,1]])if(i>=a&&j>=b){const ids=a&&b?[A[i-1],A[i],B[j],B[j-1]]:a?[A[i-1],A[i],B[j]]:[A[i],B[j],B[j-1]],value=cost[i-a][j-b]+energy(ids);if(value<cost[i][j]){cost[i][j]=value;from[i][j]={i:i-a,j:j-b,ids};}}}
-    if(!Number.isFinite(cost[n][m]))throw Error('环形包边无法形成有效的独立横截面布线。');let i=n,j=m;const faces=[];while(i||j){const step=from[i][j];faces.push(step.ids);i=step.i;j=step.j;}return faces.reverse();
+    const costAt=(i,j)=>rows[i].cost[j-rows[i].first];
+    for(let i=0;i<=n;i++){
+      const row=rows[i];
+      for(let j=row.first;j<=row.last;j++){
+        if(!i&&!j)continue;
+        const offset=j-row.first;
+        for(const [a,b]of [[1,1],[1,0],[0,1]]){
+          if(i<a||j<b)continue;
+          const prior=costAt(i-a,j-b);
+          if(!Number.isFinite(prior))continue;
+          const ids=a&&b?[A[i-1],A[i],B[j],B[j-1]]:a?[A[i-1],A[i],B[j]]:[A[i],B[j],B[j-1]];
+          const value=prior+(score||energy)(ids);
+          if(value<row.cost[offset]){row.cost[offset]=value;row.from[offset]={i:i-a,j:j-b,ids};}
+        }
+      }
+    }
+    if(!Number.isFinite(costAt(n,m)))return null;
+    let i=n,j=m;const faces=[];
+    while(i||j){const row=rows[i],step=row.from[j-row.first];faces.push(step.ids);i=step.i;j=step.j;}
+    return faces.reverse();
+  }
+  const wrapStation=u=>u-Math.floor(u);
+
+  // 沿最终曲面解 du/dv = -<Su,Sv>/<Su,Su>，从中轨向两侧走。
+  // 对相邻流线施加周期单调约束，让两侧边界保持完整且不发生交叉。
+  function annularFlow(at,U){
+    const count=Math.max(64,Math.min(192,U*3)),steps=48,h=1/steps,rows=Array(steps+1);
+    const point=(u,v)=>at([wrapStation(u),v]);
+    const delta=.035/U,rate=(u,v)=>{
+      const a=Math.max(0,v-.001),b=Math.min(1,v+.001);
+      const along=mul(sub(point(u+delta,v),point(u-delta,v)),1/(2*delta));
+      const across=mul(sub(point(u,b),point(u,a)),1/(b-a));
+      return clamp(-dot(along,across)/(dot(along,along)||1),-.35,.35);
+    };
+    const ordered=values=>{
+      const lo=[],hi=[],gap=.12/count;
+      let left=-Infinity,right=Infinity;
+      for(let i=-count;i<count;i++){
+        left=Math.max(left+gap,values[(i+count)%count]+Math.floor(i/count));
+        if(i>=0)lo[i]=left;
+      }
+      for(let i=2*count-1;i>=0;i--){
+        right=Math.min(right-gap,values[i%count]+Math.floor(i/count));
+        if(i<count)hi[i]=right;
+      }
+      return lo.map((u,i)=>(u+hi[i])*.5);
+    };
+    const center=steps/2;
+    rows[center]=Array.from({length:count},(_,i)=>i/count);
+    for(const direction of [-1,1])for(let j=center;j+direction>=0&&j+direction<=steps;j+=direction){
+      const v=j*h,dv=direction*h;
+      rows[j+direction]=ordered(rows[j].map(u=>u+dv*rate(u+.5*dv*rate(u,v),v+.5*dv)));
+    }
+    const sample=(u,v)=>{
+      const cycle=Math.floor(u),f=wrapStation(u)*count,i=Math.min(count-1,Math.floor(f)),t=f-i,k=Math.min(steps-1,Math.floor(v*steps)),w=v*steps-k;
+      const rowPoint=row=>row[i]*(1-t)+(i+1<count?row[i+1]:row[0]+1)*t;
+      return cycle+rowPoint(rows[k])*(1-w)+rowPoint(rows[k+1])*w;
+    };
+    const inverse=(u,v)=>{
+      let lo=u-1,hi=u+1;
+      for(let i=0;i<32;i++){const mid=(lo+hi)*.5;if(sample(mid,v)<u)lo=mid;else hi=mid;}
+      return (lo+hi)*.5;
+    };
+    return {point,sample,inverse,rate};
+  }
+  function annularCellShape(ps,scale){
+    const normal=E.faceData({vertices:ps},ps.map((_,i)=>i)).normal,angles=[],lengths=[];
+    let minimumAngleCosine=-1;
+    for(let i=0;i<ps.length;i++){
+      const a=sub(ps[(i+1)%ps.length],ps[i]),b=sub(ps[(i+ps.length-1)%ps.length],ps[i]),la=E.len(a),lb=E.len(b);
+      if(Math.min(la,lb)<scale*1e-9||dot(cross(a,b),normal)/(la*lb)<.015)return null;
+      const cosine=dot(a,b)/(la*lb);
+      angles.push(Math.abs(cosine));
+      minimumAngleCosine=Math.max(minimumAngleCosine,cosine);
+      lengths.push(la);
+    }
+    return {angles,minimumAngleCosine,normal,ratio:Math.max(...lengths)/Math.min(...lengths)};
+  }
+  function annularCellCost(points,scale){
+    const shape=annularCellShape(points,scale);
+    if(!shape||shape.minimumAngleCosine>Math.cos(Math.PI/9))return Infinity;
+    const errors=shape.angles.map(c=>c**4),aspect=.05*Math.log(shape.ratio)**2;
+    return (points.length===3?.76:.65*Math.max(...errors)+errors.reduce((a,b)=>a+b,0)/2)+aspect;
+  }
+  function annularQuadQuality(faces,point,scale){
+    const values=faces.filter(f=>f.length===4).flatMap(f=>annularCellShape(f.map(point),scale)?.angles||[1,1,1,1]).sort((a,b)=>a-b);
+    const degrees=value=>Math.asin(clamp(value,0,1))*180/Math.PI;
+    return {p90:degrees(values[Math.floor((values.length-1)*.9)]),max:degrees(values.at(-1))};
+  }
+
+  // 各排独立选择同一经线附近的切点。每个实顶点只生成一次，
+  // 切点的末端副本只在布线时使用，以便给 UV 留下连续的展开坐标。
+  function orthogonalAnnularMesh(base,chart,patch,flow){
+    const {U,V,grid}=chart,transport=patch.railTransport,boundary=transport.railParameters;
+    const nodes=structuredClone(patch.sectionNodes||transport.sectionNodes||patch.nodes);
+    const raw=nodes.map((_,j)=>(j===0?boundary[0]:j===V?boundary[1]:transport.midStations).slice(0,U));
+    const stations=raw.map((row,j)=>row.map(u=>flow.inverse(u,j/V)));
+    const vertexIds=grid.map(row=>row.slice(0,U));
+    const initialTriangles=transport.triangleFaces,triangleLimit=initialTriangles+2*Math.max(1,Math.floor(U/24));
+    const ringAt=(j,cut,points,coordinates,routeCoordinates,original)=>{
+      const row=stations[j];
+      const start=row.reduce((best,u,i)=>Math.abs(u-cut-Math.round(u-cut))<Math.abs(row[best]-cut-Math.round(row[best]-cut))?i:best,0);
+      const offset=Math.round(cut-row[start]);
+      return Array.from({length:U+1},(_,k)=>{
+        const i=(start+k)%U,cycle=offset+Math.floor((start+k)/U),id=points.length;
+        points.push(j===0||j===V?base.vertices[grid[j][i]]:nodes[j][i]);
+        coordinates.set(id,[raw[j][i]+cycle,j/V]);
+        routeCoordinates.set(id,stations[j][i]+cycle);
+        original.set(id,grid[j][i]);
+        return id;
+      });
+    };
+    const tile=cut=>{
+      const points=[],coordinates=new Map(),routeCoordinates=new Map(),original=new Map();
+      const rows=nodes.map((_,j)=>ringAt(j,cut,points,coordinates,routeCoordinates,original));
+      const score=ids=>{
+        const us=ids.map(id=>routeCoordinates.get(id)),span=(Math.max(...us)-Math.min(...us))*U;
+        if(span>annularCellStationSpan)return Infinity;
+        return annularCellCost(ids.map(id=>points[id]),patch.scale)+.012*span**2;
+      };
+      const cells=[];
+      for(let j=0;j<V;j++){
+        const band=tileAnnularBand(rows[j],rows[j+1],points,coordinates,patch.scale,U,score,routeCoordinates);
+        if(!band)return null;
+        cells.push(...band);
+      }
+      const triangles=cells.filter(f=>f.length===3).length;
+      if(triangles>triangleLimit)return null;
+      return {cut,faces:cells.map(f=>f.map(id=>original.get(id))),faceParameters:cells.map(f=>f.map(id=>coordinates.get(id))),triangles,score:cells.reduce((sum,f)=>sum+score(f),0)};
+    };
+    // 调整中间排站位的初始值，使两侧实体边界换算后仍有相近的采样密度。
+    const originalStations=stations.map(row=>row.slice());
+    const capture=result=>({...result,stations:stations.map(row=>row.slice()),raw:raw.map(row=>row.slice()),nodes:structuredClone(nodes)});
+    let best=null;
+    for(const blend of [0,.5,1]){
+      for(let j=1;j<V;j++)for(let i=0;i<U;i++){
+        const a=originalStations[0][i],b=originalStations[V][i];
+        const s=originalStations[j][i]*(1-blend)+(a+(b-a)*j/V)*blend;
+        stations[j][i]=s;raw[j][i]=flow.sample(s,j/V);nodes[j][i]=flow.point(raw[j][i],j/V);
+      }
+      for(const cut of [0,.17,.34,.51,.68,.85]){
+        const result=tile(cut);
+        if(result&&(!best||result.score<best.score))best=capture(result);
+      }
+    }
+    if(!best)return null;
+    for(let j=1;j<V;j++){
+      stations[j]=best.stations[j].slice();raw[j]=best.raw[j].slice();nodes[j]=best.nodes[j].slice();
+    }
+    const location=new Map(vertexIds.flatMap((row,j)=>row.map((id,i)=>[id,[j,i]])));
+    const point=id=>{const [j,i]=location.get(id);return j===0||j===V?base.vertices[id]:nodes[j][i];};
+    // 在既有纬线内滑动内部站位。每次只评估相邻实面，边界和剖面高度仍由原曲面约束。
+    for(let pass=0;pass<10;pass++){
+      const incident=new Map(vertexIds.slice(1,-1).flat().map(id=>[id,[]]));
+      for(const face of best.faces)for(const id of face)incident.get(id)?.push(face);
+      for(let j=1;j<V;j++)for(let k=0;k<U;k++){
+        const i=pass%2?U-1-k:k,station=stations[j][i],v=j/V,faces=incident.get(grid[j][i]);
+        const lo=(i?stations[j][i-1]:stations[j][U-1]-1)+.15/U,hi=(i+1<U?stations[j][i+1]:stations[j][0]+1)-.15/U;
+        if(lo>hi)continue;
+        const initial=nodes[j][i];
+        const cost=()=>faces.reduce((sum,f)=>sum+annularCellCost(f.map(point),patch.scale),0);
+        let next=station,position=initial,energy=cost();
+        for(const factor of [-.5,-.25,.25,.5]){
+          const trial=clamp(station+factor/(U*(1+pass*.2)),lo,hi);
+          nodes[j][i]=flow.point(flow.sample(trial,v),v);
+          const value=cost();
+          if(value<energy){next=trial;position=nodes[j][i];energy=value;}
+        }
+        stations[j][i]=next;raw[j][i]=flow.sample(next,v);nodes[j][i]=position;
+      }
+      const next=tile(best.cut);
+      if(!next||next.score>=best.score)break;
+      best=capture(next);
+    }
+    for(let j=1;j<V;j++)best.nodes[j][U]=best.nodes[j][0].slice();
+    const vertices=new Map(vertexIds.flatMap((row,j)=>row.map((id,i)=>[id,j===0||j===V?base.vertices[id]:best.nodes[j][i]])));
+    const priorNodes=patch.sectionNodes||transport.sectionNodes||patch.nodes;
+    const prior=new Map(vertexIds.flatMap((row,j)=>row.map((id,i)=>[id,j===0||j===V?base.vertices[id]:priorNodes[j][i]])));
+    const before=annularQuadQuality(transport.faces,id=>prior.get(id),patch.scale),after=annularQuadQuality(best.faces,id=>vertices.get(id),patch.scale);
+    if(!(after.p90<before.p90&&after.max<=before.max+1e-8))return null;
+    return {...best,before,after,vertexIds,triangleLimit};
+  }
+  function smoothAnnularRoutes(candidate,routes,base,flow,patch){
+    const {U,V,scale}=patch,{vertexIds,faces}=candidate;
+    if(!routes.length||V<2)return candidate;
+    const vertices=base.vertices.slice(),nodes=structuredClone(candidate.nodes),stations=candidate.stations.map(row=>row.slice());
+    for(let j=1;j<V;j++)for(let i=0;i<U;i++)vertices[vertexIds[j][i]]=nodes[j][i];
+    const turn=(a,b,c)=>dot(unit(sub(b,a)),unit(sub(c,b)));
+    const chains=routes.map(indices=>indices.map((i,j)=>vertexIds[j][i]));
+    const corners=chains.flatMap(chain=>chain.slice(1,-1).map((id,j)=>[chain[j],id,chain[j+2]]));
+    const moved=new Map(),splits=new Map(),angleLimit=Math.sin(candidate.after.max*Math.PI/180)+1e-10;
+    const minTurn=Math.cos(patch.bendRefinement.thresholdDegrees*Math.PI/180);
+    const minimumAngleCosine=Math.cos(Math.PI/9);
+    let triangles=candidate.triangles;
+    const valid=shape=>shape&&shape.minimumAngleCosine<=minimumAngleCosine;
+    function neighbours(indices){
+      const replacements=new Map();
+      for(const index of indices){
+        const f=faces[index],previous=splits.get(index);
+        if(previous){if(!previous.every(face=>valid(annularCellShape(face.map(id=>vertices[id]),scale))))return null;continue;}
+        const shape=annularCellShape(f.map(id=>vertices[id]),scale);
+        if(!valid(shape))return null;
+        if(f.length!==4||Math.max(...shape.angles)<=angleLimit)continue;
+        // 钝角过大的四边面可在自身内部收线，保留它的所有外边和经线边。
+        const [a,b,c,d]=f,diagonals=[[[a,b,c],[a,c,d]],[[a,b,d],[b,c,d]]];
+        const acceptable=diagonals.map(pair=>({pair,shapes:pair.map(face=>annularCellShape(face.map(id=>vertices[id]),scale))}))
+          .filter(option=>option.shapes.every(triangle=>valid(triangle)&&dot(triangle.normal,shape.normal)>0))
+          .sort((a,b)=>Math.max(...a.shapes.map(s=>s.minimumAngleCosine))-Math.max(...b.shapes.map(s=>s.minimumAngleCosine)));
+        if(!acceptable.length)return null;
+        replacements.set(index,acceptable[0].pair);
+      }
+      return triangles+2*replacements.size<=candidate.triangleLimit?replacements:null;
+    }
+    for(const indices of routes)for(let j=1;j<V;j++){
+      const i=indices[j],id=vertexIds[j][i],v=j/V,station=stations[j][i];
+      const local=corners.filter(ids=>ids.includes(id));
+      const quality=()=>Math.min(...local.map(ids=>turn(...ids.map(k=>vertices[k]))));
+      const before=quality();
+      if(before>=minTurn)continue;
+      const adjacent=faces.flatMap((f,k)=>f.includes(id)?[k]:[]),original=vertices[id];
+      const lo=Math.max(station-.45/U,(i?stations[j][i-1]:stations[j][U-1]-1)+.15/U);
+      const hi=Math.min(station+.45/U,(i+1<U?stations[j][i+1]:stations[j][0]+1)-.15/U);
+      if(lo>=hi)continue;
+      let best={turn:before};
+      // 沿原有纬线减小跨排边的转角，所有实体边界的端点保持原位。
+      for(let k=0;k<=24;k++){
+        const s=lo+(hi-lo)*k/24,u=flow.sample(s,v),point=flow.point(u,v);
+        vertices[id]=point;
+        const current=quality();
+        if(current<=best.turn)continue;
+        const replacements=neighbours(adjacent);
+        if(replacements)best={turn:current,s,u,point,replacements};
+      }
+      vertices[id]=best.point||original;
+      if(!best.point)continue;
+      nodes[j][i]=best.point;
+      if(!i)nodes[j][U]=best.point.slice();
+      stations[j][i]=best.s;
+      moved.set(id,best.u-candidate.raw[j][i]);
+      for(const [index,replacements] of best.replacements)splits.set(index,replacements);
+      triangles+=best.replacements.size*2;
+    }
+    if(!moved.size)return candidate;
+    const refined=faces.flatMap((f,i)=>splits.get(i)||[f]);
+    const after=annularQuadQuality(refined,id=>vertices[id],scale);
+    if(!(after.p90<=candidate.after.p90+1e-8&&after.max<=candidate.after.max+1e-8))return candidate;
+    const faceParameters=faces.flatMap((f,i)=>(splits.get(i)||[f]).map(face=>face.map(id=>{
+      const [u,v]=candidate.faceParameters[i][f.indexOf(id)];
+      return [u+(moved.get(id)||0),v];
+    })));
+    return {...candidate,stations,nodes,faces:refined,faceParameters,triangles,after};
+  }
+  function applyOrthogonalAnnularFlow(base,chart,patch,evaluate){
+    const {U,V}=chart,transport=patch.railTransport;
+    const fallback=reason=>{transport.orthogonality={version:1,accepted:false,reason};};
+    const flow=annularFlow(evaluate,U),initial=orthogonalAnnularMesh(base,chart,patch,flow);
+    if(!initial)return fallback('未找到通过角度和面形检查的周期网格');
+    const {vertexIds,stations:initialStations}=initial;
+    const edges=new Set(initial.faces.flatMap(f=>f.map((id,i)=>E.key(id,f[(i+1)%f.length]))));
+    const relative=(u,target)=>u-Math.round(u-target);
+    // 转角补线沿新网格已有的跨排边选路，保证导线经过实际节点。
+    function section(target){
+      let choices=initialStations[0].map((u,i)=>({cost:(relative(u,target)-target)**2,indices:[i]}));
+      for(let j=1;j<=V;j++)choices=initialStations[j].map((u,i)=>{
+        const position=relative(u,target),offset=(position-target)**2;
+        let best={cost:Infinity,indices:[]};
+        for(let k=0;k<U;k++)if(edges.has(E.key(vertexIds[j-1][k],vertexIds[j][i]))){
+          const drift=position-relative(initialStations[j-1][k],target),cost=choices[k].cost+offset+.5*drift**2;
+          if(cost<best.cost)best={cost,indices:[...choices[k].indices,i]};
+        }
+        return best;
+      });
+      return choices.reduce((best,path)=>path.cost<best.cost?path:best).indices;
+    }
+    const routes=new Map(patch.guides.filter(g=>g.family==='u'&&g.adaptive).map(g=>[g,section(g.coordinate)]));
+    const refined=smoothAnnularRoutes(initial,[...routes.values()],base,flow,patch);
+    const otherFaces=base.faces.filter((_,i)=>base.csiPatchGroups[i]!==chart.patch);
+    const structure=(typeof createContourStructureGrid==='function'?createContourStructureGrid:require('./structure-grid.js'))(E);
+    const crosses=candidate=>{
+      const vertices=base.vertices.slice();
+      for(let j=1;j<V;j++)for(let i=0;i<U;i++)vertices[vertexIds[j][i]]=candidate.nodes[j][i];
+      return structure.intersections({vertices,faces:candidate.faces.concat(otherFaces)},new Set(candidate.faces.keys()));
+    };
+    const requiredEdges=[],mandatorySections=[];
+    for(const [guide,rowIndices] of routes){
+      const chain=rowIndices.map((i,j)=>vertexIds[j][i]);
+      for(let j=1;j<=V;j++)requiredEdges.push([chain[j-1],chain[j]]);
+      mandatorySections.push({coordinate:guide.coordinate,rowIndices});
+    }
+    function sampleGuides(candidate){
+      const steps=Math.ceil(48/V)*V,stations=candidate.stations;
+      const guides=patch.guides.map(original=>{
+        if(original.family!=='u')return original;
+        const guide={...original},target=guide.coordinate,rowIndices=routes.get(original);
+        const path=rowIndices?.map((i,j)=>relative(stations[j][i],target));
+        const changed=rowIndices?.some((i,j)=>stations[j][i]!==initialStations[j][i]);
+        if(rowIndices)guide.meshEdgeChain=rowIndices.map((i,j)=>vertexIds[j][i]);
+        // 平顺过的补线用实际节点作插值点，并在每排节点取同一个局部正交切向。
+        const anchors=changed?path.map((s,j)=>{
+          const v=j/V,u=flow.sample(s,v);
+          return {u,slope:flow.rate(u,v)/V};
+        }):null;
+        guide.parameters=Array.from({length:steps+1},(_,k)=>{
+          const v=k/steps,f=v*V,j=Math.min(V-1,Math.floor(f)),t=f-j,w=t*t*(3-2*t);
+          if(anchors){
+            const a=anchors[j],b=anchors[j+1];
+            return [a.u+(b.u-a.u)*w+t*(1-t)*((1-t)*a.slope-t*b.slope),v];
+          }
+          const u=path?path[j]+(path[j+1]-path[j])*w:target;
+          return [flow.sample(u,v),v];
+        });
+        guide.points=guide.parameters.map(([u,v])=>flow.point(u,v));
+        return guide;
+      });
+      // 转角补线和普通经线在各排需保持相同的周期顺序。
+      const meridians=guides.filter(g=>g.family==='u').map(g=>g.parameters.map(p=>p[0]));
+      if(meridians.length>1){
+        const center=Math.floor(meridians[0].length/2);
+        meridians.sort((a,b)=>wrapStation(a[center])-wrapStation(b[center]));
+        for(let i=0;i<meridians.length;i++){
+          const a=meridians[i],b=meridians[(i+1)%meridians.length];
+          const shift=Math.ceil(a[center]-b[center]+1e-9);
+          if(a.some((u,k)=>b[k]+shift-u<=1e-9||b[k]+shift-u>=1-1e-9))return null;
+        }
+      }
+      return guides;
+    }
+    // 平顺候选若与邻面或相邻经线相交，再检查原正交候选。
+    let candidate=refined,guides=sampleGuides(refined);
+    if(refined!==initial&&(!guides||crosses(refined))){candidate=initial;guides=sampleGuides(initial);}
+    if(!guides)return fallback('候选经线相交');
+    if(candidate===initial&&crosses(initial))return fallback('候选环带存在穿插');
+    transport.faces=candidate.faces;
+    transport.faceParameters=candidate.faceParameters;
+    transport.triangleFaces=candidate.triangles;
+    transport.orthogonality={version:1,accepted:true,cut:candidate.cut,before:candidate.before,after:candidate.after};
+    if(patch.sectionNodes)patch.sectionNodes=candidate.nodes;
+    else transport.sectionNodes=candidate.nodes;
+    patch.guides=guides;
+    patch.bendRefinement.mandatorySections=mandatorySections;
+    patch.bendRefinement.requiredEdges=requiredEdges;
   }
   function fitStripProfiles(source,proposal,chart,nodes,scale,flatness=.02){
     const longU=chart.U>=chart.V,L=longU?chart.U:chart.V,W=longU?chart.V:chart.U,at=(i,j)=>longU?nodes[j][i]:nodes[i][j],set=(i,j,p)=>{if(longU)nodes[j][i]=p;else nodes[i][j]=p;},tr=E.triangulate(source),triangles=[];
@@ -281,9 +647,10 @@ function createContourCurvatureNetwork(E){
         return {coordinate:g.coordinate,rowIndices};
       });
       patch.bendRefinement.mandatorySections=sections;
-      for(let j=0;j<V;j++){const cuts=[[0,0],...sections.map(s=>[s.rowIndices[j],s.rowIndices[j+1]]),[U,U]].filter((p,i,a)=>!i||p[0]!==a[i-1][0]||p[1]!==a[i-1][1]);for(let k=1;k<cuts.length;k++){const [a,b]=cuts[k-1],[c,d]=cuts[k];if(c<a||d<b)throw Error('转折补线的环带站位顺序冲突。');faces.push(...tileAnnularBand(rings[j].slice(a,c+1),rings[j+1].slice(b,d+1),vertices,coordinates,patch.scale,U));}}
+      for(let j=0;j<V;j++){const cuts=[[0,0],...sections.map(s=>[s.rowIndices[j],s.rowIndices[j+1]]),[U,U]].filter((p,i,a)=>!i||p[0]!==a[i-1][0]||p[1]!==a[i-1][1]);for(let k=1;k<cuts.length;k++){const [a,b]=cuts[k-1],[c,d]=cuts[k];if(c<a||d<b)throw Error('转折补线的环带站位顺序冲突。');const band=tileAnnularBand(rings[j].slice(a,c+1),rings[j+1].slice(b,d+1),vertices,coordinates,patch.scale,U);if(!band)throw Error('环形包边无法形成有效的独立横截面布线。');faces.push(...band);}}
 
       railTransport.faces=faces.map(f=>f.map(id=>ids.get(id)));railTransport.faceParameters=faces.map(f=>f.map(id=>coordinates.get(id)));railTransport.triangleFaces=faces.filter(f=>f.length===3).length;
+      applyOrthogonalAnnularFlow(base,chart,patch,evaluate);
     }
     patch.report={supported:true,method:railTransport?'independent monotone CSI rail registration; aligned sections; mixed local edge termination':'captured CSI strip sections; rectangular Gordon net, periodic annular seam',sourceQueriesDuringReplay:0,highSurfaceQueries:sourceProfiles?sourceProfiles.sourceTriangleTests:0,sourceProfiles:sourceProfiles?{matchedSections:sourceProfiles.matchedSections,planarSections:sourceProfiles.planarSections,fallbackSections:sourceProfiles.fallbackSections,maximumWidthFractionBefore:sourceProfiles.maximumWidthFractionBefore,maximumHeightChange:sourceProfiles.maximumHeightChange,maximumWidthFractionAfter:sourceProfiles.maximumWidthFractionAfter,maximumLongitudinalDriftAfter:sourceProfiles.maximumLongitudinalDriftAfter,planarSectionMaximumRelativeHeight:sourceProfiles.planarSectionMaximumRelativeHeight}:null,lineFairing:patch.lineFairing||null,guidePaths:patch.guides.length,adaptiveGuidePaths:patch.bendRefinement.addedGuidePaths,closedControlCells:patch.controlCells.length,constructionCurves:[...patch.rows,...patch.columns].reduce((s,r)=>s+r.length,0),widthGuideLines:1,crossSectionGuideLines:internalLines,shapeSource:sourceProfiles?'same-region high-poly cross-section curvature; fixed CSI boundary; saved profile nodes':'existing CSI rim profiles including saved same-region section offsets',periodicU:patch.periodicU,railTransport:railTransport?{mode:railTransport.mode,faces:railTransport.faces.length,triangleFaces:railTransport.triangleFaces,before:railTransport.before,after:railTransport.after}:null,sectionAlignment:sectionAlignment?{measurementStage:sectionAlignment.measurementStage||'registered control nodes',maximumLongitudinalDriftBefore:sectionAlignment.maximumLongitudinalDriftBefore,maximumLongitudinalDriftAfter:sectionAlignment.maximumLongitudinalDriftAfter,maximumMove:sectionAlignment.maximumMove}:null};return patch;
   }
@@ -311,7 +678,32 @@ function createContourCurvatureNetwork(E){
         const f=[chart.grid[j][i],chart.grid[j][i+1],chart.grid[j+1][i+1],chart.grid[j+1][i]],uv=[[i/chart.U,j/chart.V],[(i+1)/chart.U,j/chart.V],[(i+1)/chart.U,(j+1)/chart.V],[i/chart.U,(j+1)/chart.V]];
         for(const t of E.triangulate({vertices:mesh.vertices,faces:[f]}).faces)triangles.push({f:t,p:t.map(id=>uv[f.indexOf(id)])});
       }}
-      for(const guide of patch.guides)guide.depth=guide.parameters.map((p,index)=>{for(const t of triangles){if(t.p.some(p=>!p))continue;const den=cross2(...t.p),a=cross2(t.p[1],t.p[2],p)/den,b=cross2(t.p[2],t.p[0],p)/den,c=1-a-b;if(Math.min(a,b,c)>=-1e-6)return add(mul(mesh.vertices[t.f[0]],a),add(mul(mesh.vertices[t.f[1]],b),mul(mesh.vertices[t.f[2]],c)));}return guide.points[index];});
+      if(patch.periodicU)for(const triangle of triangles){
+        if(triangle.p.every(Boolean))triangle.firstStation=Math.min(...triangle.p.map(p=>p[0]));
+      }
+      const routeVertices=patch.railTransport?.orthogonality?.accepted
+        ?new Map(chart.grid.flat().map(id=>[mesh.csiBaseVertices?.[id]??id,mesh.vertices[id]])):null;
+      for(const guide of patch.guides){
+        const route=routeVertices&&guide.meshEdgeChain?.map(id=>routeVertices.get(id));
+        // 补线按拟合曲面绘制，遮挡深度沿导出的跨排边连续取样。
+        if(route?.length===chart.V+1&&route.every(Boolean)){
+          guide.depth=guide.parameters.map(([,v])=>{
+            const f=v*chart.V,j=Math.min(chart.V-1,Math.floor(f));
+            return lerp(route[j],route[j+1],f-j);
+          });
+          continue;
+        }
+        guide.depth=guide.parameters.map((p,index)=>{
+          for(const t of triangles){
+            if(t.p.some(p=>!p))continue;
+            // 同一个闭环点在接缝两侧相差一个周期，按三角形所在的展开区间取值。
+            const query=patch.periodicU?[p[0]+Math.ceil(t.firstStation-p[0]-1e-8),p[1]]:p;
+            const den=cross2(...t.p),a=cross2(t.p[1],t.p[2],query)/den,b=cross2(t.p[2],t.p[0],query)/den,c=1-a-b;
+            if(Math.min(a,b,c)>=-1e-6)return add(mul(mesh.vertices[t.f[0]],a),add(mul(mesh.vertices[t.f[1]],b),mul(mesh.vertices[t.f[2]],c)));
+          }
+          return guide.points[index];
+        });
+      }
     }
   }
   return {build,fitPatch,principal,parameter,warpAt,inverse,evaluator,gordon,reference,solve,anchorDisplay,meanValueExtension,stripPatch,applyStripNetworks,bendCandidates,addBendGuides,fairWholeLine,fitStripProfiles};
