@@ -37,6 +37,14 @@ body {
 }
 .section > h2 { color: var(--text-primary); font-size: 15px; font-weight: 650; letter-spacing: .01em; }
 
+/* 横屏空间允许时固定设备列表在左，窄屏和竖屏沿文档顺序上下排列。 */
+.device-column-layout, .device-column-content { min-width: 0; }
+@media (orientation: landscape) and (min-width: 720px) {
+    .device-column-layout { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); gap: 12px; align-items: start; }
+    .device-column { position: sticky; top: 12px; }
+    #panel-media .device-column .device-list, #panel-display .device-column .device-list { max-height: calc(100vh - 160px); overflow: auto; }
+}
+
 /* 显示控制：可操作内容按关联分组，主播放与背景播放给予足够宽度。 */
 #panel-display .control-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; align-items: start; }
 #panel-display .control-item {

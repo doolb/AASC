@@ -83,8 +83,9 @@
     <main class="content">
         <section class="panel" id="panel-media">
             <h1 class="page-title">媒体管理</h1>
-            
-            <div class="section">
+
+            <div class="device-column-layout">
+            <div class="section device-column">
                 <h2>设备列表</h2>
                 <div id="quarkCacheStatus" class="quark-cache-status" role="status" aria-live="polite" style="display:none;">
                     <span id="quarkCacheStatusText"></span>
@@ -94,7 +95,7 @@
                     <div class="empty-list">暂无显示端连接</div>
                 </div>
             </div>
-            
+            <div class="device-column-content">
             <div class="section">
                 <h2>上传文件</h2>
                 <div class="file-input-wrapper">
@@ -228,18 +229,22 @@
                     </div>
                 </div>
             </div>
+            </div>
+            </div>
         </section>
         
         <section class="panel" id="panel-display" style="display:none;">
             <h1 class="page-title">显示控制</h1>
-            
-            <div class="section">
+
+            <div class="device-column-layout">
+            <div class="section device-column">
                 <h2>设备列表</h2>
                 <div class="device-list" id="deviceList">
                     <div class="empty-list">暂无显示端连接</div>
                 </div>
             </div>
 
+            <div class="device-column-content">
             <div class="section">
                 <h2>显示控制</h2>
             <div class="control-grid">
@@ -502,6 +507,8 @@
             <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
             <button class="control-btn restart-btn" onclick="restartServer()" style="margin-top: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">重启服务器</button>
         </div>
+            </div>
+            </div>
         </section>
 
         <section class="panel" id="panel-servers" style="display:none;">
