@@ -1,0 +1,138 @@
+/* 控制台视觉层只读取现有主题变量；不改动各面板的行为和状态。 */
+body {
+    background: linear-gradient(145deg, var(--bg-primary), var(--bg-secondary));
+    color: var(--text-primary);
+}
+
+.sidebar {
+    background: var(--bg-primary);
+    border-color: var(--border-color);
+}
+
+.sidebar-header { border-color: var(--border-color); }
+.logo { background: linear-gradient(90deg, var(--accent-color), var(--accent-secondary)); background-clip: text; -webkit-background-clip: text; }
+.nav-item { color: var(--text-muted); border-left-color: transparent; }
+.nav-item:hover, .nav-item.active { color: var(--text-primary); background: var(--bg-surface-strong); }
+.nav-item.active { border-left-color: var(--accent-color); }
+
+.content { padding: clamp(16px, 2.5vw, 32px); }
+.panel { max-width: 1240px; min-width: 0; }
+.panel > .page-title {
+    margin: 0 0 22px;
+    text-align: left;
+    font-size: clamp(22px, 2vw, 28px);
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--text-primary);
+    background: none;
+    -webkit-text-fill-color: currentColor;
+}
+.section {
+    padding: clamp(16px, 2vw, 24px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: var(--bg-surface);
+    box-shadow: 0 8px 28px var(--shadow-color);
+}
+.section > h2 { color: var(--text-primary); font-size: 15px; font-weight: 650; letter-spacing: .01em; }
+
+/* 显示控制：可操作内容按关联分组，主播放与背景播放给予足够宽度。 */
+#panel-display .control-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 12px; align-items: stretch; }
+#panel-display .control-item {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--card-background);
+}
+#panel-display .control-item > label:first-child { color: var(--text-primary); font-size: 14px; font-weight: 650; }
+#panel-display .control-buttons { align-items: center; gap: 8px; }
+#panel-display .control-btn {
+    min-height: 36px;
+    padding: 8px 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    background: var(--input-background);
+    color: var(--text-primary);
+    font-weight: 550;
+}
+#panel-display .control-btn:hover { background: var(--bg-surface-strong); }
+#panel-display .control-btn.active, #panel-display .control-btn.playing {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+    border-color: var(--accent-color);
+    box-shadow: none;
+}
+#panel-display .control-btn.paused { background: var(--bg-surface-strong); color: var(--text-primary); }
+#panel-display .control-btn:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+#panel-display .control-btn:disabled { opacity: .5; }
+#panel-display #backgroundMediaUrl,
+#panel-display #backgroundMediaType {
+    min-width: 0;
+    padding: 9px 11px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    background: var(--input-background);
+    color: var(--text-primary);
+}
+#panel-display #backgroundMediaUrl { display: block; width: 100%; margin-bottom: 10px; }
+#panel-display .control-item:has(#backgroundMediaUrl) > label:not(:first-child) { margin: 12px 0 6px; color: var(--text-secondary); }
+#panel-display #backgroundMediaStatus, #panel-display .text-playback-status { margin-top: 10px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+
+/* 浅色主题已有通用按钮规则；此处保留控制面板的语义状态与可读性。 */
+:root[data-theme-mode="light"] #panel-display .control-btn:not(.active):not(.playing) {
+    background: var(--input-background) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* 聊天保持消息与输入区域独立滚动，并让主题色贯穿消息和会话栏。 */
+#panel-chat .chat-container { border: 1px solid var(--border-color); border-radius: 14px; background: var(--card-background); }
+#panel-chat .chat-tabs { background: var(--content-background); border-right: 1px solid var(--border-color); }
+#panel-chat .chat-tab { color: var(--text-secondary); border-color: var(--border-color); }
+#panel-chat .chat-tab.active { color: var(--text-primary); background: var(--bg-surface-strong); border-left-color: var(--accent-color); }
+#panel-chat .chat-main { min-width: 0; padding: 18px; }
+#panel-chat .chat-header { gap: 12px; flex-wrap: wrap; border-color: var(--border-color); }
+#panel-chat .chat-header h3 { color: var(--text-primary); }
+#panel-chat .chat-messages { background: var(--content-background); border: 1px solid var(--border-color); border-radius: 12px; }
+#panel-chat #chatInput { min-width: 0; background: var(--input-background); color: var(--text-primary); border: 1px solid var(--border-color); }
+#panel-chat #chatInput::placeholder { color: var(--text-muted); }
+
+/* 媒体库和任务面板使用一致的内容边界，避免状态和操作挤在一起。 */
+#panel-media .media-library-container { min-width: 0; }
+#panel-media .media-library-toolbar { gap: 10px; }
+#panel-media .media-library-breadcrumb { min-width: min(100%, 200px); background: var(--content-background); border: 1px solid var(--border-color); }
+#panel-media .media-library-item { border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-background); }
+#panel-media .media-library-item:hover { border-color: var(--accent-color); }
+#panel-task .task-tabs { background: var(--content-background); border: 1px solid var(--border-color); }
+#panel-task .task-tab { color: var(--text-secondary); }
+#panel-task .task-tab.active { color: var(--text-primary); background: var(--bg-surface-strong); }
+#panel-task .task-card { background: var(--card-background); border-color: var(--border-color); }
+#panel-task .task-card.selected { border-color: var(--accent-color); background: var(--bg-surface-strong); }
+#panel-task .task-card-title { color: var(--text-primary); }
+#panel-task .task-card-meta, #panel-task .task-picker-label { color: var(--text-secondary); }
+
+/* 主题原有全局按钮渐变会掩盖标签选中态；仅对导航标签恢复中性色。 */
+:root[data-theme-mode="light"] #panel-task .task-tab,
+:root[data-theme-mode="light"] #panel-media .media-library-tab {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border-color: transparent !important;
+}
+:root[data-theme-mode="light"] #panel-task .task-tab.active,
+:root[data-theme-mode="light"] #panel-media .media-library-tab.active {
+    background: var(--bg-surface-strong) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--accent-color) !important;
+}
+
+@media (max-width: 700px) {
+    .content { padding: 14px 12px; }
+    .panel > .page-title { margin-bottom: 16px; }
+    #panel-display .control-grid { grid-template-columns: minmax(0, 1fr); }
+    #panel-chat .chat-main { padding: 12px; }
+    #panel-chat .chat-actions { flex-wrap: wrap; }
+    #panel-media .media-library-toolbar { align-items: stretch; }
+    #panel-task .task-three-col { flex-direction: column; height: auto; }
+    #panel-task .task-list-col, #panel-task .task-instances-col, #panel-task .task-result-col { width: 100%; min-width: 0; }
+}

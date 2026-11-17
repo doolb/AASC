@@ -1,5 +1,7 @@
 # 自测功能文档
 
+控制端界面：`tests/control-workspace-browser.test.js` 检查 15 套主题下显示、聊天、媒体库和任务控件在 390/1440 像素内可见，并检查其他主面板尺寸；主题配置、预览和媒体控制布局回归通过。动态业务数据与真实手机触控仍需现场验收。
+
 背景图片与声音：`node --test tests/background-media.test.js tests/background-media-browser.test.js` 覆盖图片/GIF 状态及切换、播放拒绝和迟到操作；真实 Chromium 对 WAV 和含 AAC 音轨视频测得非零音频。设备声音与音频焦点待验收；`npm run test:media-loop` 19/20，原有临时上传浏览器用例超时。
 
 通用背景媒体：控制端自测只读检查背景控件和显示页节点；`node --test tests/background-media.test.js` 覆盖状态校验、通道切换、音量及睡眠恢复，真实媒体解码、设备音频输出与自动播放策略需设备验收。
