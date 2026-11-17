@@ -19,5 +19,10 @@ window.BackgroundMediaControl = {
         document.getElementById('backgroundMediaVolume').value = state.volume ?? 50;
         document.getElementById('backgroundMediaVolumeValue').textContent = state.volume ?? 50;
         document.getElementById('backgroundMediaStatus').textContent = !state.url ? '背景媒体已停止' : state.playing ? '已请求播放背景媒体' : '背景媒体已暂停';
+    },
+    renderStatus(value) {
+        const labels = { loading: '背景媒体加载中', playing: '背景媒体播放中', paused: '背景媒体已暂停', sleeping: '背景媒体随睡眠暂停', stopped: '背景媒体已停止', blocked: '背景播放被阻止', error: '背景媒体播放失败' };
+        const label = labels[value.status];
+        if (label) document.getElementById('backgroundMediaStatus').textContent = value.message ? `${label}：${value.message}` : label;
     }
 };

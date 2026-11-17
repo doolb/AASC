@@ -47,7 +47,7 @@ body {
 }
 
 /* 背景视频处于主媒体之下，保持比例并允许主画面自然遮挡。 */
-#backgroundMediaVideo {
+#backgroundMediaVideo, #backgroundMediaImage {
     position: absolute;
     inset: 0;
     width: 100%;

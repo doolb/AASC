@@ -1539,7 +1539,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'displayPlaylistRequest', 'displayPlaylistCancel', 'displayQuickControl', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['backgroundMediaStatus', 'chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'displayPlaylistRequest', 'displayPlaylistCancel', 'displayQuickControl', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -9622,6 +9622,16 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     }
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;
     const displayData = displayClients.get(displayId);
+    if (data.type === 'backgroundMediaStatus') {
+        const valid = ['loading', 'playing', 'paused', 'sleeping', 'stopped', 'blocked', 'error'];
+        if (displayData?.ws === ws && valid.includes(data.status)
+            && data.url === (displayData.state.backgroundMedia?.url || '')) {
+            const status = { status: data.status, message: typeof data.message === 'string' ? data.message.slice(0, 120) : '' };
+            displayData.state.backgroundMediaStatus = status;
+            broadcastToControls({ type: 'backgroundMediaStatus', displayId, ...status });
+        }
+        return;
+    }
     if (data.type === 'getChatContextUsage') {
         if (displayData?.ws === ws) chatContextUsage.handle(ws, data, displayId);
         return;
@@ -11816,6 +11826,7 @@ async function handleControlMessageFallback(data, ws) {
                             return;
                         }
                         displayData.state.backgroundMedia = backgroundMedia;
+                        displayData.state.backgroundMediaStatus = null;
                         persistDisplayState(displayData, { backgroundMedia });
                         sendToDisplay(displayId, { type: 'control', action: 'backgroundMedia', value: backgroundMedia });
                         broadcastToControls({ type: 'backgroundMediaChanged', displayId, backgroundMedia });

@@ -50,7 +50,7 @@ const SelfTest = {
                     const html = await response.text();
                     const valid = response.ok && ids.every(id => document.getElementById(id))
                         && typeof window.BackgroundMediaControl?.change === 'function'
-                        && html.includes('backgroundMediaVideo') && html.includes('backgroundMediaAudio');
+                        && html.includes('backgroundMediaVideo') && html.includes('backgroundMediaAudio') && html.includes('backgroundMediaImage');
                     return { success: !!valid, message: valid ? '背景媒体控件和播放节点已加载' : '背景媒体资源不完整', details: '只检查结构，实际解码及声音输出需在设备上验证' };
                 } catch (error) { return { success: false, message: `检查背景媒体失败: ${error.message}` }; }
             }

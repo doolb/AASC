@@ -345,6 +345,8 @@ const WebSocketManager = {
             }
         } else if (data.type === 'backgroundMediaChanged') {
             if (data.displayId === window.currentDisplayId) window.BackgroundMediaControl?.render(data.backgroundMedia);
+        } else if (data.type === 'backgroundMediaStatus') {
+            if (data.displayId === window.currentDisplayId) window.BackgroundMediaControl?.renderStatus(data);
         } else if (data.type === 'backgroundMediaError') {
             if (data.displayId === window.currentDisplayId) showToast(data.message, 'error');
         } else if (data.type === 'displayState') {
@@ -360,6 +362,7 @@ const WebSocketManager = {
             
             if (data.displayId === window.currentDisplayId) {
                 window.BackgroundMediaControl?.render(data.state.backgroundMedia);
+                if (data.state.backgroundMediaStatus) window.BackgroundMediaControl?.renderStatus(data.state.backgroundMediaStatus);
                 window.Controls?.setAutoBlackBorders?.(data.state.autoBlackBorders);
                 window.Controls?.setBlackBorderTransition?.(data.state.blackBorderTransition);
                 window.ControlMediaLoop?.restore(data.displayId, data.state);

@@ -71,6 +71,7 @@
     </div>
 
     <div id="mediaContainer">
+        <img id="backgroundMediaImage" alt="">
         <video id="backgroundMediaVideo" playsinline preload="auto"></video>
         <audio id="backgroundMediaAudio" preload="auto"></audio>
         <div id="waitingMessage">
@@ -958,6 +959,11 @@
         }
         let htmlMediaAbortController = null;
         let displayWs = null;
+        window.DisplayBackgroundMedia.onStatus = (status) => {
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({ type: 'backgroundMediaStatus', ...status }));
+            }
+        };
         // ASR 来源必须与当前 WebSocket 使用同一个持久化显示端 ID；连接确认前也允许使用本地 ID 上传。
         let displayId = '';
 
