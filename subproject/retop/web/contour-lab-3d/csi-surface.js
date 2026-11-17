@@ -114,7 +114,7 @@ function untangle(mesh,progress){const m=structuredClone(mesh),D=E.bounds(m).dia
       shift=r=>(r.edge.parameters[r.i]-r.edge.initialParameters[r.i])*r.edge.length*r.sign,
       tangent=r=>{const t=r.edge.parameters[r.i],h=1e-4;return mul(E.unit(sub(r.edge.sample(Math.min(1,t+h)).point,r.edge.sample(Math.max(0,t-h)).point)),r.sign);};
     for(const e of edges)e.initialParameters=e.parameters.slice();
-    for(const patch of patches){const c=patch.plan,s=[(c.lengths[0]+c.lengths[2])/2,(c.lengths[1]+c.lengths[3])/2],axis=c.annular?1:s[0]<s[1]*.12?0:s[1]<s[0]*.12?1:null;if(axis===null)continue;
+    for(const patch of patches){const c=patch.plan,s=[(c.lengths[0]+c.lengths[2])/2,(c.lengths[1]+c.lengths[3])/2],axis=c.annular?(guard?null:1):s[0]<s[1]*.12?0:s[1]<s[0]*.12?1:null;if(axis===null)continue;
       const A=axis===0?refs(c.sides[3]).reverse():refs(c.sides[0]),B=axis===0?refs(c.sides[1]):refs(c.sides[2]).reverse();
       if(A.length!==B.length)throw Error('CSI包边两侧的横截面数量不匹配。');
       // Reversing a chart side must also reverse its oriented tangent.

@@ -506,3 +506,14 @@ UV页新增“按平滑组重新展开”，正式Worker只替换五档UV，复�
 保存sourceProfiles版本2与实际sectionNodes；剖面、控制线、导线显示和真实低模使用同一个受约束放样定义。参数重放只读已保存的节点与曲线，不再查询高模；旧定义缺少这些字段时仍按旧算法重放。所有操作只更新中档低模及其UV，原高模、源证据、解析CSI外边界和另外四档保持原样。预算仍按最终三角数核对，未以加面掩盖错误。此修正不替代进一步的CSI外形误差优化，也不接入卡线中模。
 
 专项验证见tests/strip-source-profile.cjs：平面假鼓包、真实横向曲率、连续半宽、分区失败回退、空间变换、真实顶点驱动、旧新参数与实际肩甲。原生公网/离线测试见tests/strip-profile-browser.mjs，复用不变的原高模边界证据，完整执行新的剖面构造、曲面和布线，并检查七视角、参数重放、UV、OBJ/JSON及移动布局。实际验证与发布状态以artifacts/contour-lab-3d/strip-profile-release.json为准；仍是独立分区候选，不称完整重建。未提交、推送或安装依赖。
+
+
+## 2026-11-17：修复环带轨道配对挤压、中间排布线与横截经纬线弯折
+
+针对用户反馈的上方外圈曲面（`Patch 3` 环形平滑组）布线畸形与青色横截经纬线急剧弯折问题，定位并修复三处联动缺陷：
+
+1. **禁止高版本包边采样按序强配对环带轨道（`csi-surface.js`）**：`alignRimSamples` 在 `rimSamplingVersion === 2`（`guard` 启用）时对 `c.annular` 环带仍按原始索引强行做 `A[i]`—`B[i]` 配对，在两侧逻辑分段不对称时把内圈轨道拉成局部 `0.26` 紧邻 `5.89`（约 `22.9` 倍）的严重挤压/拉伸。现于 `guard` 模式下跳过 `c.annular`，由后续 `railTransport` 独立承担环带单调配准；缺省 `rimSamplingVersion === 2` 的旧工程参数继续保持原有重放路径。
+2. **环带中间排站位对齐两侧轨道密度（`curvature-network.js`）**：`stripPatch` 保留原有均匀控制网 `nodes` 与 C2 整线 `lineFairing` 不变，新增 `smoothMidStations` 由两侧 `railParameters` 平滑计算单调递增的中间排参数 `railTransport.midStations`，将中间排实际网格顶点（有 `sourceProfiles` 时写入 `sectionNodes`，无剖面源时写入 `railTransport.sectionNodes` 以兼容不带 `sectionNodes` 的旧测试重放）和中间排 UV 均采样于 `[midStations[i], j/V]`，避免中排均匀 `i/U` 与两侧密度脱节导致大量长细三角插补。
+3. **横截转折补线联合对齐并沿曲面平滑采样（`curvature-network.js`）**：在 `if (railTransport)` 分支中取消独立最近邻索引与 3 点 `interpolateLine` 对 `g.points` 的覆盖，改为通过 `alignAnnularSection` 联合搜索各排单调对齐站位 `rowIndices`（兼顾 3D 横截直线度、参数跨度与目标坐标偏移），随后沿连续曲面 `evaluate([u(v), v])` 平滑采样 `g.parameters` 与 `g.points`，保证显示导线与实际网格切分链一致且无 V/U 形弯折。
+
+实际肩甲（`reference/shoulder.json`）在离线单文件 `dist/index.html` 与单元测试下实测：环形组 `Patch 3` 内圈轨道边长极差比降至 `2.90`（`0.822–2.385`），面数 `114 → 102`、三角面 `36 → 12`，最小内角 `5.8° → 24.83°`，最大边长比 `9.13 → 5.28`，全部横向 `u` 导线最大转角 `≤ 12.85°`（`lineFairing` 全接受、`evaluator` 半宽居中误差 `< 1e-8`）；低模共 `965` 三角面（`≤ 1000` 预算）、非邻接三角相交 `0`、`7` 个无重叠 UV 岛，OBJ 导出与原高模不变。专项回归验证见 `tests/annular-section-wiring.cjs` 与无头 Chrome 七视角及局部放大检查；当前仍为独立分区低模候选，未提交、推送或安装依赖。

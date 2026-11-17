@@ -201,6 +201,28 @@ function createContourCurvatureNetwork(E){
     if(chart.annular)for(let j=1;j<W;j++)set(L,j,at(0,j).slice());
     return {version:2,method:'same-region high-poly plane sections; remove affine boundary residual, preserve cross-width curvature; continuously centred station loft',sourceFingerprint:E.fingerprint(source),flatnessRelativeToWidth:flatness,sections,matchedSections:matched,planarSections:planar,sourceTriangleTests:triangles.length*sections.length,fallbackSections:sections.length-matched,maximumWidthFractionBefore:maxFractionBefore,maximumHeightChange:maxHeightChange,maximumMove:Math.max(...nodes.flatMap((row,j)=>row.map((p,i)=>dist(p,before[j][i])))),sourceQueriesDuringReplay:0};
   }
+  // 由两侧非均匀轨道参数平滑生成中间排参数，避免中间排顶点仍按均匀步长脱节
+  function smoothMidStations(rp0,rp1,U){
+    const mid=rp0.map((a,i)=>.5*(a+rp1[i]));
+    for(let pass=0;pass<2;pass++){const prev=mid.slice();for(let i=1;i<U;i++)mid[i]=.5*prev[i]+.25*(prev[i-1]+prev[i+1]);}
+    return mid;
+  }
+  // 联合搜索环形条带各排单调对齐的站位索引，避免独立最近邻错位把横截导线拉出V/U弯折
+  function alignAnnularSection(rowU,rings,vertices,targetU,prev,U,V){
+    const nearest=(a,t)=>a.reduce((best,v,i)=>Math.abs(v-t)<Math.abs(a[best]-t)?i:best,0);
+    const ranges=Array.from({length:V+1},(_,j)=>{const c=nearest(rowU(j),targetU),lo=Math.max(prev[j],c-2),hi=Math.min(U,c+2),xs=[];for(let i=lo;i<=hi;i++)xs.push(i);return xs.length?xs:[prev[j]];});
+    if(V===2){
+      let best=null,bestScore=Infinity;
+      for(const i0 of ranges[0])for(const i1 of ranges[1])for(const i2 of ranges[2]){
+        const p0=vertices[rings[0][i0]],p1=vertices[rings[1][i1]],p2=vertices[rings[2][i2]];
+        const turn=Math.acos(clamp(dot(unit(sub(p1,p0)),unit(sub(p2,p1))),-1,1))*180/Math.PI;
+        const u0=rowU(0)[i0],u1=rowU(1)[i1],u2=rowU(2)[i2],spread=Math.abs(u0-u1)+Math.abs(u2-u1)+Math.abs(u0-u2),offset=Math.abs((u0+u1+u2)/3-targetU),score=turn*.015+spread*1.2+offset*3.5;
+        if(score<bestScore){bestScore=score;best=[i0,i1,i2];}
+      }
+      if(best)return best;
+    }
+    return ranges.map((xs,j)=>xs.reduce((best,i)=>Math.abs(rowU(j)[i]-targetU)<Math.abs(rowU(j)[best]-targetU)?i:best,xs[0]));
+  }
   function stripPatch(base,chart,{internalLines=3,lineFairing=false,cornerPoints=[],fairingTolerance,profileSource=null,internalSmoothing=.5}={}){
     const {U,V,grid}=chart,nodes=grid.map(row=>row.map(id=>base.vertices[id].slice()));let sectionAlignment=null;
     let railTransport=null;
@@ -230,17 +252,34 @@ function createContourCurvatureNetwork(E){
     // An annular strip has a duplicated parameter seam with one shared vertex.
     const border=[...grid[0].map((id,i)=>({vertex:id,uv:[i/U,0]})),...grid.slice(1).map((row,j)=>({vertex:row[U],uv:[1,(j+1)/V]})),...grid[V].slice(0,-1).map((id,i)=>({vertex:id,uv:[i/U,1]})).reverse(),...grid.slice(1,-1).map((row,j)=>({vertex:row[0],uv:[0,(j+1)/V]})).reverse()];
     patch.boundary=border.map(b=>{const [u,v]=b.uv,uv=railTransport&&(v===0||v===1)?[railTransport.railParameters[v===0?0:1][Math.round(u*U)],v]:b.uv;return {...b,uv,point:railTransport&&(v===0||v===1)?base.vertices[b.vertex].slice():nodes[Math.round(v*V)][Math.round(u*U)].slice()};});const evaluate=evaluator(patch),longU=U>=V;
-    if(sourceProfiles){patch.sectionNodes=nodes.map((row,j)=>row.map((p,i)=>i===0&&!patch.periodicU||i===U&&!patch.periodicU||j===0||j===V?p.slice():evaluate([i/U,j/V])));if(patch.periodicU)for(let j=1;j<V;j++)patch.sectionNodes[j][U]=patch.sectionNodes[j][0].slice();}
+    const midU=railTransport?smoothMidStations(railTransport.railParameters[0],railTransport.railParameters[1],U):null;
+    const sampleSectionNodes=()=>nodes.map((row,j)=>row.map((p,i)=>i===0&&!patch.periodicU||i===U&&!patch.periodicU||j===0||j===V?p.slice():evaluate([midU?midU[i]:i/U,j/V])));
+    if(midU){railTransport.midStations=midU;if(!sourceProfiles){railTransport.sectionNodes=sampleSectionNodes();if(patch.periodicU)for(let j=1;j<V;j++)railTransport.sectionNodes[j][U]=railTransport.sectionNodes[j][0].slice();}}
+    if(sourceProfiles){patch.sectionNodes=sampleSectionNodes();if(patch.periodicU)for(let j=1;j<V;j++)patch.sectionNodes[j][U]=patch.sectionNodes[j][0].slice();}
     for(const family of ['u','v']){const count=(family==='u')===longU?internalLines:1;for(let k=1;k<=count;k++){const coordinate=k/(count+1),steps=Math.max(24,(family==='u'?V:U)*6),parameters=Array.from({length:steps+1},(_,i)=>family==='u'?[coordinate,i/steps]:[i/steps,coordinate]);patch.guides.push({family,coordinate,parameters,points:parameters.map(evaluate),endpointsOnCSI:true});}}
     for(let j=0;j<V;j++)for(let i=0;i<U;i++)patch.controlCells.push({u:[i/U,(i+1)/U],v:[j/V,(j+1)/V],corners:[[j,i],[j,i+1],[j+1,i+1],[j+1,i]],closed:true});
     const addedBends=addBendGuides(patch,chart);
     if(!railTransport)for(const g of addedBends){const axis=g.family==='u'?0:1,count=axis===0?U:V,k=Math.round(g.coordinate*count),line=axis===0?grid.map(row=>row[k]):grid[k];for(let i=1;i<line.length;i++)patch.bendRefinement.requiredEdges.push([line[i-1],line[i]]);}
     if(railTransport){
-      const vertices=base.vertices.map(p=>p.slice()),coordinates=new Map();for(let j=0;j<=V;j++)for(let i=0;i<U;i++){const id=grid[j][i];if(j>0&&j<V)vertices[id]=(patch.sectionNodes||nodes)[j][i].slice();coordinates.set(id,[j===0?railTransport.railParameters[0][i]:j===V?railTransport.railParameters[1][i]:i/U,j/V]);}
+      const rp0=railTransport.railParameters[0],rp1=railTransport.railParameters[1],rowU=j=>j===0?rp0:j===V?rp1:midU;
+      const vertices=base.vertices.map(p=>p.slice()),coordinates=new Map();
+      // 中间排顶点坐标与UV均取 midU[i]，与两侧轨道配准站位保持一致
+      for(let j=0;j<=V;j++)for(let i=0;i<U;i++){const id=grid[j][i];if(j>0&&j<V)vertices[id]=(patch.sectionNodes||railTransport.sectionNodes||nodes)[j][i].slice();coordinates.set(id,[rowU(j)[i],j/V]);}
       // The shared seam vertex has two UV values; tile with distinct temporary
       // endpoint copies, then record per-face UV before identifying the seam.
       const rings=grid.map((row,j)=>row.map((id,i)=>{if(i!==U)return id;const duplicate=vertices.length;vertices.push(vertices[id].slice());coordinates.set(duplicate,[1,j/V]);return duplicate;})),ids=new Map(rings.flatMap((row,j)=>row.map((id,i)=>[id,grid[j][i]]))),faces=[];
-      const nearest=(a,t)=>a.reduce((best,v,i)=>Math.abs(v-t)<Math.abs(a[best]-t)?i:best,0),sections=addedBends.filter(g=>g.family==='u').sort((a,b)=>a.coordinate-b.coordinate).map(g=>{const rowIndices=Array.from({length:V+1},(_,j)=>j===0?nearest(railTransport.railParameters[0],g.coordinate):j===V?nearest(railTransport.railParameters[1],g.coordinate):Math.round(g.coordinate*U)),params=rowIndices.map((i,j)=>coordinates.get(rings[j][i])),points=rowIndices.map((i,j)=>vertices[rings[j][i]]),curves=interpolateLine(points),steps=32;g.parameters=Array.from({length:steps+1},(_,i)=>{const f=i/steps*V,j=Math.min(V-1,Math.floor(f)),t=f-j;return params[j].map((x,k)=>x*(1-t)+params[j+1][k]*t);});g.points=Array.from({length:steps+1},(_,i)=>lineAt(curves,i/steps));g.sectionCurves=curves;g.meshEdgeChain=rowIndices.map((i,j)=>grid[j][i]);for(let j=1;j<=V;j++)patch.bendRefinement.requiredEdges.push([g.meshEdgeChain[j-1],g.meshEdgeChain[j]]);return {coordinate:g.coordinate,rowIndices};});
+      let prev=Array(V+1).fill(0);
+      // 先单调联合对齐各排补线站位，再沿连续曲面 evaluate([u(v), v]) 采样横截导线，避免3点样条拐弯
+      const sections=addedBends.filter(g=>g.family==='u').sort((a,b)=>a.coordinate-b.coordinate).map(g=>{
+        const rowIndices=alignAnnularSection(rowU,rings,vertices,g.coordinate,prev,U,V);prev=rowIndices;
+        const us=rowIndices.map((i,j)=>rowU(j)[i]),steps=32;
+        g.coordinate=us.reduce((s,u)=>s+u,0)/us.length;
+        g.parameters=Array.from({length:steps+1},(_,k)=>{const f=k/steps*V,j=Math.min(V-1,Math.floor(f)),t=f-j;return [us[j]*(1-t)+us[j+1]*t,k/steps];});
+        g.points=g.parameters.map(evaluate);
+        g.meshEdgeChain=rowIndices.map((i,j)=>grid[j][i]);
+        for(let j=1;j<=V;j++)patch.bendRefinement.requiredEdges.push([g.meshEdgeChain[j-1],g.meshEdgeChain[j]]);
+        return {coordinate:g.coordinate,rowIndices};
+      });
       patch.bendRefinement.mandatorySections=sections;
       for(let j=0;j<V;j++){const cuts=[[0,0],...sections.map(s=>[s.rowIndices[j],s.rowIndices[j+1]]),[U,U]].filter((p,i,a)=>!i||p[0]!==a[i-1][0]||p[1]!==a[i-1][1]);for(let k=1;k<cuts.length;k++){const [a,b]=cuts[k-1],[c,d]=cuts[k];if(c<a||d<b)throw Error('转折补线的环带站位顺序冲突。');faces.push(...tileAnnularBand(rings[j].slice(a,c+1),rings[j+1].slice(b,d+1),vertices,coordinates,patch.scale,U));}}
 
@@ -252,7 +291,7 @@ function createContourCurvatureNetwork(E){
     const patches=definition.stripPatches||[];if(!patches.length)return mesh;const out=structuredClone(mesh),D=E.bounds(mesh).diagonal;
     for(const p of patches){const chart=out.csiCharts.find(c=>c.patch===p.patch);if(!chart||chart.U!==p.U||chart.V!==p.V)throw Error('包边经纬网与CSI分区拓扑不一致。');
       for(const b of p.boundary)if(!(p.sectionAlignment&&p.periodicU&&b.uv[1]>0&&b.uv[1]<1)&&dist(mesh.vertices[b.vertex],b.point)>D*1e-8)throw Error('包边经纬网与CSI边界不一致。');
-      for(let j=1;j<chart.V;j++)for(let i=p.sectionAlignment&&p.periodicU?0:1;i<chart.U;i++)out.vertices[chart.grid[j][i]]=(p.sectionNodes||p.nodes)[j][i].slice();
+      for(let j=1;j<chart.V;j++)for(let i=p.sectionAlignment&&p.periodicU?0:1;i<chart.U;i++)out.vertices[chart.grid[j][i]]=(p.sectionNodes||p.railTransport?.sectionNodes||p.nodes)[j][i].slice();
       if(p.railTransport){const old=out.faces.map((_,i)=>out.csiPatchGroups[i]===p.patch?i:-1).filter(i=>i>=0),first=old[0],source=out.faceSources?.[first]??0,faces=[],groups=[],faceSources=[];for(let i=0;i<out.faces.length;i++){if(i===first)for(const f of p.railTransport.faces){faces.push(f.slice());groups.push(p.patch);faceSources.push(source);}if(out.csiPatchGroups[i]!==p.patch){faces.push(out.faces[i]);groups.push(out.csiPatchGroups[i]);faceSources.push(out.faceSources?.[i]??0);}}out.faces=faces;out.csiPatchGroups=groups;out.faceSources=faceSources;chart.transportedStrip=true;chart.faceParameters=structuredClone(p.railTransport.faceParameters);}
     }out.csiReport.stripCurveNetworks={patches:patches.length,sourceQueriesDuringReplay:0,geometrySource:'saved rectangular CSI control-net nodes',boundaryFixed:true};return out;
   }
