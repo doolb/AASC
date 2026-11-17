@@ -244,15 +244,6 @@
                 <h2>显示控制</h2>
             <div class="control-grid">
                 <div class="control-item">
-                    <label>MMD / VRM 角色层</label>
-                    <div class="control-buttons">
-                        <button id="mmdVisibilityToggle" class="control-btn" type="button" disabled
-                                aria-pressed="false" onclick="Controls.toggleMmdVisibility()">MMD 状态同步中</button>
-                    </div>
-                    <div id="mmdVisibilityStatus" style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.65);">当前状态：未同步</div>
-                </div>
-
-                <div class="control-item">
                     <label>画面填充</label>
                     <div class="control-buttons">
                         <button class="control-btn" data-fit="contain" onclick="sendFitMode('contain')">适应</button>
@@ -270,13 +261,6 @@
                         <span>秒，停留</span>
                         <input id="dynamicFitHoldSeconds" type="number" min="0.1" max="300" step="0.1" value="2" oninput="Controls.sendDynamicFitConfig()" style="width:58px;padding:4px 6px;border:0;border-radius:4px;background:rgba(255,255,255,0.1);color:#fff;text-align:center;">
                         <span>秒</span>
-                    </div>
-                </div>
-
-                <div class="control-item">
-                    <label>睡眠模式</label>
-                    <div class="control-buttons">
-                        <button class="control-btn" id="sleepSettingsBtn" onclick="Controls.showSleepModePanel()" title="按时段隐藏媒体/UI，降低夜间干扰">设置</button>
                     </div>
                 </div>
 
@@ -340,6 +324,17 @@
                 </span>
             </div>
 
+            <details class="display-advanced">
+              <summary>角色、睡眠、性能与语音播报</summary>
+            <div class="control-item">
+                <label>MMD / VRM 角色层</label>
+                <div class="control-buttons"><button id="mmdVisibilityToggle" class="control-btn" type="button" disabled aria-pressed="false" onclick="Controls.toggleMmdVisibility()">MMD 状态同步中</button></div>
+                <div id="mmdVisibilityStatus" style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.65);">当前状态：未同步</div>
+            </div>
+            <div class="control-item">
+                <label>睡眠模式</label>
+                <div class="control-buttons"><button class="control-btn" id="sleepSettingsBtn" onclick="Controls.showSleepModePanel()" title="按时段隐藏媒体/UI，降低夜间干扰">设置</button></div>
+            </div>
             <div class="control-item">
                 <label>APK 大小核并发</label>
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
@@ -388,6 +383,10 @@
                 </form>
             </div>
 
+            </details>
+
+            <details class="display-advanced" ontoggle="if(this.open) requestAnimationFrame(() => window.Crop?.recalculateSize(false))">
+            <summary>画面预览与裁剪</summary>
             <div class="crop-control">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                     <label style="font-size:14px;color:#fff;font-weight:500;">画面裁剪区域</label>
@@ -486,18 +485,19 @@
                     </div>
                 </div>
             </div>
+            </details>
         </div>
         
-        <div class="section llm-model-section">
-            <h2>LLM 模型</h2>
+        <details class="section llm-model-section display-advanced">
+            <summary>LLM 模型</summary>
             <p class="llm-model-description">只显示当前选中的显示端；模型切换会等待当前推理完成。</p>
             <div id="llmModelPanel"><div class="empty-list">请先在设备列表中选择显示端</div></div>
-        </div>
-        <div class="section voice-vad-section">
-            <h2>监听 VAD / 底噪检测</h2>
+        </details>
+        <details class="section voice-vad-section display-advanced">
+            <summary>监听 VAD / 底噪检测</summary>
             <p class="voice-vad-description">为每个显示端单独设置监听灵敏度，检测时请保持环境安静。</p>
             <div id="voiceVadPanel"><div class="empty-list">暂无显示端连接</div></div>
-        </div>
+        </details>
         <div class="section info-section">
             <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
             <button class="control-btn restart-btn" onclick="restartServer()" style="margin-top: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">重启服务器</button>

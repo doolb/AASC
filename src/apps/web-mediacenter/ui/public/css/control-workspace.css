@@ -15,10 +15,10 @@ body {
 .nav-item:hover, .nav-item.active { color: var(--text-primary); background: var(--bg-surface-strong); }
 .nav-item.active { border-left-color: var(--accent-color); }
 
-.content { padding: clamp(16px, 2.5vw, 32px); }
+.content { padding: clamp(12px, 1.5vw, 20px); }
 .panel { max-width: 1240px; min-width: 0; }
 .panel > .page-title {
-    margin: 0 0 22px;
+    margin: 0 0 14px;
     text-align: left;
     font-size: clamp(22px, 2vw, 28px);
     font-weight: 700;
@@ -28,19 +28,20 @@ body {
     -webkit-text-fill-color: currentColor;
 }
 .section {
-    padding: clamp(16px, 2vw, 24px);
+    padding: clamp(12px, 1.4vw, 18px);
     border: 1px solid var(--border-color);
     border-radius: 16px;
     background: var(--bg-surface);
-    box-shadow: 0 8px 28px var(--shadow-color);
+    box-shadow: 0 4px 18px var(--shadow-color);
+    margin-bottom: 12px;
 }
 .section > h2 { color: var(--text-primary); font-size: 15px; font-weight: 650; letter-spacing: .01em; }
 
 /* 显示控制：可操作内容按关联分组，主播放与背景播放给予足够宽度。 */
-#panel-display .control-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 12px; align-items: stretch; }
+#panel-display .control-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; align-items: start; }
 #panel-display .control-item {
     min-width: 0;
-    padding: 16px;
+    padding: 12px;
     border: 1px solid var(--border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -78,6 +79,15 @@ body {
 #panel-display #backgroundMediaUrl { display: block; width: 100%; margin-bottom: 10px; }
 #panel-display .control-item:has(#backgroundMediaUrl) > label:not(:first-child) { margin: 12px 0 6px; color: var(--text-secondary); }
 #panel-display #backgroundMediaStatus, #panel-display .text-playback-status { margin-top: 10px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+#panel-display .device-list { max-height: 150px; overflow: auto; }
+#panel-display .display-advanced { margin-top: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-background); }
+#panel-display .display-advanced > summary { padding: 11px 13px; cursor: pointer; color: var(--text-primary); font-size: 14px; font-weight: 650; }
+#panel-display .display-advanced[open] > summary { border-bottom: 1px solid var(--border-color); margin-bottom: 10px; }
+#panel-display details.display-advanced > .control-item,
+#panel-display details.display-advanced > .crop-control { margin: 10px; }
+#panel-display details.section.display-advanced { padding: 0; }
+#panel-display details.section.display-advanced > p,
+#panel-display details.section.display-advanced > div { margin: 10px 14px; }
 
 /* 浅色主题已有通用按钮规则；此处保留控制面板的语义状态与可读性。 */
 :root[data-theme-mode="light"] #panel-display .control-btn:not(.active):not(.playing) {
@@ -104,6 +114,51 @@ body {
 #panel-media .media-library-breadcrumb { min-width: min(100%, 200px); background: var(--content-background); border: 1px solid var(--border-color); }
 #panel-media .media-library-item { border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-background); }
 #panel-media .media-library-item:hover { border-color: var(--accent-color); }
+
+/* 来源导航只占一行，可用触摸、滚轮或键盘水平浏览。 */
+#panel-media .media-library-tabs { flex-direction: row; align-items: center; overflow-x: auto; gap: 8px; padding: 3px 2px 8px; scrollbar-width: thin; }
+#panel-media .media-tab-section, #panel-media .media-region-group { flex: 0 0 auto; flex-wrap: nowrap; }
+#panel-media .media-library-tab { white-space: nowrap; border-radius: 9px; }
+#panel-media .media-library-content, #panel-media .bilibili-video-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 10px; }
+
+/* 图片和视频完整覆盖卡片，文字和操作使用渐变底保证明暗主题可读。 */
+#panel-media .media-library-item:not(.folder):not(.unavailable) {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    aspect-ratio: 4 / 3;
+    min-width: 0;
+    overflow: hidden;
+    isolation: isolate;
+}
+#panel-media .media-library-item:not(.folder):not(.unavailable) .media-thumb-wrapper { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; aspect-ratio: auto; }
+#panel-media .media-library-item:not(.folder):not(.unavailable)::after { content: ''; position: absolute; inset: 25% 0 0; z-index: -1; background: linear-gradient(transparent, rgba(0,0,0,.9)); pointer-events: none; }
+#panel-media .media-library-item:not(.folder):not(.unavailable) .item-name { padding: 8px 10px 2px; color: #fff !important; font-weight: 650; text-shadow: 0 1px 3px #000; }
+#panel-media .media-library-item:not(.folder):not(.unavailable) .item-meta { padding: 0 10px 5px; color: #eee !important; }
+#panel-media .media-library-item:not(.folder):not(.unavailable) .item-actions { flex-wrap: wrap; opacity: 0; padding: 0 8px 8px; }
+#panel-media .media-library-item:not(.folder):not(.unavailable):hover .item-actions,
+#panel-media .media-library-item:not(.folder):not(.unavailable):focus-within .item-actions { opacity: 1; }
+#panel-media .media-library-item .item-actions button, #panel-media .media-library-item .item-actions .btn-download { flex: 1 1 auto; min-width: 0; padding: 6px; }
+#panel-media .media-library-item .playing-badge { top: 8px; bottom: auto; }
+#panel-media .media-library-item.folder { background: var(--card-background); color: var(--text-primary); }
+
+/* 只有带封面的远程条目使用全图卡片；无封面条目保留正常文本流。 */
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) { position: relative; display: flex; flex-direction: column; justify-content: flex-end; aspect-ratio: 4 / 3; padding: 10px; overflow: hidden; isolation: isolate; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover)::after { content: ''; position: absolute; inset: 25% 0 0; z-index: -1; background: linear-gradient(transparent, rgba(0,0,0,.9)); pointer-events: none; }
+#panel-media .bilibili-video-card .bilibili-video-cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) .bilibili-video-title { color: #fff !important; font-weight: 650; text-shadow: 0 1px 3px #000; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) > div:not(.bilibili-video-actions) { color: #fff; }
+#panel-media .bilibili-video-actions { flex-wrap: wrap; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) .bilibili-video-actions { opacity: 0; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover):hover .bilibili-video-actions,
+#panel-media .bilibili-video-card:has(.bilibili-video-cover):focus-within .bilibili-video-actions { opacity: 1; }
+
+@media (hover: none) {
+    #panel-media .media-library-item:not(.folder):not(.unavailable) .item-actions { opacity: 1; }
+    #panel-media .bilibili-video-card:has(.bilibili-video-cover) .bilibili-video-actions { opacity: 1; }
+    #panel-media .item-actions button, #panel-media .item-actions .btn-download,
+    #panel-media .bilibili-video-actions button { min-height: 36px; }
+}
 #panel-task .task-tabs { background: var(--content-background); border: 1px solid var(--border-color); }
 #panel-task .task-tab { color: var(--text-secondary); }
 #panel-task .task-tab.active { color: var(--text-primary); background: var(--bg-surface-strong); }
@@ -129,7 +184,7 @@ body {
 @media (max-width: 700px) {
     .content { padding: 14px 12px; }
     .panel > .page-title { margin-bottom: 16px; }
-    #panel-display .control-grid { grid-template-columns: minmax(0, 1fr); }
+    #panel-display .control-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }
     #panel-chat .chat-main { padding: 12px; }
     #panel-chat .chat-actions { flex-wrap: wrap; }
     #panel-media .media-library-toolbar { align-items: stretch; }
