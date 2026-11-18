@@ -603,6 +603,32 @@ const SelfTest = {
             }
         },
         {
+            id: 'media_breadcrumb_contrast',
+            name: '媒体库路径文字对比度',
+            description: '只读检查当前主题的路径文字和背景对比度',
+            category: '界面布局',
+            run: async () => {
+                const bar = document.getElementById('mediaLibraryBreadcrumb');
+                const item = bar?.querySelector('.breadcrumb-item');
+                if (!item) return { success: false, message: '媒体库路径文字不存在' };
+                // 当前路径背景为不透明主题色，按照 sRGB 相对亮度计算文字对比度。
+                const luminance = color => {
+                    const channels = color.match(/[\d.]+/g)?.map(Number);
+                    if (!channels || channels.length < 3 || (channels.length > 3 && channels[3] !== 1)) return null;
+                    const linear = channels.slice(0, 3).map(value => {
+                        const component = value / 255;
+                        return component <= 0.04045 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4;
+                    });
+                    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+                };
+                const background = luminance(getComputedStyle(bar).backgroundColor);
+                const foreground = luminance(getComputedStyle(item).color);
+                const contrast = background === null || foreground === null ? 0 : (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+                const valid = contrast >= 4.5;
+                return { success: valid, message: valid ? '媒体库路径文字清晰' : '媒体库路径文字对比度不足', details: `当前主题对比度 ${contrast.toFixed(2)}:1` };
+            }
+        },
+        {
             id: 'media_masonry_structure',
             name: '媒体库自适应卡片',
             description: '只读检查尺寸监听与瀑布流资源',

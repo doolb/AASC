@@ -138,7 +138,11 @@ body {
 /* 媒体库和任务面板使用一致的内容边界，避免状态和操作挤在一起。 */
 #panel-media .media-library-container { min-width: 0; }
 #panel-media .media-library-toolbar { gap: 10px; }
-#panel-media .media-library-breadcrumb { min-width: min(100%, 200px); background: var(--content-background); border: 1px solid var(--border-color); }
+#panel-media .media-library-breadcrumb { min-width: min(100%, 200px); background: var(--bg-secondary); border: 1px solid var(--border-color); }
+/* 路径与分隔符共享主题文字色，避免浅色主题文字融入背景。 */
+#panel-media .media-library-breadcrumb .breadcrumb-item,
+#panel-media .media-library-breadcrumb .breadcrumb-sep { color: var(--text-primary); }
+#panel-media .media-library-breadcrumb .breadcrumb-item:hover { color: var(--text-primary); text-decoration: underline; }
 #panel-media .media-library-item { border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-background); }
 #panel-media .media-library-item:hover { border-color: var(--accent-color); }
 
