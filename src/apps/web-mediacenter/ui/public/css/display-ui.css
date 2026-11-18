@@ -77,3 +77,29 @@
     .display-media-library-entry { flex-wrap: wrap; }
     .display-media-bilibili-actions { width: 100%; }
 }
+
+/* 显示端来源汇总：列流容纳不同高度，卡片自身按封面比例生长。 */
+.display-media-library-entries { display: block; }
+.display-media-card-grid { column-width: 180px; column-gap: 10px; }
+.display-media-library-entries > .display-media-bilibili-nav { margin-bottom: 10px; }
+.display-media-library-panel .display-media-library-entry {
+    position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end;
+    width: 100%; min-height: 140px; aspect-ratio: var(--display-card-aspect, 4 / 3);
+    break-inside: avoid; margin: 0 0 10px; padding: 10px; overflow: hidden; isolation: isolate;
+}
+.display-media-library-entry.has-cover::before {
+    content: ''; position: absolute; inset: 28% 0 0; z-index: -1;
+    background: linear-gradient(transparent, rgba(0, 0, 0, .76)); pointer-events: none;
+}
+.display-media-card-cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.display-media-library-icon { margin: auto; font-size: 42px; }
+.display-media-library-panel .display-media-library-entry.is-directory { aspect-ratio: auto; }
+.display-media-library-entry.is-directory :is(.display-media-library-icon, .display-media-library-entry-name, .display-media-library-batch) { flex-shrink: 0; }
+.display-media-library-panel .display-media-library-entry-name { flex: 0 0 auto; width: 100%; overflow-wrap: anywhere; text-shadow: 0 1px 3px #000; }
+.display-media-library-panel .display-media-bilibili-row { min-height: 190px; }
+.display-media-bilibili-row .display-media-library-entry-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.display-media-library-panel .display-media-bilibili-actions { width: 100%; }
+@media (max-width: 600px) {
+    .display-media-library-entries { padding: 10px; }
+    .display-media-card-grid { column-width: 140px; }
+}

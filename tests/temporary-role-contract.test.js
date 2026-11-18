@@ -28,7 +28,8 @@ function testServerAndControlContracts() {
     assert(serverSource.includes("data.type === 'startTemporaryConversation'"));
     assert(serverSource.includes("'startTemporaryConversation',"));
     assert(serverSource.includes('roleName: temporaryConversation.roleName'));
-    assert(serverSource.includes('chat.getTemplateSystemPrompt(temporaryConversation.roleName)'));
+    const contextSource = fs.readFileSync('src/apps/server/modules/chat/chat-context-usage.js', 'utf8');
+    assert(contextSource.includes('chat.getTemplateSystemPrompt(temporaryRoleName)'));
     assert(controlSource.includes('onTemporaryRoleChange'));
     assert(controlSource.includes('temporaryConversationId'));
     assert(controlSource.includes('type: \'startTemporaryConversation\''));

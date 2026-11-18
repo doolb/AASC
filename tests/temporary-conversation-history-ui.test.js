@@ -10,14 +10,12 @@ const serverJs = fs.readFileSync(
     'utf8'
 );
 
-assert.match(chatJs, /temporaryHistoryGroups/);
-assert.match(chatJs, /temporaryHistoryViewSessionId/);
-assert.match(chatJs, /renderTemporaryHistorySelector/);
-assert.match(chatJs, /viewTemporaryHistory/);
-assert.match(chatJs, /showCurrentTemporaryConversation/);
-assert.match(chatJs, /历史临时会话只读查看/);
-assert.match(chatJs, /不能发送消息/);
+assert.doesNotMatch(chatJs, /temporaryHistoryViewSessionId/);
+assert.doesNotMatch(chatJs, /renderTemporaryHistorySelector/);
+assert.match(chatJs, /this\.temporaryConversation\.messages/);
 assert.match(serverJs, /historyGroups:/);
-assert.match(serverJs, /getTemporaryConversationHistoryGroups/);
+assert.match(serverJs, /getContinuousTemporaryConversationHistory/);
+assert.match(chatJs, /清空全部临时聊天记录/);
+assert.doesNotMatch(chatJs, /历史临时会话只读查看/);
 
-console.log('temporary-conversation-history-ui.test.js: 9/9 passed');
+console.log('temporary-conversation-history-ui.test.js: 连续历史契约通过');

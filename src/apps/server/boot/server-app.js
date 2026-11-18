@@ -68,8 +68,7 @@ const {
     DEFAULT_TEMPORARY_HISTORY_GROUPS,
     DEFAULT_TEMPORARY_CONTEXT_GROUPS,
     normalizeTemporaryConversationHistoryConfig,
-    selectTemporaryConversationHistory,
-    getTemporaryConversationHistoryGroups
+    getContinuousTemporaryConversationHistory
 } = require('../modules/voice/temporary-conversation-history');
 const {
     beginRepairModeEntry,
@@ -436,7 +435,7 @@ const chatHistoryClear = createChatHistoryClearService({ chat, gameService: gomo
 const chatContextUsage = createChatContextUsageService({ chat,
     getGameSnapshot: displayId => gomokuGame.snapshot(displayId),
     getTemporaryConversation: () => ({ ...temporaryConversation,
-        history: getTemporaryConversationHistoryContext(temporaryConversation.id) })
+        history: getTemporaryConversationHistoryContext() })
 });
 gomokuDisplayDemo = createGomokuDisplayDemoService({
     getSnapshot: displayId => gomokuGame.snapshot(displayId),
@@ -2243,19 +2242,17 @@ function getDisplayVoiceAssistantNames() {
 }
 
 function getTemporaryConversationSnapshot() {
-    const conversationConfig = getVoiceConversationWindowConfig();
+    const currentMessages = new Map(temporaryConversation.messages.map(message => [message.id, message]));
+    const messages = getContinuousTemporaryConversationHistory(chat.getHistory({ preserveThink: true }))
+        .map(message => ({ ...message, ...currentMessages.get(message.id) }));
     return {
         id: temporaryConversation.id,
         startedAt: temporaryConversation.startedAt,
         displayId: temporaryConversation.displayId,
         roleName: temporaryConversation.roleName,
         templateId: temporaryConversation.templateId,
-        messages: temporaryConversation.messages.map(message => ({ ...message })),
-        historyGroups: getTemporaryConversationHistoryGroups(
-            chat.getHistory(),
-            temporaryConversation.id,
-            conversationConfig
-        )
+        messages,
+        historyGroups: []
     };
 }
 
@@ -2294,24 +2291,8 @@ function clearTemporaryChatHistory(options = {}) {
     return chatHistoryClear.clear({ ...options, mode: 'temporary' });
 }
 
-function pruneTemporaryConversationHistory(currentSessionId) {
-    const conversationConfig = getVoiceConversationWindowConfig();
-    if (typeof chat.pruneHistorySessions !== 'function') return;
-    chat.pruneHistorySessions({
-        mode: 'temporary',
-        currentSessionId,
-        maxHistoricalSessions: conversationConfig.temporaryHistoryGroups
-    });
-}
-
-function getTemporaryConversationHistoryContext(currentSessionId) {
-    const conversationConfig = getVoiceConversationWindowConfig();
-    const selected = selectTemporaryConversationHistory(
-        chat.getHistory(),
-        currentSessionId,
-        conversationConfig
-    );
-    return selected.messages;
+function getTemporaryConversationHistoryContext() {
+    return getContinuousTemporaryConversationHistory(chat.getHistory());
 }
 
 function replaceTemporaryConversation(displayId, roleName = null) {
@@ -2355,11 +2336,12 @@ function ensureTemporaryConversation(displayId) {
 }
 
 function clearTemporaryConversation(options = {}) {
-    clearTemporaryChatHistory({ ...options, sessionId: temporaryConversation.id,
+    const history = clearTemporaryChatHistory({ ...options, sessionId: temporaryConversation.id,
         // 临时会话的所属显示端由服务器确定，控制端当前选中项可能已切换。
         ...(temporaryConversation.displayId ? { displayIds: [temporaryConversation.displayId] } : {}) });
     temporaryConversation.messages = [];
     broadcastTemporaryConversation('clear');
+    return history;
 }
 
 function appendTemporaryConversationMessage(message, conversationId) {
@@ -5756,7 +5738,8 @@ app.get('/api/chat/history', (req, res) => {
 
 app.post('/api/chat/clear', (req, res) => {
     try {
-        const history = chatHistoryClear.clear(req.body || {});
+        const history = req.body?.mode === 'temporary'
+            ? clearTemporaryConversation(req.body) : chatHistoryClear.clear(req.body || {});
         log('Chat', `清空聊天历史 source=http mode=${req.body?.mode || '-'} target=${req.body?.target || '-'} sessionId=${req.body?.sessionId || '-'}`);
         res.json({
             status: 'success',
@@ -11370,7 +11353,8 @@ async function handleControlMessageFallback(data, ws) {
                             target: data.target,
                             sessionId: data.sessionId
                         };
-                        const remainingHistory = chatHistoryClear.clear({ ...data, ...scope });
+                        const remainingHistory = scope.mode === 'temporary'
+                            ? clearTemporaryConversation({ ...data, ...scope }) : chatHistoryClear.clear({ ...data, ...scope });
                         // 显示端只接收被清空范围的快照，其他私聊历史不能阻止当前面板刷新。
                         const history = isDisplayChatSource
                             ? chat.getHistory({ ...scope, preserveThink: true }) : remainingHistory;
@@ -12168,7 +12152,6 @@ async function handleChatMessage(options) {
     await chatAttachments.bind(inputAttachments);
     if (isTemporaryConversation) {
         appendTemporaryConversationMessage(userMessageRecord, effectiveTemporaryConversationId);
-        pruneTemporaryConversationHistory(effectiveTemporaryConversationId);
     }
     
     const { systemPrompt, includeHistory, contextCount } = resolveChatContextOptions(chat, {
@@ -12288,7 +12271,7 @@ async function handleChatMessage(options) {
         templateTarget: effectiveTemplateTarget,
         sessionId: effectiveSessionId,
         historyMessages: isTemporaryConversation
-            ? getTemporaryConversationHistoryContext(effectiveTemporaryConversationId)
+            ? getTemporaryConversationHistoryContext()
             : null,
         images: [...images.map((image, index) => ({ ...savedInputImages[index], ...image })), ...inputAttachments.filter(file => file.kind === 'image')],
         attachments: inputAttachments,

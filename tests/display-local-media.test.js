@@ -56,6 +56,12 @@ test('目录条目只保留目录与可播放文件，HTTPS 下绝对 http 地�
     assert.equal(entries[3].proxyUrl, '');
 });
 
+test('非 B 站视频条目保留来源提供的封面', () => {
+    const [entry] = normalizeDisplayEntries([{ name:'视频', path:'/v', type:'file', mediaType:'video', url:'/stream', cover:'/cover.jpg' }]);
+    assert.equal(entry.cover, '/cover.jpg');
+    assert.equal(entry.directUrl, '/stream');
+});
+
 test('非回环访问 /api/display-local 一律 403', async t => {
     const app = express();
     app.use('/api/display-local', createDisplayLocalRouter({

@@ -660,7 +660,7 @@ const SelfTest = {
                         .map(url => fetch(url, { cache: 'no-store' })));
                     if (responses.some(response => !response.ok)) return { success: false, message: '显示端媒体来源资源不可读取' };
                     const [script, html, css] = await Promise.all(responses.map(response => response.text()));
-                    const valid = ['quark', 'bilibili', '国内媒体', 'display-local/libraries', '/d:home', '/d:related:'].every(value => script.includes(value))
+                    const valid = ['quark', 'bilibili', 'Promise.allSettled', 'display-local/libraries', '/d:home', '/d:related:'].every(value => script.includes(value))
                         && html.includes('displayMediaLibraryOpacity') && css.includes('--display-media-background-alpha');
                     return { success: valid, message: valid ? '显示端媒体来源结构正常' : '显示端媒体来源结构缺失', details: '仅检查入口结构；实际浏览和播放需设备及来源验收' };
                 } catch (error) { return { success: false, message: `显示端媒体来源检查失败: ${error.message}` }; }

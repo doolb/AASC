@@ -1,5 +1,16 @@
 # 显示端语音唤醒与监听控制实现文档
 
+## 临时聊天连续记录（2026-11-18）
+
+```text
+连续历史 := 所有现存 mode=temporary 消息按时间顺序排列
+会话快照.messages := 连续历史；角色切换/语音唤醒 → 更新活动会话和角色，不删除历史
+模型 historyMessages := 连续历史；按临时消息数量上限和 token 预算截取
+不再按组或单桶条数裁剪临时历史，也不显示历史组选择器；内部 ID 保留以隔离迟到回复
+清空 → 提示将清空全部临时聊天 → WebSocket/HTTP 共用临时历史清理并广播空快照
+清空普通群聊 → 只删除 group 消息，不删除临时、角色和私聊消息
+```
+
 ## 修复模式状态与工作 Agent 路由
 
 ```text
@@ -1116,52 +1127,11 @@ reduceConversationInput(state, text):
     active 状态下普通有效输入 -> 保持 windowType，并更新最后有效输入时间
 
 temporaryConversation:
-    服务端只保留一个全局当前实例 { id, startedAt, displayId, roleName, templateId, messages[] }
-    每个临时会话实例的 id 代表一组连续对话
-    一组连续对话在主动结束或 temporaryWindowMs 到期时完成
-    服务端从持久化 temporary 消息按 sessionId 聚合已完成会话组
-    只保留最近 temporaryHistoryGroups 组历史上下文，默认 10 组
-    每次临时请求发送当前会话组和最近 temporaryContextGroups-1 组历史，默认总计 3 组
-    新的临时唤醒或 temporaryConversationStarted:
-        将旧实例视为已完成会话组，不清理其 LLM 历史
-        生成新 id，消息置空，广播 { type: "temporaryConversation", action: "reset" }
-        其他显示端已有的 activeGroup/windowType=temporary 状态切换到新临时会话并继续共享
-    临时用户消息和助手回复只写入该实例及 temporary 会话键，不混入普通群聊页签
-    控制端连接或请求 getTemporaryConversation:
-        返回当前全局实例快照
-    控制端临时页签展示快照并允许直接发送:
-        输入框保持可用
-        发送 chatMessage 时携带 mode='temporary'、temporaryConversation=true、temporaryConversationId
-        服务端若当前实例不存在则创建实例；若请求携带旧 id 则归并到当前实例，不创建分叉
-        服务端将控制端消息和助手回复追加到当前实例，并广播最新快照
-    清空操作清空当前实例并广播
-
-临时角色选择:
-    精确角色唤醒命令返回 { type: "wake", windowType: "temporary", assistantName }
-    控制端临时页签从有效聊天模板渲染角色选择器
-    选择角色时发送 { type: "startTemporaryConversation", roleName }
-    服务端校验模板后替换全局实例并广播 roleName/templateId
-    临时普通消息只发送 temporaryConversationId，不发送角色提示词
-    服务端按当前实例 roleName 调用 getTemplateSystemPrompt()
-    服务端将当前会话组消息与最近历史会话组转换为 historyMessages 发送给 LLM
-    getTemplateSystemPrompt() 只包含基础提示词和一个匹配模板
-    普通“开始对话”请求仍调用 getGroupSystemPrompt()，包含全部角色模板
-
-temporaryConversation history for control:
-    groupTemporaryConversationMessages(chat.getHistory(), mode="temporary")
-        按 sessionId 聚合消息
-        排除当前 temporaryConversation.id
-        按结束时间倒序截取 temporaryHistoryGroups 组
-    getTemporaryConversationSnapshot():
-        返回当前 conversation
-        返回 historyGroups: [{ sessionId, startedAt, endedAt, roleName, messageCount, messages[] }]
-    控制端连接、临时会话替换、临时消息更新和 getTemporaryConversation 请求:
-        通过已有 temporaryConversation WebSocket 消息同步 historyGroups
-    控制端临时页签:
-        默认显示当前组 messages
-        点击 historyGroups 中的一组时只读显示该组 messages
-        显示“返回当前对话”后恢复当前组
-        历史组查看期间禁用发送，不能修改 temporaryConversation.id
+    服务端保留当前 id、角色和显示端；历史从现存 temporary 消息按时间合并
+    新唤醒或选择角色 → 更新 ID 与角色、广播连续历史；不按组清理旧记录
+    控制端 → 按快照连续展示并发送；清空前提示会删除全部临时记录
+    模型 → 使用连续临时历史，按现有数量和 token 预算截取
+    当前 ID 仍用于拒绝旧请求和迟到回复
 
 armConversationTimer(displayId):
     根据 state.windowType 选择 temporaryWindowMs 或 conversationWindowMs

@@ -29,28 +29,23 @@ test('显示端面板横竖屏、主题、透明度和隐藏状态', { skip: !fs
                 const hiddenLibrary = getComputedStyle(library).display;
                 quick.hidden = false;
                 library.hidden = false;
-                const sources = document.getElementById('displayMediaLibrarySources');
-                sources.innerHTML = '<span class="display-media-library-group-title">媒体来源</span>' + Array.from({length: 8}, (_, i) => `<button class="display-media-library-source${i === 0 ? ' active' : ''}">来源${i}</button>`).join('');
                 const main = library.querySelector('.display-media-library-main');
                 const rect = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width }; };
                 const sections = [...quick.querySelectorAll(':scope > section')];
                 library.style.setProperty('--display-media-background-alpha', '0');
-                const result = { hiddenQuick, hiddenLibrary, quick: rect(quick), first: rect(sections[0]), second: rect(sections[1]), sources: rect(sources), main: rect(main), body: rect(library.querySelector('.display-media-library-body')), background: getComputedStyle(library).backgroundColor, selected: getComputedStyle(sources.querySelector('button')).color, sourceScroll: sources.scrollWidth, sourceWidth: sources.clientWidth };
+                const result = { hiddenQuick, hiddenLibrary, quick: rect(quick), first: rect(sections[0]), second: rect(sections[1]), main: rect(main), body: rect(library.querySelector('.display-media-library-body')), background: getComputedStyle(library).backgroundColor };
                 quick.hidden = true; library.hidden = true;
                 return result;
             }, theme);
             assert.equal(value.hiddenQuick, 'none');
             assert.equal(value.hiddenLibrary, 'none');
             assert.equal(value.background, 'rgba(8, 10, 16, 0)');
-            assert.equal(value.selected, 'rgb(255, 255, 255)');
+            assert.ok(value.main.width >= width - 2, `${width}/${theme} 媒体区域应占满可用宽度`);
             assert.ok(value.quick.left >= 0 && value.quick.right <= width && value.quick.bottom <= height, `${width}/${theme} 快捷面板溢出`);
             if (horizontal) {
                 assert.ok(value.first.right <= value.second.left && Math.abs(value.first.top - value.second.top) < 2, `${width}/${theme} 快捷控制应并排`);
-                assert.ok(value.sources.right <= value.main.left && value.sources.top === value.main.top, `${width}/${theme} 来源应在左侧`);
             } else {
                 assert.ok(value.first.bottom <= value.second.top, `${width}/${theme} 快捷控制应单列`);
-                assert.ok(value.sources.bottom <= value.main.top + 1 && value.main.width >= width - 2, `${width}/${theme} 来源应在顶部`);
-                assert.ok(value.sourceScroll > value.sourceWidth, `${width}/${theme} 来源应可横向滚动`);
             }
         }
     }
