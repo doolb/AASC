@@ -612,7 +612,7 @@ const SelfTest = {
                     const responses = await Promise.all(['/control', '/js/media-masonry.js', '/css/control-workspace.css'].map(url => fetch(url, { cache: 'no-store' })));
                     if (responses.some(response => !response.ok)) return { success: false, message: '媒体卡片布局资源不可读取' };
                     const [html, script, style] = await Promise.all(responses.map(response => response.text()));
-                    const valid = html.includes('js/media-masonry.js') && script.includes('loadedmetadata') && script.includes('naturalWidth') && style.includes('.media-masonry-ready');
+                    const valid = html.includes('js/media-masonry.js') && script.includes('loadedmetadata') && script.includes('naturalWidth') && style.includes('.media-masonry-ready') && style.includes('.media-library-item.folder .item-name');
                     return { success: valid, message: valid ? '媒体卡片布局资源正常' : '媒体卡片布局资源缺失', details: '尺寸加载、重排与触屏操作由浏览器测试和设备验收覆盖' };
                 } catch (error) { return { success: false, message: `媒体卡片检查失败: ${error.message}` }; }
             }

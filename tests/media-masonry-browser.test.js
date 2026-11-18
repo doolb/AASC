@@ -92,3 +92,48 @@ test('媒体瀑布流按真实尺寸重排，动态加载和缩放不重叠', { 
     await page.click('#wide .item-actions button');
     assert.equal(await page.evaluate(() => window.played), 1);
 });
+
+test('文件夹长名称在多操作按钮、主题和不同屏幕下可见', { skip: !fs.existsSync(chrome), timeout: 30000 }, async t => {
+    const $ = cheerio.load(fs.readFileSync(path.join(root, 'upload.html'), 'utf8'));
+    $('script,link,style').remove();
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.setViewport({ width: 390, height: 844, hasTouch: true });
+    await page.setContent($.html());
+    for (const css of ['upload.css', 'chat.css', 'media-library.css', 'theme.css', 'control-workspace.css']) await page.addStyleTag({ path: path.join(root, 'css', css) });
+    await page.addStyleTag({ content: '*, *::before, *::after { transition:none !important; animation:none !important; }' });
+    await page.evaluate(() => {
+        document.querySelectorAll('.panel').forEach(panel => panel.style.display = panel.id === 'panel-media' ? 'block' : 'none');
+        const list = document.getElementById('mediaLibraryContent');
+        list.innerHTML = Array.from({ length: 6 }, (_, index) => `<div class="media-library-item folder" data-index="${index}" onclick="window.opened = ${index}"><div class="folder-icon">📁</div><div class="item-name">超长文件夹名称用于检查换行和显示完整程度ABCDEFGHIJK${index}</div><div class="item-actions"><button onclick="event.stopPropagation(); window.action = 'batch'">批量播放</button><button>下载到媒体库</button><button>删除</button></div></div>`).join('');
+    });
+    await page.addScriptTag({ path: path.join(root, 'js/media-masonry.js') });
+    for (const [width, height] of [[390, 844], [1440, 900]]) {
+        await page.setViewport({ width, height, hasTouch: true });
+        for (const theme of ['dark', 'light', 'warm']) {
+            await page.evaluate(theme => { document.documentElement.dataset.theme = theme; document.documentElement.dataset.themeMode = theme === 'dark' ? 'dark' : 'light'; }, theme);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            const data = await page.evaluate(() => [...document.querySelectorAll('#mediaLibraryContent .folder')].map(card => {
+                const name = card.querySelector('.item-name'); const actions = card.querySelector('.item-actions');
+                const box = element => { const r = element.getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, height:r.height }; };
+                return { card:box(card), name:box(name), actions:box(actions), nameHeight:name.clientHeight, nameScroll:name.scrollHeight, opacity:getComputedStyle(actions).opacity, color:getComputedStyle(name).color, cardColor:getComputedStyle(card).color };
+            }));
+            for (const item of data) {
+                assert.ok(item.name.height >= 32 && item.nameHeight >= item.nameScroll, `${width}/${theme} 名称被压缩或裁切`);
+                assert.ok(item.name.top >= item.card.top && item.actions.bottom <= item.card.bottom + 1, `${width}/${theme} 内容超出卡片`);
+                assert.equal(item.opacity, '1', `${width}/${theme} 触屏按钮应可见`);
+                assert.equal(item.color, item.cardColor, `${width}/${theme} 名称应使用主题文字色`);
+            }
+            for (let i = 0; i < data.length; i++) for (let j = i + 1; j < data.length; j++) {
+                const a=data[i].card, b=data[j].card;
+                assert.ok(a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1, `${width}/${theme} 文件夹卡片重叠`);
+            }
+        }
+    }
+    await page.click('[data-index="0"] .item-actions button');
+    assert.equal(await page.evaluate(() => window.action), 'batch');
+    assert.equal(await page.evaluate(() => window.opened), undefined);
+    await page.click('[data-index="1"] .item-name');
+    assert.equal(await page.evaluate(() => window.opened), 1);
+});
