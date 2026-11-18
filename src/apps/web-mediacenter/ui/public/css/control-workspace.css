@@ -167,7 +167,7 @@ body {
 #panel-media .media-library-item:not(.folder):not(.unavailable):focus-within .item-actions { opacity: 1; }
 #panel-media .media-library-item .item-actions button, #panel-media .media-library-item .item-actions .btn-download { flex: 1 1 auto; min-width: 0; padding: 6px; }
 #panel-media .media-library-item .playing-badge { top: 8px; bottom: auto; }
-#panel-media .media-library-item.folder { background: var(--card-background); color: var(--text-primary); }
+#panel-media .media-library-item.folder { background: var(--bg-secondary); color: var(--text-primary); }
 /* 文件夹的内容可高于默认比例；名称和按钮不能被 flex 挤成零高度。 */
 #panel-media .media-masonry-ready > .media-library-item.folder { aspect-ratio: auto; min-height: 140px; padding: 14px 12px; }
 #panel-media .media-library-item.folder .folder-icon,
@@ -175,6 +175,14 @@ body {
 #panel-media .media-library-item.folder .item-actions { flex-shrink: 0; }
 #panel-media .media-library-item.folder .item-name { width: 100%; white-space: normal; overflow-wrap: anywhere; color: var(--text-primary); }
 #panel-media .media-library-item.folder .item-actions { max-width: 100%; justify-content: center; flex-wrap: wrap; }
+/* 目录附加信息及操作均与当前主题配对，避免浅色卡片上出现浅色文字。 */
+#panel-media .media-library-item.folder .item-meta { color: var(--text-primary) !important; }
+#panel-media .media-library-item.folder .share-link-actions { max-width: 100%; flex-wrap: wrap; }
+#panel-media .media-library-item.folder :is(.item-actions, .share-link-actions) button {
+    background: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+}
 
 /* 只有带封面的远程条目使用全图卡片；无封面条目保留正常文本流。 */
 #panel-media .bilibili-video-card:has(.bilibili-video-cover) { position: relative; display: flex; flex-direction: column; justify-content: flex-end; aspect-ratio: 4 / 3; padding: 10px; overflow: hidden; isolation: isolate; }

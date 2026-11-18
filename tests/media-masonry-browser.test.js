@@ -137,3 +137,41 @@ test('文件夹长名称在多操作按钮、主题和不同屏幕下可见', { 
     await page.click('[data-index="1"] .item-name');
     assert.equal(await page.evaluate(() => window.opened), 1);
 });
+
+test('普通目录和分享目录在所有现有主题中保持文字对比度', { skip: !fs.existsSync(chrome), timeout: 30000 }, async t => {
+    const $ = cheerio.load(fs.readFileSync(path.join(root, 'upload.html'), 'utf8'));
+    $('script,link,style').remove();
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.setViewport({ width: 390, height: 844, hasTouch: true });
+    await page.setContent($.html());
+    for (const css of ['upload.css', 'chat.css', 'media-library.css', 'theme.css', 'control-workspace.css']) await page.addStyleTag({ path: path.join(root, 'css', css) });
+    await page.addStyleTag({ content: '*, *::before, *::after { transition:none !important; animation:none !important; }' });
+    await page.evaluate(() => {
+        document.querySelectorAll('.panel').forEach(panel => panel.style.display = panel.id === 'panel-media' ? 'block' : 'none');
+        document.getElementById('mediaLibraryContent').innerHTML = '<div class="media-library-item folder"><div class="folder-icon">📁</div><div class="item-name">普通目录</div><div class="item-actions"><button class="btn-batch">批量播放</button><button class="btn-delete">删除</button></div></div><div class="media-library-item folder share-link-card"><div class="folder-icon">📁</div><div class="item-name">夸克目录</div><div class="item-meta">主服务器</div><div class="share-link-actions"><button>移动</button><button>设置</button><button>下载</button></div></div>';
+    });
+    await page.addScriptTag({ path: path.join(root, 'js/media-masonry.js') });
+    const themes = ['dark','light','warm','pink','lavender-yellow','red-blue','gold','mint','ocean','forest','slate','algae-salt','girl-pink','rose-gold','new-year-red'];
+    for (const theme of themes) {
+        const checks = await page.evaluate(theme => {
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.dataset.themeMode = theme === 'dark' ? 'dark' : 'light';
+            // 按 WCAG 相对亮度计算实际文字色与其不透明背景的对比度。
+            const luminance = color => {
+                const values = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => x / 255).map(x => x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+                return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+            };
+            const contrast = (foreground, background) => {
+                const a = luminance(foreground), b = luminance(background);
+                return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+            };
+            return [...document.querySelectorAll('#mediaLibraryContent .folder')].flatMap(card => {
+                const background = getComputedStyle(card).backgroundColor;
+                return [...card.querySelectorAll('.item-name, .item-meta, button')].map(node => ({ label: node.textContent, foreground: getComputedStyle(node).color, background: node.tagName === 'BUTTON' ? getComputedStyle(node).backgroundColor : background, ratio: contrast(getComputedStyle(node).color, node.tagName === 'BUTTON' ? getComputedStyle(node).backgroundColor : background) }));
+            });
+        }, theme);
+        for (const item of checks) assert.ok(item.ratio >= 4.5, `${theme} ${item.label} 对比度不足：${item.ratio.toFixed(2)} ${item.foreground} / ${item.background}`);
+    }
+});
