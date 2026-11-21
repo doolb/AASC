@@ -6,6 +6,18 @@
 
 ## 1. PlaylistManager 模块
 
+### URL 列表请求
+
+```text
+playlistUrlRequest 到达时:
+    拒绝 temp=true；验证 urls 是 1 至 10000 项数组
+    对每项验证 url 为无凭据的绝对 HTTP(S) 地址，长度不超过 16384
+    验证 mediaType 为 image、gif、video、audio、html 或 text
+    保留输入顺序，生成 {url, fileName, mediaType}；text 可带 plain/markdown format
+    不下载媒体，复用普通 playlistStart、循环、进度、控制与非临时状态恢复
+    无效项整体返回 playlistError；不可因过滤而静默漏项
+```
+
 ### playlist-app-service.js
 
 ```

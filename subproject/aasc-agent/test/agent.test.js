@@ -23,3 +23,34 @@ test('委派后以目标角色权限执行，未授权能力被拒绝', async ()
   await assert.rejects(agent.run('不存在', '任务'), /未知角色/);
   await assert.rejects(createHieTool().execute({}), /未连接/);
 });
+
+test('工具批次结束后可交回宿主，先确认批次再返回且不重复调用模型', async () => {
+  const calls = [];
+  const agent = new Agent({
+    roles: [{ name: '主管', permissions: [] }, { name: '游戏', permissions: ['hie'] }],
+    commandRoles: ['游戏'], defaultRole: '主管', maxModelTurns: 1,
+    directDecision: () => ({ tool: 'hie', input: {} }),
+    tools: { hie: { async execute() { calls.push('tool'); return { checked: true }; } } },
+    model: {
+      async respond() { calls.push('model'); return { commands: ['[游戏,run]'] }; },
+      async beginToolBatch() { calls.push('begin'); },
+      async finishToolBatch() { calls.push('finish'); },
+    },
+  });
+  const result = await agent.chat('处理缺口', { returnAfterToolBatch: true });
+  assert.deepEqual(calls, ['model', 'begin', 'tool', 'finish']);
+  assert.equal(result.results[0].result.checked, true);
+});
+
+test('交回中层时拒绝多个命令，任何工具均不执行', async () => {
+  let calls = 0;
+  const agent = new Agent({
+    roles: [{ name: '主管', permissions: [] }, { name: '游戏', permissions: ['hie'] }],
+    commandRoles: ['游戏'], defaultRole: '主管', directDecision: () => ({ tool: 'hie', input: {} }),
+    tools: { hie: { async execute() { calls++; } } },
+    model: { async respond() { return { commands: ['[游戏,run]', '[游戏,snapshot]'] }; } },
+  });
+  const result = await agent.chat('处理缺口', { returnAfterToolBatch: true });
+  assert.match(result.text, /只能包含一个命令/);
+  assert.equal(calls, 0);
+});

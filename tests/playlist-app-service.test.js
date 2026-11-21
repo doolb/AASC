@@ -26,6 +26,25 @@ const fakeManager = {
     }
 };
 
+test('URL 列表保留顺序、类型及查询参数，并整体拒绝无效项', () => {
+    const manager = new PlaylistManager(fakeManager);
+    const urls = [
+        { url: 'http://192.168.1.39:3089/api/proxy?url=https%3A%2F%2Fa.example%2Fvideo.m3u8%3Fx%3D1', mediaType: 'video', fileName: '视频' },
+        { url: 'https://example.com/pic.gif', mediaType: 'gif', fileName: '动图' },
+        { url: 'https://example.com/note', mediaType: 'text', format: 'markdown' }
+    ];
+    const result = manager.buildFromUrls(urls);
+    assert.deepStrictEqual(result.map(item => item.mediaType), ['video', 'gif', 'text']);
+    assert.strictEqual(result[0].url, urls[0].url);
+    assert.strictEqual(result[2].format, 'markdown');
+    for (const bad of ['file:///secret', 'http://user:pass@example.com/file', '/relative', 'javascript:alert(1)']) {
+        assert.throws(() => manager.buildFromUrls([urls[0], { url: bad, mediaType: 'image' }]), /地址无效/);
+    }
+    assert.throws(() => manager.buildFromUrls([]), /数量/);
+    assert.throws(() => manager.buildFromUrls([{ url: 'https://example.com/', mediaType: 'unknown' }]), /媒体类型/);
+    assert.throws(() => manager.buildFromUrls([{ url: 'https://example.com/', mediaType: 'text', format: 'html' }]), /格式/);
+});
+
 const htmlTree = {
     '/': [
         { name: 'index.html', path: '/index.html', type: 'file', mediaType: 'html', modifiedTime: new Date('2026-01-02'), url: '/media/1/index.html' },

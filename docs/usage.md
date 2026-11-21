@@ -386,6 +386,8 @@ Node子显示端下载/Buffer播放不再写audio_*.wav。Windows使用已有Win
 
 命令行调用服务器 API 的完整说明见：[API 使用与命令行工具](api-usage.md)。
 
+其他客户端接入显示端、单媒体、背景媒体及批量播放，请参见[显示端与媒体播放 API](usage/display-media-api.md)。
+
 ### 1.1 安装依赖
 
 ```bash

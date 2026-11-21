@@ -12,6 +12,11 @@ const map = {
 };
 
 describe('GoalPlanner', () => {
+  it('未达到 success 时仍可规划，但不满足前置条件时阻塞', () => {
+    const planner = new GoalPlanner();
+    expect(planner.expand({ state: { won: false } }, { id: 'pig', success: 'state.won == true' })).toMatchObject({ status: 'ready', condition: { satisfied: false } });
+    expect(planner.expand({ state: { ready: false } }, { id: 'pig', condition: 'state.ready == true' })).toMatchObject({ status: 'blocked', reason: 'goal-condition-not-satisfied' });
+  });
   it('expands a retreat goal through a map navigator and preserves the low-level condition', () => {
     const mapNavigator = new Moba25dNavigator({ map });
     const planner = new GoalPlanner({ navigators: { 'map-2.5d': mapNavigator } });

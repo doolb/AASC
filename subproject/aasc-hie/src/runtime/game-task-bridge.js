@@ -72,7 +72,12 @@ export class GameTaskBridge {
     if (!/^:[0-9]+(?:\.[0-9]+)?$/.test(display)) throw new Error('invalid display');
     const args = ['scripts/auto-pig-levels.py', '--start-level', String(options.startLevel),
       '--window-id', options.windowId, '--display', display, '--max-levels', String(maxLevels)];
+    if (options.outputRoot !== undefined) {
+      if (typeof options.outputRoot !== 'string' || !options.outputRoot) throw new Error('invalid outputRoot');
+      args.push('--output-root', resolve(options.outputRoot));
+    }
     if (options.duckAuto === true) args.push('--duck-auto');
+    if (options.inspectOnly === true) args.push('--inspect-only');
     this.running = true;
     try {
       return await new Promise((resolveResult, reject) => {

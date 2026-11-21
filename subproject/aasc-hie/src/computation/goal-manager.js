@@ -28,7 +28,7 @@ const evaluateNode = async (node, goal, worldState, progressStore) => {
     children.push(await evaluateNode(node.children[index], goal?.steps?.[index] ?? { id: node.children[index].goalId }, worldState, progressStore));
   }
   const progress = await progressStore.get(goal ?? { id: node.goalId });
-  const conditionComplete = node.condition?.expression !== undefined && node.condition?.satisfied === true;
+  const conditionComplete = node.completion?.expression !== undefined && node.completion?.satisfied === true;
   const childrenComplete = children.length > 0 && children.every((child) => child.completed);
   const completed = progress.completed === true || (children.length > 0 ? childrenComplete : conditionComplete);
   const status = completed ? 'complete' : (node.status === 'blocked' ? 'blocked' : 'pending');

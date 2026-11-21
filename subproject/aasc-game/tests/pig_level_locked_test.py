@@ -18,6 +18,31 @@ spec.loader.exec_module(app)
 
 
 class LockedPlanTest(unittest.TestCase):
+    def test_bomb_policy_rejects_both_directions_of_contact(self):
+        pigs = [
+            {'id': 1, 'direction': 'east', 'grid': {'col': 0, 'row': 0, 'cells': [[0, 0], [1, 0]]}},
+            {'id': 2, 'direction': 'west', 'kind': 'bomb', 'grid': {'col': 4, 'row': 0, 'cells': [[4, 0], [5, 0]]}},
+        ]
+        data = {'grid': [0, 0, 1, 6, 1], 'pigs': pigs, 'locks': {}, 'bombs': {'2': 3}, 'bomb_policy': 'avoid_contact'}
+        first = {'index': 0, 'pig_id': 1, 'direction': 'east', 'from': [0, 0], 'to': [2, 0], 'exited': False, 'travel_cells': 2}
+        second = {'index': 1, 'pig_id': 2, 'direction': 'west', 'from': [4, 0], 'to': [2, 0], 'exited': False, 'travel_cells': 2}
+        for action in (first, second):
+            with self.assertRaisesRegex(ValueError, '禁止'):
+                app.validate_plan(dict(data, actions=[action]), require_complete=False)
+        with self.assertRaisesRegex(ValueError, '搜索'):
+            pig_locked_candidate.solve(data, seeds=(1,))
+
+    def test_bomb_policy_finds_and_replays_collision_free_exit(self):
+        pigs = [{'id': n, 'direction': 'west', 'grid': {'col': 0, 'row': n - 1,
+                 'cells': [[0, n - 1], [1, n - 1]]}} for n in (1, 2)]
+        data = {'grid': [0, 0, 1, 4, 2], 'pigs': pigs, 'locks': {}, 'bombs': {'2': 3},
+                'bomb_policy': 'avoid_contact'}
+        solved = pig_locked_candidate.solve(data, strategy='auto')
+        self.assertTrue(all(action['exited'] for action in solved['actions']))
+        self.assertEqual(app.validate_plan(solved), {})
+        with self.assertRaisesRegex(ValueError, '实机画面核对'):
+            app.run(None, solved, [0, 0, 4, 2], Path('/unused'))
+
     def test_search_limit_returns_verified_partial_path(self):
         with tempfile.TemporaryDirectory() as directory:
             executable = str(Path(directory) / 'solver')

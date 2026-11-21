@@ -53,7 +53,7 @@ def prepare(pigs, columns, rows):
     return tuple(state), tuple(directions)
 
 
-def actions(state, directions, columns, rows, blockers=(), lengths=None, widths=None):
+def actions(state, directions, columns, rows, blockers=(), lengths=None, widths=None, springs=()):
     """假设点击后沿原方向滑到障碍前或离开；真实游戏规则仍须逐步核对。"""
     lengths = lengths if lengths is not None else [2] * len(state)
     widths = widths if widths is not None else [1] * len(state)
@@ -76,7 +76,7 @@ def actions(state, directions, columns, rows, blockers=(), lengths=None, widths=
                 break
             front = [(nx + (j if dy else 0), ny + (j if dx else 0)) for j in range(widths[index])]
             if any(occupied.get(cell) is not None and occupied[cell] != index for cell in front):
-                if distance:
+                if distance and index not in springs:
                     result.append((False, index, (position[0] + dx * distance, position[1] + dy * distance), distance))
                 break
             distance += 1
@@ -151,7 +151,7 @@ def validate_candidate_plan(pigs, ducks, columns, rows, candidate, blockers=(), 
             proposed = (action['exited'], index, destination, action['travel_cells'])
             if (action['pig_id'] != pigs[index]['id'] or action['direction'] != directions[index]
                     or tuple(action['from']) != state[index]
-                    or proposed not in actions(state, directions, columns, rows, remaining + fixed, lengths, widths)):
+                    or proposed not in actions(state, directions, columns, rows, remaining + fixed, lengths, widths, {i for i, pig in enumerate(pigs) if pig.get('kind') == 'spring'})):
                 raise ValueError('候选动作与当前状态或合法移动不一致')
             following = list(state)
             following[index] = destination
@@ -196,7 +196,7 @@ def solve_duck_hypothesis(pigs, ducks, columns, rows, max_states=100000, timeout
     remaining, initially_departed = settle_ducks(initial, directions, duck_cells, columns, rows, lengths, fixed, widths)
     def duck_actions(state, current_ducks):
         # 优先离场，再固定打散编号；避免长距离优先反复落入同一类死胡同。
-        candidates = actions(state, directions, columns, rows, current_ducks + fixed, lengths, widths)
+        candidates = actions(state, directions, columns, rows, current_ducks + fixed, lengths, widths, {i for i, pig in enumerate(pigs) if pig.get('kind') == 'spring'})
         return sorted(candidates, key=lambda item: (not item[0], (item[1] * 1103515245 + 12345) & 0xffffffff))
     started = time.monotonic()
     first = (initial, remaining)
@@ -239,7 +239,7 @@ def solve(pigs, columns, rows, max_states=100000, timeout=15.0, order_seed=None,
     widths = [pig.get('width', 1) for pig in pigs]
     fixed = validate_blockers(blockers, initial, directions, lengths, columns, rows, widths=widths)
     def ordered_actions(state):
-        choices = actions(state, directions, columns, rows, blockers=fixed, lengths=lengths, widths=widths)
+        choices = actions(state, directions, columns, rows, blockers=fixed, lengths=lengths, widths=widths, springs={i for i, pig in enumerate(pigs) if pig.get('kind') == 'spring'})
         if order_seed is None:
             return choices
         def rank(item):

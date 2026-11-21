@@ -5,7 +5,7 @@ const path = require('node:path');
 const level = require('../web/pig-level/level-48.json');
 const level40 = require('../web/pig-level/level-40.json');
 const engine = import('../web/pig-level/engine.mjs');
-const supportedLevels = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70];
+const supportedLevels = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 82];
 
 for (const levelId of supportedLevels) {
     test(`第${levelId}关网页数据可独立重放`, async () => {
@@ -137,4 +137,51 @@ test('小象整个前沿均须畅通才能移动', async () => {
         { id: 2, x: 2, y: 1, length: 1, direction: 'east' }
     ] };
     assert.equal(movePig(board, createState(board), 1).ok, false);
+});
+
+test('第82关真实路线第73步碰撞减数，撤回快照不受影响', async () => {
+    const level82 = require('../web/pig-level/level-82.json');
+    const { createState, cloneState, movePig, sameAction } = await engine;
+    let state = createState(level82);
+    assert.equal(state.pigs.filter(pig => pig.kind === 'bomb').length, 12);
+    for (let index = 0; index < level82.steps.length; index += 1) {
+        const saved = cloneState(state);
+        const result = movePig(level82, state, level82.steps[index].id);
+        assert.ok(result.ok && !result.state.failed && sameAction(result.action, level82.steps[index]));
+        if (index === 72) {
+            assert.equal(saved.pigs.find(pig => pig.id === 87).bombCount, 3);
+            assert.equal(result.state.pigs.find(pig => pig.id === 87).bombCount, 2);
+            assert.equal(movePig(level82, saved, level82.steps[index].id).state.pigs.find(pig => pig.id === 87).bombCount, 2);
+        }
+        state = result.state;
+    }
+    assert.equal(state.exitCount, 91);
+    assert.ok(state.pigs.every(pig => pig.gone));
+});
+
+test('炸弹碰撞、爆炸和快照恢复', async () => {
+    const { createState, cloneState, movePig, verifyPlan } = await engine;
+    const board = { columns: 5, rows: 1, pigs: [
+        { id: 1, x: 0, y: 0, length: 1, direction: 'east', kind: 'bomb', bombCount: 3 },
+        { id: 2, x: 3, y: 0, length: 1, direction: 'west', kind: 'bomb', bombCount: 3 }
+    ] };
+    const initial = createState(board);
+    const first = movePig(board, initial, 1);
+    assert.deepEqual(first.action.to, [2, 0]);
+    assert.deepEqual(first.state.pigs.map(pig => pig.bombCount), [2, 2]);
+    const saved = cloneState(first.state);
+    const second = movePig(board, first.state, 2);
+    assert.deepEqual(second.state.pigs.map(pig => pig.bombCount), [1, 1]);
+    const third = movePig(board, second.state, 1);
+    assert.equal(third.state.failed, true);
+    assert.equal(movePig(board, third.state, 2).ok, false);
+    assert.deepEqual(saved.pigs.map(pig => pig.bombCount), [2, 2]);
+    assert.equal(saved.failed, false);
+    assert.deepEqual(initial.pigs.map(pig => pig.bombCount), [3, 3]);
+    assert.throws(() => verifyPlan({ ...board, steps: [first.action, second.action, third.action] }), /第 3 步/);
+    const ordinary = { ...board, pigs: [{ ...board.pigs[0], kind: 'normal' }, board.pigs[1]] };
+    const hit = movePig(ordinary, createState(ordinary), 1);
+    assert.equal(hit.state.pigs[1].bombCount, 2);
+    const movingBomb = { ...board, pigs: [board.pigs[0], { ...board.pigs[1], kind: 'normal' }] };
+    assert.equal(movePig(movingBomb, createState(movingBomb), 1).state.pigs[0].bombCount, 2);
 });

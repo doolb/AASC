@@ -2,7 +2,8 @@ import { createState, cloneState, movePig, sameAction, verifyPlan } from './engi
 
 const SUPPORTED_LEVELS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '70'];
 const $ = id => document.getElementById(id);
-const ui = { board: $('board'), remaining: $('remaining'), rope: $('ropeCount'), status: $('status'), slider: $('slider'), previous: $('previous'), next: $('next'), undo: $('undo'), hint: $('hintToggle'), step: $('stepText'), progress: $('progressText'), win: $('win') };
+SUPPORTED_LEVELS.push('82');
+const ui = { board: $('board'), remaining: $('remaining'), rope: $('ropeCount'), status: $('status'), slider: $('slider'), previous: $('previous'), next: $('next'), undo: $('undo'), hint: $('hintToggle'), step: $('stepText'), progress: $('progressText'), win: $('win'), failure: $('failure') };
 let level;
 let state;
 let cursor = 0;
@@ -88,7 +89,7 @@ function seek(target) {
     history = [];
     for (let index = 0; index < target; index += 1) {
         const result = movePig(level, state, level.steps[index].id);
-        if (!result.ok || !sameAction(result.action, level.steps[index])) throw new Error(`第 ${index + 1} 步回放失败`);
+        if (!result.ok || result.state.failed || !sameAction(result.action, level.steps[index])) throw new Error(`第 ${index + 1} 步回放失败`);
         history.push({ state: cloneState(state), cursor });
         state = result.state;
         cursor += 1;
@@ -119,7 +120,8 @@ function pigArt(pig) {
     const lockRemaining = pig.kind === 'lock' ? Math.max(0, pig.unlockAfter - state.exitCount) : 0;
     const lock = lockRemaining ? `<rect x="${cx - 23}" y="${cy - 20}" width="46" height="40" rx="8" fill="#edb83f" stroke="#a66b22" stroke-width="3"/><text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="27" font-weight="bold" fill="white">${lockRemaining}</text>` : '';
     const scissors = pig.kind === 'scissors' ? `<text x="${cx}" y="${cy + 15}" text-anchor="middle" font-size="49">✂️</text>` : '';
-    return `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true"><ellipse cx="${cx}" cy="${cy}" rx="${width / 2 - 9}" ry="${height / 2 - 9}" fill="#f4a6a2" stroke="#ce807d" stroke-width="3"/><ellipse cx="${hx}" cy="${hy}" rx="27" ry="27" fill="#f6b7ad" stroke="#d48580" stroke-width="3"/><g fill="#5b3934">${eyes}</g>${rope}${scissors}${lock}</svg>`;
+    const bomb = pig.kind === 'bomb' ? `<rect x="${cx - 22}" y="${cy - 22}" width="44" height="44" rx="10" fill="#9c4938" stroke="#663025" stroke-width="3"/><text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="29" font-weight="bold" fill="white">${pig.bombCount}</text>` : '';
+    return `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true"><ellipse cx="${cx}" cy="${cy}" rx="${width / 2 - 9}" ry="${height / 2 - 9}" fill="#f4a6a2" stroke="#ce807d" stroke-width="3"/><ellipse cx="${hx}" cy="${hy}" rx="27" ry="27" fill="#f6b7ad" stroke="#d48580" stroke-width="3"/><g fill="#5b3934">${eyes}</g>${rope}${scissors}${lock}${bomb}</svg>`;
 }
 
 function render() {
@@ -175,8 +177,9 @@ function render() {
         button.style.width = `${100 * (horizontal ? pig.length : (pig.width || 1)) / level.columns}%`;
         button.style.height = `${100 * (horizontal ? (pig.width || 1) : pig.length) / level.rows}%`;
         const locked = pig.kind === 'lock' && state.exitCount < pig.unlockAfter;
-        button.disabled = locked || (pig.kind === 'rope' && state.remainingScissors > 0);
-        button.setAttribute('aria-label', `${pig.kind === 'elephant' ? '小象' : pig.kind === 'scissors' ? '剪刀猪' : pig.kind === 'rope' ? '绳子猪' : pig.kind === 'lock' ? '锁猪' : '小猪'} ${pig.id}${locked ? `，锁还剩 ${pig.unlockAfter - state.exitCount}` : button.disabled ? '，绳子未解开' : ''}`);
+        button.disabled = state.failed || locked || (pig.kind === 'rope' && state.remainingScissors > 0);
+        const label = pig.kind === 'bomb' ? `炸弹猪 ${pig.id}，剩余 ${pig.bombCount} 次碰撞` : `${pig.kind === 'elephant' ? '小象' : pig.kind === 'scissors' ? '剪刀猪' : pig.kind === 'rope' ? '绳子猪' : pig.kind === 'lock' ? '锁猪' : '小猪'} ${pig.id}${locked ? `，锁还剩 ${pig.unlockAfter - state.exitCount}` : pig.kind === 'rope' && state.remainingScissors > 0 ? '，绳子未解开' : ''}`;
+        button.setAttribute('aria-label', label);
         button.innerHTML = pigArt(pig) + (hinted ? '<span class="hint-arrow">▼</span>' : '');
         button.addEventListener('click', () => apply(pig.id));
         fragment.append(button);
@@ -186,15 +189,17 @@ function render() {
     const lock = state.pigs.find(pig => pig.kind === 'lock' && !pig.gone);
     ui.rope.textContent = lock ? (state.exitCount < lock.unlockAfter ? `🔒 还需 ${lock.unlockAfter - state.exitCount} 只` : '🔓 锁已解开') : level.id === 40 ? '🔓 锁已解开' : state.remainingScissors ? `✂ 还需 ${state.remainingScissors} 把剪刀` : '✂ 绳子已全部解开';
     if (level.cages?.length) ui.rope.textContent = level.cages.map(cage => `铁笼 ${Math.max(0, cage.unlockAfter - state.exitCount)}`).join(' · ');
+    if (level.pigs.some(pig => pig.kind === 'bomb')) ui.rope.textContent = `💣 剩余 ${state.pigs.filter(pig => pig.kind === 'bomb' && !pig.gone).length} 只`;
     ui.step.textContent = cursor === null ? '自由游玩中' : cursor === level.steps.length ? '步骤已完成' : `下一步 · ${cursor + 1} / ${level.steps.length}`;
     ui.progress.textContent = cursor === null ? '已偏离参考步骤' : `${cursor} / ${level.steps.length}`;
-    ui.status.textContent = notice || (cursor === null ? '拖动进度条可回到参考步骤。' : ui.hint.checked ? '红色光圈提示下一只小猪，也可以自己尝试。' : '点击小猪自由操作，或使用步骤按钮。');
+    ui.status.textContent = state.failed ? '炸弹爆炸，请撤回一步或重新开始。' : notice || (cursor === null ? '拖动进度条可回到参考步骤。' : ui.hint.checked ? '红色光圈提示下一只小猪，也可以自己尝试。' : '点击小猪自由操作，或使用步骤按钮。');
     ui.slider.max = level.steps.length;
     if (cursor !== null) ui.slider.value = cursor;
     ui.previous.disabled = history.length === 0;
     ui.undo.disabled = history.length === 0;
-    ui.next.disabled = cursor === null || cursor >= level.steps.length;
-    ui.win.hidden = remaining !== 0 || state.ducks.length !== 0;
+    ui.next.disabled = state.failed || cursor === null || cursor >= level.steps.length;
+    ui.win.hidden = state.failed || remaining !== 0 || state.ducks.length !== 0;
+    ui.failure.hidden = !state.failed;
 }
 
 async function start() {
@@ -213,7 +218,7 @@ async function start() {
             location.assign(url.toString());
         });
         document.title = `猪了个猪 · 第 ${id} 关`;
-        $('ruleText').textContent = level.cages?.length ? '小猪离场使铁笼计数减少，计数归零后铁笼打开。' : level.pigs.some(pig => pig.kind === 'lock')
+        $('ruleText').textContent = level.pigs.some(pig => pig.kind === 'bomb') ? '炸弹猪碰撞后计数减一，归零爆炸；可以撤回或重新开始。' : level.cages?.length ? '小猪离场使铁笼计数减少，计数归零后铁笼打开。' : level.pigs.some(pig => pig.kind === 'lock')
             ? '每只普通猪离场后锁计数减一；计数归零后才能移动锁猪。'
             : level.pigs.some(pig => pig.kind === 'scissors' || pig.kind === 'rope')
                 ? '剪刀猪离场后会解除一根绳；绳子全部解开后才能移动绳子猪。'
@@ -226,6 +231,8 @@ async function start() {
         ui.hint.addEventListener('change', render);
         $('resetButton').addEventListener('click', () => seek(0));
         $('winReset').addEventListener('click', () => seek(0));
+        $('failureReset').addEventListener('click', () => seek(0));
+        $('failureUndo').addEventListener('click', undo);
         render();
     } catch (error) {
         ui.status.textContent = error.message;

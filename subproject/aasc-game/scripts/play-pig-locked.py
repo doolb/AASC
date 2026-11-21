@@ -19,6 +19,22 @@ pig_cage = app.cage_vision
 
 def validate_plan(data, require_complete=True):
     """独立重放所有动作，禁止提前操作锁猪或接受不完整终态。"""
+    policy = data.get('bomb_policy')
+    if policy is not None and policy != 'avoid_contact':
+        raise ValueError('未知炸弹策略')
+    bombs = set()
+    if policy == 'avoid_contact':
+        if not isinstance(data.get('bombs'), dict) or not data['bombs'] or data.get('ducks'):
+            raise ValueError('炸弹配置无效或与鸭子混合尚未验证')
+        try:
+            bombs = {int(key) for key in data['bombs']}
+        except (ValueError, TypeError) as error:
+            raise ValueError('炸弹编号无效') from error
+        if not bombs <= {pig['id'] for pig in data['pigs']}:
+            raise ValueError('炸弹编号不在布局中')
+        marked = {pig['id'] for pig in data['pigs'] if pig.get('kind') == 'bomb' or pig.get('bomb_limit') is not None}
+        if not marked <= bombs:
+            raise ValueError('炸弹编号未全部声明')
     if data.get('ducks') and data.get('dynamic_cages'):
         raise ValueError('动态铁笼与鸭子混合尚未验证')
     ids = {pig['id'] for pig in data['pigs']}
@@ -79,8 +95,19 @@ def validate_plan(data, require_complete=True):
         candidate = (action['exited'], index, destination, action['travel_cells'])
         if (type(action['exited']) is not bool or action['pig_id'] != pig['id']
                 or action['direction'] != directions[index] or tuple(action['from']) != state[index]
-                or candidate not in app.player.solver.actions(state, directions, grid[3], grid[4], blockers=set(blockers) | active_cage, lengths=lengths, widths=widths)):
+                or candidate not in app.player.solver.actions(state, directions, grid[3], grid[4], blockers=set(blockers) | active_cage, lengths=lengths, widths=widths, springs={i for i, pig in enumerate(pigs) if pig.get('kind') == 'spring'})):
             raise ValueError('计划动作不合法')
+        if bombs and not action['exited']:
+            # 保守搜索不假设可承受碰撞次数；炸弹及被撞炸弹均不得接触。
+            if pig['id'] in bombs:
+                raise ValueError('保守策略禁止炸弹撞击')
+            dx, dy = app.player.solver.VECTORS[directions[index]]
+            own = app.player.solver.cells(destination, directions[index], lengths[index], widths[index])
+            front = {(x + dx, y + dy) for x, y in own} - set(own)
+            bomb_cells = {cell for i, other in enumerate(pigs) if other['id'] in bombs
+                          for cell in app.player.solver.cells(state[i], directions[i], lengths[i], widths[i])}
+            if front & bomb_cells:
+                raise ValueError('保守策略禁止撞击炸弹')
         state[index] = destination
         exits += int(action['exited'])
     if require_complete and any(position is not None for position in state):
@@ -151,7 +178,26 @@ def match_scissors_frame(image, board, pigs, state, directions, grid, scissors, 
     return matched
 
 
-def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells, unknown=(), locks=None, exits=0):
+def cage_blue_regions(image, board, cages):
+    """取得笼外蓝色标记，供已复核的静态未知物件位置核对。"""
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, (90, 50, 40), (135, 255, 255))
+    allowed = mask.copy()
+    allowed[:] = 0
+    x, y, width, height = (round(value) for value in board)
+    allowed[y:y + height, x:x + width] = 255
+    for cage in cages:
+        x, y, width, height = cage['bbox']
+        allowed[max(0, y - 4):min(image.shape[0], y + height + 4),
+                max(0, x - 4):min(image.shape[1], x + width + 4)] = 0
+    mask = cv2.bitwise_and(mask, allowed)
+    count, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+    return [list(map(int, stats[index, :4])) for index in range(1, count)
+            if stats[index, cv2.CC_STAT_AREA] >= 20]
+
+
+def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells, unknown=(), locks=None, exits=0,
+                     protected_cells=(), blue_boxes=()):
     """每次核对笼体轮廓及全部笼外猪；蓝底漏检笼体时回退到已复核笼格边界过滤笼内猪。"""
     if app.auto.ui_state(image) != 'unknown':
         return None
@@ -160,8 +206,18 @@ def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells
     if cages:
         if pig_cage.cells(cages, grid) != expected_set:
             return None
-    elif not expected_set:
-        return None
+    if blue_boxes:
+        current_blue = cage_blue_regions(image, board, cages)
+        if len(current_blue) != len(blue_boxes):
+            return None
+        remaining_blue = list(current_blue)
+        for x, y, width, height in blue_boxes:
+            matches = [box for box in remaining_blue if math.dist((x + width / 2, y + height / 2),
+                       (box[0] + box[2] / 2, box[1] + box[3] / 2)) <= 4
+                       and abs(box[2] - width) <= 6 and abs(box[3] - height) <= 6]
+            if len(matches) != 1:
+                return None
+            remaining_blue.remove(matches[0])
     locks = locks or {}
     hidden = [i for i, pig in enumerate(pigs) if state[i] is not None and exits < locks.get(pig['id'], 0)]
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
@@ -181,17 +237,37 @@ def match_cage_frame(image, board, pigs, state, directions, grid, expected_cells
         detected = [pig for pig in detected if not any(x0 <= pig['center'][0] <= x1 and y0 <= pig['center'][1] <= y1
                                                        for x0, y0, x1, y1 in cage_boxes)]
     detected = [pig for pig in detected if all(math.dist(pig['center'], pigs[i]['center']) > grid[2] * .7 for i in hidden)]
+    fragments = []
     for item in unknown:
+        if (blue_boxes and item.get('direction') == 'unknown'
+                and any(math.dist(item['center'], (box[0] + box[2] / 2, box[1] + box[3] / 2)) <= grid[2] * 1.3
+                        for box in blue_boxes)):
+            fragments.append(item)
+            continue
         matches = [pig for pig in detected if math.dist(pig['center'], item['center']) < grid[2] * .3]
         if len(matches) != 1:
             return None
         detected.remove(matches[0])
+    if fragments:
+        blocked = {tuple(cell) for cell in protected_cells}
+        def is_protected_fragment(pig):
+            if not any(math.dist(pig['center'], item['center']) < grid[2] * 1.5 for item in fragments):
+                return False
+            x, y, width, height = pig['bbox']
+            x0, y0, step, columns, rows = grid
+            cells = {(col, row) for row in range(rows) for col in range(columns)
+                     if x - step / 2 <= x0 + col * step <= x + width + step / 2
+                     and y - step / 2 <= y0 + row * step <= y + height + step / 2}
+            return bool(cells) and cells <= blocked
+        detected = [pig for pig in detected if not is_protected_fragment(pig)]
     visible = [i for i in range(len(pigs)) if i not in hidden]
     return app.player.match_expected(detected, [state[i] for i in visible], [directions[i] for i in visible],
                                      grid, [pigs[i].get('length', 2) for i in visible])
 
 
 def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
+    if data.get('bombs') or any(pig.get('kind') == 'bomb' or pig.get('bomb_limit') is not None for pig in data.get('pigs', [])):
+        raise ValueError('炸弹猪的实机画面核对尚未实现，禁止执行')
     partial = data.get('status') == 'partial'
     locks = validate_plan(data, require_complete=not partial)
     pigs, grid, actions = data['pigs'], data['grid'], data['actions']
@@ -235,7 +311,8 @@ def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
                                                                            for a, b in zip(observed, expected_entities)):
                             raise ValueError('未知物件位置或外观发生变化')
                     if data.get('cage_cells'):
-                        matched = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()), locks, exits)
+                        matched = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()), locks, exits,
+                                                   data.get('blockers', ()) if data.get('cage_blue_markers') else (), data.get('cage_blue_markers', ()))
                     elif data.get('scissors') or data.get('ropes'):
                         matched = match_scissors_frame(latest, board, pigs, state, directions, grid,
                                                        set(data.get('scissors', ())), set(data.get('ropes', ())),
@@ -277,7 +354,8 @@ def run(adapter, data, board, output, wait=1.5, stage_should_stop=None):
                 latest = adapter.capture()
                 try:
                     if data.get('cage_cells'):
-                        final_match = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()), locks, exits)
+                        final_match = match_cage_frame(latest, board, pigs, state, directions, grid, data['cage_cells'], data.get('cage_unknown', ()), locks, exits,
+                                                       data.get('blockers', ()) if data.get('cage_blue_markers') else (), data.get('cage_blue_markers', ()))
                     elif data.get('scissors') or data.get('ropes'):
                         final_match = match_scissors_frame(latest, board, pigs, state, directions, grid,
                                                            set(data.get('scissors', ())), set(data.get('ropes', ())),
@@ -326,9 +404,10 @@ def main():
     parser.add_argument('--level', required=True, type=int)
     parser.add_argument('--window-id', required=True, type=app.player.extract.parse_window_id)
     parser.add_argument('--display', default=':1')
+    parser.add_argument('--output', type=Path, help='新建执行证据目录，不覆盖已有文件')
     args = parser.parse_args()
     data = json.loads(args.plan.read_text(encoding='utf8'))
-    output = ROOT / 'docs/references/pig-game/play-runs' / f"level-{args.level:02d}-locked-{datetime.now():%Y%m%d-%H%M%S-%f}"
+    output = args.output or ROOT / 'docs/references/pig-game/play-runs' / f"level-{args.level:02d}-locked-{datetime.now():%Y%m%d-%H%M%S-%f}"
     print('锁猪关卡资料:', output, flush=True)
     adapter = app.player.X11Adapter(args.display, args.window_id)
     try:

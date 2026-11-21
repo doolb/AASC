@@ -2,10 +2,12 @@ import { parseCommand } from './command.js';
 
 /** 运行时只执行预先注册的能力，不接受模型传入可执行函数。 */
 export class Agent {
-  constructor({ roles, tools, model, maxDelegationDepth = 4, commandRoles = [], maxModelTurns = 4, defaultRole = null }) {
+  constructor({ roles, tools, model, directDecision, maxDelegationDepth = 4, commandRoles = [], maxModelTurns = 4, defaultRole = null }) {
     this.roles = new Map(roles.map(role => [role.name, { ...role, permissions: new Set(role.permissions) }]));
     this.tools = new Map(Object.entries(tools));
     this.model = model;
+    this.directDecision = directDecision;
+    this.chatRunning = false;
     this.maxDelegationDepth = maxDelegationDepth;
     this.commandRoles = new Set(commandRoles);
     if (defaultRole != null && !this.roles.has(defaultRole)) throw new Error('默认角色未注册');
@@ -32,6 +34,7 @@ export class Agent {
   async chat(message, options = {}) {
     if (typeof message !== 'string' || !message.trim()) throw new Error('消息不能为空');
     if (typeof this.model?.respond !== 'function') throw new Error('未配置可对话的模型');
+    if (this.chatRunning) throw new Error('当前 Agent 已有进行中的对话');
     const roleName = options.role ?? this.defaultRole;
     const selected = roleName == null ? null : this.roles.get(roleName);
     if (roleName != null && !selected) throw new Error('未知角色: ' + String(roleName));
@@ -40,12 +43,17 @@ export class Agent {
       .filter(Boolean).map(role => ({ name: role.name, persona: role.persona }));
     const results = [];
     const texts = [];
-    let toolResults = [];
-    let previousReply = null;
+    if (options.initialToolResults != null && !Array.isArray(options.initialToolResults)) throw new Error('初始工具结果无效');
+    let toolResults = options.initialToolResults ?? [];
+    let previousReply = toolResults.length ? { text: message, commands: [] } : null;
     let received = false;
+    this.chatRunning = true;
     try {
       for (let turn = 0; turn < this.maxModelTurns; turn++) {
-        const answer = await this.model.respond({ message, role, roles, toolResults, previousReply });
+        // 宿主可以只压缩交给模型的证据；真实工具结果仍原样返回给调用方。
+        const modelResults = typeof options.projectToolResults === 'function' ? options.projectToolResults(toolResults) : toolResults;
+        if (!Array.isArray(modelResults)) throw new Error('模型工具结果投影无效');
+        const answer = await this.model.respond({ message, role, roles, toolResults: modelResults, previousReply });
         received = true;
         if (typeof answer === 'string') {
           if (!answer && !texts.length) throw new Error('模型返回空回复');
@@ -62,26 +70,43 @@ export class Agent {
           if (!this.commandRoles.has(item.role) || !this.roles.has(item.role)) throw new Error('模型无权调用角色: ' + item.role);
           return item;
         });
+        if (options.returnAfterToolBatch && parsed.length > 1) {
+          return { text: '交回中层的批次只能包含一个命令，已拒绝整批。', results };
+        }
         if (!answer.text && !parsed.length) throw new Error('模型返回空回复');
         if (answer.text) texts.push(answer.text);
         if (!parsed.length) return { text: texts.join('\n'), results };
-        if (turn === this.maxModelTurns - 1) throw new Error('模型调用轮次超限');
+        if (typeof options.shouldSkipCommands === 'function' && options.shouldSkipCommands(parsed)) {
+          return { text: texts.join('\n') || '相同的采集命令没有新进展，已停止。', results };
+        }
+        if (turn === this.maxModelTurns - 1 && !options.returnAfterToolBatch) {
+          if (options.stopAtTurnLimit) return { text: [...texts, '本轮模型调用已达上限，最后提出的命令未执行。'].join('\n'), results };
+          throw new Error('模型调用轮次超限');
+        }
         toolResults = [];
+        if (typeof this.model.beginToolBatch === 'function') await this.model.beginToolBatch(role);
         for (const item of parsed) {
           const result = await this.run(item.role, item.task, item.args, 0, options.onEvent);
           const record = { role: item.role, result };
           results.push(record);
           toolResults.push(record);
         }
+        if (options.returnAfterToolBatch) {
+          // 游戏宿主需要先复查现场并交回中层；持久化已结束的工具批次，避免正常退出被误判为中断。
+          if (typeof this.model.finishToolBatch === 'function') await this.model.finishToolBatch(role);
+          return { text: texts.join('\n'), results };
+        }
         previousReply = { text: answer.text ?? '', commands: [...commands] };
       }
       throw new Error('模型调用轮次超限');
     } catch (error) {
       // 模型已请求本地动作但执行或反馈失败时，不再假定远端会话与本地状态一致。
-      if (received && typeof this.model.markSessionUncertain === 'function') {
+      if (received && !error.retryableSession && typeof this.model.markSessionUncertain === 'function') {
         try { await this.model.markSessionUncertain(role); } catch (_) { /* 保留原始错误。 */ }
       }
       throw error;
+    } finally {
+      this.chatRunning = false;
     }
   }
 
@@ -104,7 +129,8 @@ export class Agent {
       const role = this.roles.get(roleName);
       if (!role) throw new Error('未知角色: ' + roleName);
       if (depth > this.maxDelegationDepth) throw new Error('委派层数超限');
-      const decision = await this.model.decide({ role: { name: role.name, persona: role.persona }, task, args });
+      const direct = typeof this.directDecision === 'function' ? await this.directDecision({ role: role.name, task, args }) : null;
+      const decision = direct ?? await this.model.decide({ role: { name: role.name, persona: role.persona }, task, args });
       if (!decision || typeof decision.tool !== 'string') throw new Error('模型返回无效决策');
       emit('decision', { tool: decision.tool });
       if (!role.permissions.has(decision.tool)) throw new Error('角色无权使用能力: ' + decision.tool);

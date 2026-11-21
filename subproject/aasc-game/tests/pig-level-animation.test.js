@@ -95,6 +95,24 @@ test('离场动画、重复操作和跳转取消保持状态一致', { timeout: 
         await page.waitForSelector('.pig');
         assert.match(page.url(), /level=48/);
         assert.equal(await page.$eval('#progressText', element => element.textContent), '0 / 176');
+        await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.select('#levelSelect', '82')]);
+        await page.waitForSelector('[aria-label^="炸弹猪"]');
+        assert.equal(await page.$eval('#remaining', element => element.textContent), '剩余 91 只');
+        await page.$eval('#slider', element => { element.value = 72; element.dispatchEvent(new Event('input', { bubbles: true })); });
+        assert.match(await page.$eval('[data-pig-id="87"]', element => element.getAttribute('aria-label')), /剩余 3 次/);
+        await page.click('#next');
+        assert.match(await page.$eval('[data-pig-id="87"]', element => element.getAttribute('aria-label')), /剩余 2 次/);
+        await page.click('#undo');
+        assert.match(await page.$eval('[data-pig-id="87"]', element => element.getAttribute('aria-label')), /剩余 3 次/);
+        await page.click('#next');
+        await page.$eval('[data-pig-id="21"]', element => element.click());
+        await page.$eval('[data-pig-id="21"]', element => element.click());
+        assert.equal(await page.$eval('#failure', element => element.hidden), false);
+        await page.click('#failureUndo');
+        assert.equal(await page.$eval('#failure', element => element.hidden), true);
+        assert.match(await page.$eval('[data-pig-id="87"]', element => element.getAttribute('aria-label')), /剩余 1 次/);
+        await page.$eval('#slider', element => { element.value = 104; element.dispatchEvent(new Event('input', { bubbles: true })); });
+        assert.equal(await page.$eval('#win', element => element.hidden), false);
     } finally {
         if (browser) await browser.close();
         server.kill();

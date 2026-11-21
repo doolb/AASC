@@ -111,6 +111,7 @@ export class IntelligenceLayer {
 /** Run instinct, muscle-memory, and intelligence in order and select one plan. */
 export class AutonomyCoordinator {
   constructor(options = {}) {
+    this.intelligenceOnGapOnly = options.intelligenceOnGapOnly === true;
     const layerFor = (value, Layer) => {
       if (!value) return new Layer();
       return typeof value.decide === 'function' ? value : new Layer(value);
@@ -126,7 +127,10 @@ export class AutonomyCoordinator {
     const results = [];
     const gaps = [...(context.gaps ?? [])];
     let shared = { ...context };
-    for (const [, layer] of this.layers) {
+    for (const [name, layer] of this.layers) {
+      if (name === 'intelligence' && this.intelligenceOnGapOnly
+          && results.some(result => (result.plans ?? []).length)
+          && !gaps.some(gap => gap.requiresIntelligence === true)) continue;
       const result = await layer.decide({ ...shared, gaps: [...gaps] });
       results.push(result);
       gaps.push(...(result.gaps ?? []));

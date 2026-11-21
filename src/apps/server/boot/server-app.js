@@ -1642,7 +1642,7 @@ async function startServer() {
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'setVoiceCaptureConfig', 'requestAudioInputDevices', 'setAudioOutputConfig', 'requestAudioOutputDevices', 'requestDisplayRecording', 'stopDisplayRecording',
                 'listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera',
                 'setGlobalRecordingPause',
-                'playlistRequest', 'playlistControl', 'bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove', 'shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet', 'gameDemoStart', 'gameDemoStop',
+                'playlistRequest', 'playlistUrlRequest', 'playlistControl', 'bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove', 'shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet', 'gameDemoStart', 'gameDemoStop',
                 'getWebProxyConfig', 'setWebProxyList', 'setProviderProxy',
                 'taskMediaCollectionsGet', 'taskMediaFolderCreate', 'taskMediaFolderDelete', 'taskMediaAdd', 'taskMediaMove', 'taskMediaRemove'
             ];
@@ -11563,7 +11563,7 @@ async function handleControlMessageFallback(data, ws) {
                         }
                     });
                     return;
-                } else if (data.type === 'playlistRequest') {
+                } else if (data.type === 'playlistRequest' || data.type === 'playlistUrlRequest') {
                     (async () => {
                         try {
                             const displayIds = data.displayIds || [];
@@ -11573,8 +11573,12 @@ async function handleControlMessageFallback(data, ws) {
                             }
                             let playlist;
                             let dynamicCursor = null;
-                            const dynamic = !data.temp && data.libraryType === 'quark';
-                            if (dynamic) {
+                            const urlList = data.type === 'playlistUrlRequest';
+                            const dynamic = !urlList && !data.temp && data.libraryType === 'quark';
+                            if (urlList) {
+                                if (data.temp) throw new Error('URL 列表不能与临时文件模式混用');
+                                playlist = playlistManager.buildFromUrls(data.urls);
+                            } else if (dynamic) {
                                 const cursor = playlistManager.createDirectoryCursor(data.libraryId, data.path, data);
                                 const batch = await nextDynamicPlaylistBatch(cursor, data.remoteNodeId);
                                 playlist = batch.playlist;

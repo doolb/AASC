@@ -7,7 +7,8 @@
     "test": "node --test test/*.test.js",
     "start": "node src/tui-cli.js",
     "tui": "node src/tui-cli.js",
-    "parse": "node src/cli.js"
+    "parse": "node src/cli.js",
+    "pig": "node src/pig-cli.js"
   },
   "engines": {
     "node": ">=18"

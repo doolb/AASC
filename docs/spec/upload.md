@@ -1,5 +1,9 @@
 # 上传功能实现文档
 
+```text
+其他客户端 → 按 docs/usage/display-media-api.md 使用现有 HTTP 与 /control WebSocket 协议
+```
+
 ## 控制端布局与主题
 
 ```text

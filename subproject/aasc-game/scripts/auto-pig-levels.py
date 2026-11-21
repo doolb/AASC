@@ -62,6 +62,30 @@ def same_centers(first, second):
     return True
 
 
+def refine_unknown_directions(candidates, observations):
+    """只有整盘位置稳定且两帧一致时才补充未知方向，输出仍是未复核候选。"""
+    if len(observations) < 2:
+        return 0
+    baseline = [pig['center'] for pig in candidates]
+    if any(not same_centers(baseline, [pig['center'] for pig in frame]) for frame in observations):
+        return 0
+    changed = 0
+    for pig in candidates:
+        if pig['direction'] != 'unknown':
+            continue
+        votes = []
+        for frame in observations:
+            nearby = [item for item in frame if math.dist(pig['center'], item['center']) < 10]
+            if len(nearby) != 1 or nearby[0]['direction'] not in ('north', 'south', 'east', 'west'):
+                break
+            votes.append(nearby[0]['direction'])
+        if len(votes) == len(observations) and len(set(votes)) == 1:
+            pig['direction'] = votes[0]
+            pig['direction_source'] = 'stable_multi_frame_candidate'
+            changed += 1
+    return changed
+
+
 def preserve_animal_guide(image, output):
     """双模板确认新动物说明后留证并停下，等待操作者先取证。"""
     if auto.ui_state(image) != 'animal_guide':
@@ -245,7 +269,7 @@ def stable_initial_with_retries(adapter, level, image, attempts=3):
     raise ValueError('初始画面多组采样均不稳定：' + str(last_error))
 
 
-def run_level(adapter, output, level, initial=None, max_states=100000, timeout=15.0, max_steps=300, wait_seconds=1.5, reviewed_layout=None, duck_auto=False, candidate_plan=None, filter_outside_yellow=False, ocr_options=None, special_layout=None):
+def run_level(adapter, output, level, initial=None, max_states=100000, timeout=15.0, max_steps=300, wait_seconds=1.5, reviewed_layout=None, duck_auto=False, candidate_plan=None, filter_outside_yellow=False, ocr_options=None, special_layout=None, inspect_only=False):
     """完成单关并记录资料；只有下一帧确认位置后才确认上一步。"""
     output.mkdir(parents=True, exist_ok=False)
     image = initial if initial is not None else adapter.capture()
@@ -287,6 +311,37 @@ def run_level(adapter, output, level, initial=None, max_states=100000, timeout=1
             else:
                 raise ValueError('连续画面均与人工复核布局不一致')
         save_or_error(output / 'original.png', image)
+        if inspect_only:
+            # 目标要求的完整策略和特殊物件模型尚未全部接入时，仅留证，不进入任何点击分支。
+            board = player.extract.valid_board(image, None)
+            candidates, _, warnings = player.extract.identify(image, board)
+            if any(pig['direction'] == 'unknown' for pig in candidates):
+                observations = []
+                try:
+                    for _ in range(2):
+                        time.sleep(0.3)
+                        frame = adapter.capture()
+                        if frame.shape != image.shape or auto.ui_state(frame) != 'unknown':
+                            observations = []
+                            break
+                        observed, _, _ = player.extract.identify(frame, board)
+                        observations.append(observed)
+                    refine_unknown_directions(candidates, observations)
+                except (OSError, ValueError, cv2.error):
+                    # 增补失败时保留原始未知值，不影响首帧证据。
+                    pass
+            ducks = auto.find_yellow_ducks(image, board)
+            player.write_json(output / 'level.json', {'level': level, 'status': 'candidates_unverified',
+                              'board': list(board), 'count': len(candidates),
+                              'unknown_directions': sum(pig['direction'] == 'unknown' for pig in candidates),
+                              'pigs': candidates, 'other_entities': ducks, 'warnings': warnings})
+            marked = player.extract.annotate(image, candidates, board, [])
+            if not cv2.imwrite(str(output / 'annotated.png'), marked):
+                raise OSError('无法保存方向标注图')
+            player.write_json(output / 'result.json', {'status': 'inspection_only', 'level': level,
+                              'clicks': 0, 'confirmed': 0, 'screenshot': 'original.png',
+                              'reason': '已采集候选，等待布局与物件机制复核'})
+            return 'inspection_only', image
         board = player.extract.valid_board(image, reference.get('board') if reviewed_layout is not None else None)
         raw, _, warnings = player.extract.identify(image, board)
         ducks = auto.find_yellow_ducks(image, board)
@@ -648,6 +703,7 @@ def main(argv=None):
     parser.add_argument('--display', default=':1')
     parser.add_argument('--output-root', type=Path, default=Path('docs/references/pig-game/play-runs'))
     parser.add_argument('--max-levels', type=int, default=100, help='本次最多尝试的关卡数')
+    parser.add_argument('--inspect-only', action='store_true', help='只采集与识别当前关卡，不执行任何游戏点击')
     parser.add_argument('--from-victory', action='store_true', help='当前停在上一关通关界面，先点击下一关')
     parser.add_argument('--previous-initial', type=Path, help='上一关初始截图，用于确认关卡标题变化')
     parser.add_argument('--wait', type=float, default=1.5)
@@ -661,6 +717,8 @@ def main(argv=None):
     parser.add_argument('--ocr-short-side', type=int, default=640, help='OCR 局部图片短边，0 表示原图（默认 640）')
     parser.add_argument('--ocr-timeout', type=int, default=45, help='单次 OCR 超时秒数（默认 45）')
     args = parser.parse_args(argv)
+    if args.inspect_only and args.from_victory:
+        parser.error('只采集模式不能切换关卡')
     if args.start_level < 1 or args.max_levels < 1 or not math.isfinite(args.wait) or args.wait < 1:
         parser.error('关卡和关数必须为正整数；等待至少 1 秒')
     if args.ocr_short_side != 0 and not 256 <= args.ocr_short_side <= 2048:
@@ -690,7 +748,8 @@ def main(argv=None):
                                                duck_auto=args.duck_auto,
                                                candidate_plan=args.candidate_plan if offset == 0 else None,
                                                filter_outside_yellow=args.filter_outside_yellow if offset == 0 else False,
-                                               ocr_options=ocr_options, special_layout=args.special_layout if offset == 0 else None)
+                                               ocr_options=ocr_options, special_layout=args.special_layout if offset == 0 else None,
+                                               inspect_only=args.inspect_only)
             print(f'第 {level} 关：{status}；资料 {output}', flush=True)
             if status != 'victory':
                 return 2

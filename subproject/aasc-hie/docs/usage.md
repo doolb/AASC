@@ -74,6 +74,10 @@ period boundary without changing the package.
 
 `GameTaskBridge` 从指定的 `aasc-game` 关卡运行目录读取 `level.json`、`plan.json` 和 `result.json`。`snapshot(path, { report: true })` 会在存在失败结果时向构造器传入的 `NavigationGapQueue` 报告证据；缺少尚未生成的文件不会生成虚假结果，格式错误会报错。返回的计划只是数据，不能直接当作已执行指令。
 
+`ScriptMaintenance` 供显式启用的游戏宿主使用，提供 `list()`、`read(name)` 与 `update({name, sha256, content})`。只能修改 `scripts/` 内已存在的普通 JavaScript 文件；摘要必须与当前文件一致，更新后运行语法检查与 HIE 测试，失败时恢复原内容。检查排除两组依赖本机缺失的王者荣耀数据集和导航资源的测试；其他 HIE 测试必须通过。检测到其他进程更改文件时不会覆盖其修改。
+
+`PigNavigation` 加载 `data/packages/pig-game.nav.md`，通过 `GoalManager` 记录采集、复核、求解、执行和胜利五个步骤。`advance()` 先采集，未提供复核布局时返回阻塞原因和 `sessionDir`；使用同目录恢复并通过 `advance({ reviewedLayout })` 提供由可信宿主复核、绑定首屏 SHA-256 的布局。完整计划经 `auto` 求解和独立重放后，执行器重新检查关卡和现场；中断后禁止盲目重试。`allowExecution: false` 可仅求解。炸弹等未建模机制会停止；导航链的 `status: complete` 表示链构造完成，不表示游戏通关，实际胜利以会话目标进度及胜利截图为准。
+
 显式以 `new GameTaskBridge({ enabled: true })` 启用后，`run({ startLevel, windowId, display, maxLevels, duckAuto })` 才能启动相邻 `aasc-game` 的连续游玩脚本；调用会等到脚本退出并返回退出码。此接口不接管正在运行的进程，也不自动修复卡关。默认路径可通过 `gameRoot` 覆盖。设备输入与状态核验仍由原脚本负责。
 
 `decide(path, coordinator, context)` 把快照和缺口交给现有 `AutonomyCoordinator`，返回分层决策；不会自动执行决策。
