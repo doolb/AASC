@@ -25,7 +25,7 @@ for (const type of ['image', 'video', 'audio']) {
         assert.equal(target.src, 'http://media/test');
         target.onerror();
         assert.equal(target.src, '/api/media-proxy?url=test');
-        assert.equal(timers.size, type === 'image' ? 1 : 0);
+        assert.equal(timers.size, 0, '回退重试过程中不提前触发或重复安排切换定时器');
         target.onerror();
         assert.equal(timers.size, 1, '备用地址也失败后只调度一次下一项');
     });

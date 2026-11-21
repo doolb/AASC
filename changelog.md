@@ -8,6 +8,11 @@
 
 ### 批量播放
 
+- ✅ [2026-11-21] 修复显示端批量播放外部图片切换时闪出背景，新增下一张预加载与同位画布垫底切换
+  - 新增 `src/apps/web-mediacenter/ui/public/js/display-image-preloader.js`，更新 `src/apps/web-mediacenter/ui/public/display.html`、`src/apps/web-mediacenter/ui/public/css/display.css`、`docs/design/batch-playlist.md`、`docs/spec/batch-playlist.md`、`docs/task/2026-11-21_显示端批量图片无闪烁切换与预加载.md` 与 `docs/todo.md`。
+  - 已有图片在屏幕显示时，保留当前 `mediaImage` 画面并在后台预加载/解码下一张图片（含 `directUrl -> fallbackUrl` 代理回退），就绪后以 `#mediaImageHold` 同位垫底完成 `mediaImage` 替换、适配/裁剪/旋转计算和尺寸上报，确保即便是 `no-store` 外部图也不露出 `#mediaContainer` 背景及光晕；加载完成后再唯一调度切换定时器，并在快速切页、暂停/恢复、列表替换、切入非图片媒体时以 `mediaLoadSequence` 作废过期异步结果。
+  - 更新 `tests/display-playlist-fallback.test.js` 并新增 `tests/display-playlist-image-preload.test.js`，12 组相关测试文件共 52/52 全部通过，真实设备待验收。
+
 - ✅ [2026-11-21] 修复显示端播放列表覆盖备用媒体地址处理，直连失败时可回退到同源代理；图片、视频和音频回退及失败切换测试通过。
 
 ### 控制端媒体播放

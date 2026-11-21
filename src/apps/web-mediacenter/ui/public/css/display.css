@@ -78,11 +78,21 @@ body {
     z-index: 999999;
 }
 
+#mediaImageHold {
+    display: none;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+    transform-origin: center center;
+    transition: none !important;
+}
+
 #mediaImage {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
     display: none;
+    z-index: 2;
     transition: transform 0.3s ease, object-fit 0.3s ease;
 }
 
