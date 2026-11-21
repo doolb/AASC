@@ -299,5 +299,5 @@ const theme = {
 ## 相关文档
 
 - [实现文档](../spec/map-visualization.md)
-- [AASC 架构](./aasc.md)
+- [AASC 架构](aasc.md)
 - [任务文档](../task/2026-04-02_执行者能力可视化管理.md)

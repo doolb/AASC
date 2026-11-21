@@ -17,7 +17,7 @@
 ## HMR2 Node原图服务（2026-10-22）
 
 - [Sharp0.35.5](https://www.npmjs.com/package/sharp/v/0.35.5)、[OpenCV.js4.12固定包](https://www.npmjs.com/package/@techstark/opencv-js/v/4.12.0-release.1)、[bmp-js0.1.0](https://www.npmjs.com/package/bmp-js/v/0.1.0)：独立lock锁定；Sharp仅decode/orient，OpenCV双dtype仿射，不以resize冒充原预处理。
-- [原Python准备函数](<E:/ai/ai-depthmap/hmr2_gpu_service.py#L358-L414>)与[29图CPU证据说明](<usage/hmr2-node-onnx-service.md>)：NumPy2/SciPy/skimage原dtype/累加/归一化链。CMYK未保留内部色彩空间会实差134，修正整数256移位换色后四输入全SHA一致。
+- [原Python准备函数](<E:/ai/ai-depthmap/hmr2_gpu_service.py#L358-L414>)与[29图CPU证据说明](<../3rd/hmr2-node-onnx/docs/usage/hmr2-node-onnx-service.md>)：NumPy2/SciPy/skimage原dtype/累加/归一化链。CMYK未保留内部色彩空间会实差134，修正整数256移位换色后四输入全SHA一致。
 - BMP依赖不按bfOffBits跳像素，接纳收紧40-byte DIB/标准palette/start/stride，V4/V5/gap/巨palette不静默误读。此为本机源码审阅＋CPU实測，不称全部BMP兼容。
 - [自定义候选清单](<../3rd/hmr2-node-onnx/core/model-catalog.json>)含完整模型来源/SHA与许可提示；没有可验证公共URL，不自行托管上传SMPL权重。Node模型EP与未知allocator边界另见[DirectML EP官网](https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html)及[既有阶段A本机报告](<E:/ai/ai-depthmap/hmr2_node_onnx/results/phase-a-report.md>)。
 
@@ -26,16 +26,16 @@
 
 ## 图像投影与刚体姿态方案（2026-10-16）
 
-- [Ceres重投影误差优化](https://ceres-solver.readthedocs.io/latest/nnls_tutorial.html#bundle-adjustment)说明用图像观测与相机投影误差求3D/相机参数；[MuJoCo约束动力学计算](https://mujoco.readthedocs.io/en/stable/computation/)作为约束动力学参考。新方案仍复用本地Ammo已有胶囊/球和6DoF关节，已在临时副本以点到相机射线横向弹簧产生虚拟力并检查实际PMX；不是引入Ceres/MuJoCo，三图未达到自动还原。单图多解、真实支撑与原生到显示映射仍需核查，见[任务方案](task/20261016_MMDAR二维投影驱动刚体姿态评估.md)。
+- [Ceres重投影误差优化](https://ceres-solver.readthedocs.io/latest/nnls_tutorial.html#bundle-adjustment)说明用图像观测与相机投影误差求3D/相机参数；[MuJoCo约束动力学计算](https://mujoco.readthedocs.io/en/stable/computation/)作为约束动力学参考。新方案仍复用本地Ammo已有胶囊/球和6DoF关节，已在临时副本以点到相机射线横向弹簧产生虚拟力并检查实际PMX；不是引入Ceres/MuJoCo，三图未达到自动还原。单图多解、真实支撑与原生到显示映射仍需核查，见[任务方案](../3rd/mmd-ar-test/docs/task/20261016_MMDAR二维投影驱动刚体姿态评估.md)。
 
 ## 人体三维辅助模型可行性（2026-10-16）
 
-- 用户停止继续RTMW后，拟改RTMPose二维+像素深度：[Depth Anything V2官方项目](https://github.com/DepthAnything/Depth-Anything-V2)说明Small为24.8M参数、Apache-2.0及相对深度，并列出ONNX与Transformers.js浏览器路径；[ONNX Community模型卡](https://huggingface.co/onnx-community/depth-anything-v2-small)提供Web用法和导出权重。已固定revision c70d1ddbcd93c9bda8098268cc3554adf5e8dd4f的model_quantized.onnx（27,258,801字节、SHA256 fcf51f1b230362b28690bb9d1809bf0431f29cad20534e3f589bd7285547f20d、Apache-2.0），本机WASM三图推理与刚体弱排序对照完成，无稳定收益；minimal/14倍数/RGB/ImageNet归一化参考[Transformers.js DPT处理器](https://github.com/huggingface/transformers.js/blob/2.17.2/src/processors.js)，Canvas缩放与Pillow不完全一致。手机/WebGPU未验；表面像素深度不能直接替代隐藏关节z。新计划见[评估任务](task/20261016_MMDAR二维姿态与像素深度辅助评估.md)。
+- 用户停止继续RTMW后，拟改RTMPose二维+像素深度：[Depth Anything V2官方项目](https://github.com/DepthAnything/Depth-Anything-V2)说明Small为24.8M参数、Apache-2.0及相对深度，并列出ONNX与Transformers.js浏览器路径；[ONNX Community模型卡](https://huggingface.co/onnx-community/depth-anything-v2-small)提供Web用法和导出权重。已固定revision c70d1ddbcd93c9bda8098268cc3554adf5e8dd4f的model_quantized.onnx（27,258,801字节、SHA256 fcf51f1b230362b28690bb9d1809bf0431f29cad20534e3f589bd7285547f20d、Apache-2.0），本机WASM三图推理与刚体弱排序对照完成，无稳定收益；minimal/14倍数/RGB/ImageNet归一化参考[Transformers.js DPT处理器](https://github.com/huggingface/transformers.js/blob/2.17.2/src/processors.js)，Canvas缩放与Pillow不完全一致。手机/WebGPU未验；表面像素深度不能直接替代隐藏关节z。新计划见[评估任务](../3rd/mmd-ar-test/docs/task/20261016_MMDAR二维姿态与像素深度辅助评估.md)。
 
-- [官方COCO-WholeBody点序](https://raw.githubusercontent.com/open-mmlab/mmpose/main/configs/_base_/datasets/coco_wholebody.py)明确髋11/12、膝13/14、踝15/16先左后右。原始XYZ腿部对应候选试验沿用此定义与来源索引，不改变官方映射或全局反转；只是单独验证局部预测歧义，三图结果与原始/候选报告见[评估任务](task/20261016_MMDAR人体三维深度辅助模型评估.md)，未自动纠正或正式接入。
+- [官方COCO-WholeBody点序](https://raw.githubusercontent.com/open-mmlab/mmpose/main/configs/_base_/datasets/coco_wholebody.py)明确髋11/12、膝13/14、踝15/16先左后右。原始XYZ腿部对应候选试验沿用此定义与来源索引，不改变官方映射或全局反转；只是单独验证局部预测歧义，三图结果与原始/候选报告见[评估任务](../3rd/mmd-ar-test/docs/task/20261016_MMDAR人体三维深度辅助模型评估.md)，未自动纠正或正式接入。
 
 - 用户提供的[b-arac/rtmpose3d](https://github.com/b-arac/rtmpose3d)是RTMW3D的Python/PyTorch/MMPose封装，默认L、可选X；[配置](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/configs/__init__.py)列出官方系列检查点名，[三维后处理](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/models/pose_estimator.py)依赖内参与root_z回投影完整XYZ。仅核查源码，未运行封装或评估L；完整XYZ不是本轮已测试的Z软约束，也不表示镜头已准确恢复。
-  - 用户确认后已追加本机XYZ方向临时对照：复用X缓存、显式(width/2,height/2)主点和默认内参/root_z回投影，未运行此Python检测/裁剪。XYZ三图实际15.90%/1.84%/4.33%对齐RMS，仅二次元相机通过；真人软物理执行落差及预测冲突保留，完整数据见[评估任务](task/20261016_MMDAR人体三维深度辅助模型评估.md)，不把此版本当稳定接入或该仓库整体复现。
+  - 用户确认后已追加本机XYZ方向临时对照：复用X缓存、显式(width/2,height/2)主点和默认内参/root_z回投影，未运行此Python检测/裁剪。XYZ三图实际15.90%/1.84%/4.33%对齐RMS，仅二次元相机通过；真人软物理执行落差及预测冲突保留，完整数据见[评估任务](../3rd/mmd-ar-test/docs/task/20261016_MMDAR人体三维深度辅助模型评估.md)，不把此版本当稳定接入或该仓库整体复现。
 
 - 本机已验证[RTMW3D-x ONNX](https://huggingface.co/Soykaf/RTMW3D-x/tree/a4f0d54c52ee44ee4e1dda1936d714490c6234d2/onnx)：369330857字节/SHA256 `4a289c0e99d47eb595e99679d9d4a2d1def1b4241f9adcbafba44b9ff585ebcd`，Apache-2.0。官方解码依据固定MMPose提交`759b39c13fea6ba094afc1fa932f51dc1b11cbf9`的projects/rtmpose3d/rtmpose3d/simcc_3d_label.py及config；z第三维288，以髋中点归零。rtmlib参考封装不能替代官方轴维度核查；本机Web两后端与实际FK试验记录见对应task，未正式分发新权重。
 
@@ -46,12 +46,12 @@
 ## RTMPose-m历史默认权重（2026-10-16，默认已恢复MediaPipe Pose）
 
 - [MMPose RTMPose官方模型库](https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose)的Body7 m384；[固定ONNX SDK归档](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-384x288-65e718c4_20230504.zip)。实际输入384×288、两个17点SimCC输出、RGB均值方差与归档detail/pipeline和真推理核查。历史模型固定摘要/许可见pose-onnx-NOTICES.md与模型测试方法；assets.js现为MediaPipe默认清单。
-- 用户最终要求恢复最早MediaPipe Pose，默认分发OpenCV Zoo固定revision的检测11,990,159字节与姿态5,557,238字节两个ONNX（模型world是估计）。RTMPose兼容函数和历史二维/深度试验保留，默认不分发其权重。具体来源/预后处理见下节及[恢复任务](task/20261016_MMDAR图片识别切回MediaPipePose.md)。
+- 用户最终要求恢复最早MediaPipe Pose，默认分发OpenCV Zoo固定revision的检测11,990,159字节与姿态5,557,238字节两个ONNX（模型world是估计）。RTMPose兼容函数和历史二维/深度试验保留，默认不分发其权重。具体来源/预后处理见下节及[恢复任务](../3rd/mmd-ar-test/docs/task/20261016_MMDAR图片识别切回MediaPipePose.md)。
 
 ## 图片姿态与相机匹配依据（2026-10-15）
 
 - [DWPose官方ONNX项目](https://github.com/IDEA-Research/DWPose)：ControlNet预处理器`dw_openpose_full`，官方示例为YOLOX-l检测和`dw-ll_ucoco_384.onnx`全身姿态；[具体模型加载源码](https://github.com/IDEA-Research/DWPose/blob/onnx/ControlNet-v1-1-nightly/annotator/dwpose/wholebody.py)。与本项目已试17点RTMPose-m Body7不是同一权重。
-- [ControlNet传统OpenPose参考实现](https://github.com/lllyasviel/ControlNet/tree/main/annotator/openpose)与[作者预处理权重](https://huggingface.co/lllyasviel/Annotators)：本机四模型对照使用其身体网络/PAF及`body_pose_model.pth`，临时CPU环境运行；[对照范围与结果](task/20261016_MMDAR四模型姿态效果对照.md)。
+- [ControlNet传统OpenPose参考实现](https://github.com/lllyasviel/ControlNet/tree/main/annotator/openpose)与[作者预处理权重](https://huggingface.co/lllyasviel/Annotators)：本机四模型对照使用其身体网络/PAF及`body_pose_model.pth`，临时CPU环境运行；[对照范围与结果](../3rd/mmd-ar-test/docs/task/20261016_MMDAR四模型姿态效果对照.md)。
 - [ControlNet SD1.5 OpenPose模型卡](https://huggingface.co/lllyasviel/control_v11p_sd15_openpose)：该权重使用骨架图控制SD生成，图像关键点预处理另用OpenPose/DWPose；不能将生成控制权重当作姿态检测器。
 
 - [OpenCV PnP姿态估计](https://docs.opencv.org/4.x/d5/d1f/calib3d_solvePnP.html)：已知3D/2D对应和相机内参下的旋转/平移、重投影误差、鲁棒估计及多解。用于拟定相机匹配方案，不代表项目已接入OpenCV JS或已经恢复真实拍摄机位。
@@ -64,7 +64,7 @@
 
 ## VaM身体控制本地证据（2026-10-13）
 
-用户提供`/mnt/vam/Managed/Assembly-CSharp.dll`，SHA-256 `3c314d55ece06924064c9165f9124f1666f4d33967a02f78b97cf3a932d62f2f`。使用临时ILSpy CLI11.1只读分析：FreeControllerV3.Init/SetJointSprings/ApplyComply连接物理体并设置关节驱动/让步；FollowPhysicallySingle.FixedUpdate施加力与力矩；AllJointsController批量切换控制状态。主程序集类型索引未发现独立FullBodyIK/VRIK类。DLL未提供Unity预制体实际质量/关节/碰撞参数或原生PhysX求解器，因此本项目采用独立Ammo人体代理实现类似机制，不宣称参数或结果完全等价。原DLL/临时反编译源码不纳入仓库；实现与验证见`docs/task/20261013_MMDAR_VaM身体物理控制.md`。
+用户提供`/mnt/vam/Managed/Assembly-CSharp.dll`，SHA-256 `3c314d55ece06924064c9165f9124f1666f4d33967a02f78b97cf3a932d62f2f`。使用临时ILSpy CLI11.1只读分析：FreeControllerV3.Init/SetJointSprings/ApplyComply连接物理体并设置关节驱动/让步；FollowPhysicallySingle.FixedUpdate施加力与力矩；AllJointsController批量切换控制状态。主程序集类型索引未发现独立FullBodyIK/VRIK类。DLL未提供Unity预制体实际质量/关节/碰撞参数或原生PhysX求解器，因此本项目采用独立Ammo人体代理实现类似机制，不宣称参数或结果完全等价。原DLL/临时反编译源码不纳入仓库；实现与验证见`3rd/mmd-ar-test/docs/task/20261013_MMDAR_VaM身体物理控制.md`。
 
 ## MMD-AR 全身 IK 约束求解（2026-10-13）
 
@@ -212,15 +212,15 @@ web-mediacenter/
 
 ## 肩髋深度原型证据（2026-10-16）
 
-复用既有固定Depth Anything V2 Small浮点图与RTMPose缓存，没有新增外部模型/依赖；肩髋独立取样/躯干成对力与三图同初值对照证据见[刚体任务肩髋执行记录](task/20261016_MMDAR二维投影驱动刚体姿态评估.md)及[模型测试方法](usage/mmd-pose-model-testing.md)。实际未解决真人前后腿翻转，不以表面相对深度当关节z或掌面方向。
+复用既有固定Depth Anything V2 Small浮点图与RTMPose缓存，没有新增外部模型/依赖；肩髋独立取样/躯干成对力与三图同初值对照证据见[刚体任务肩髋执行记录](../3rd/mmd-ar-test/docs/task/20261016_MMDAR二维投影驱动刚体姿态评估.md)及[模型测试方法](../3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md)。实际未解决真人前后腿翻转，不以表面相对深度当关节z或掌面方向。
 
 ## 人物分割用于姿态前处理（2026-10-16，方案资料）
 
-[OpenCV Zoo PPHumanSeg](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/README.md)提供Apache-2.0 ONNX与示例，[官方预后处理](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/pphumanseg.py)规定RGB192×192归一化及原图输出映射；[MediaPipe Image Segmenter](https://developers.google.com/edge/mediapipe/solutions/vision/image_segmenter)与[ONNX Selfie模型卡](https://huggingface.co/onnx-community/mediapipe_selfie_segmentation)提供Web人物mask路径。仅资料核查，不当本机全身/动漫分割或手机通过，固定资源身份与三图对照待确认后实测。见[任务](task/20261016_MMDAR人物分割辅助姿态计算.md)。
+[OpenCV Zoo PPHumanSeg](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/README.md)提供Apache-2.0 ONNX与示例，[官方预后处理](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/pphumanseg.py)规定RGB192×192归一化及原图输出映射；[MediaPipe Image Segmenter](https://developers.google.com/edge/mediapipe/solutions/vision/image_segmenter)与[ONNX Selfie模型卡](https://huggingface.co/onnx-community/mediapipe_selfie_segmentation)提供Web人物mask路径。仅资料核查，不当本机全身/动漫分割或手机通过，固定资源身份与三图对照待确认后实测。见[任务](../3rd/mmd-ar-test/docs/task/20261016_MMDAR人物分割辅助姿态计算.md)。
 
 ## 人物分割本机模型身份与实际证据（2026-10-16）
 
-[OpenCV官方HF固定revision](https://huggingface.co/opencv/human_segmentation_pphumanseg/tree/e876e63603f6c65c1a22576bfd5fc7c07ecf9eb9)的原精度ONNX为6,163,938字节，SHA256 552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24，与[OpenCV Zoo LFS指针](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/human_segmentation_pphumanseg_2023mar.onnx)核对，Apache-2.0。三图本机WASM已运行，不能将官方示例评测当本项目准确率；动漫误分猪剑、原图/裁剪/抠图差异和失败见[执行任务](task/20261016_MMDAR人物分割辅助姿态计算.md)。
+[OpenCV官方HF固定revision](https://huggingface.co/opencv/human_segmentation_pphumanseg/tree/e876e63603f6c65c1a22576bfd5fc7c07ecf9eb9)的原精度ONNX为6,163,938字节，SHA256 552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24，与[OpenCV Zoo LFS指针](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/human_segmentation_pphumanseg_2023mar.onnx)核对，Apache-2.0。三图本机WASM已运行，不能将官方示例评测当本项目准确率；动漫误分猪剑、原图/裁剪/抠图差异和失败见[执行任务](../3rd/mmd-ar-test/docs/task/20261016_MMDAR人物分割辅助姿态计算.md)。
 
 ## IMU磁力计与重力倾斜补偿（2026-10-28）
 

@@ -15,7 +15,7 @@
 - [聊天图片输入、续聊与上传能力开关](usage/chat-media-input.md)（源码已实现，服务包待部署；视频入口尚未接入）
 
 - [MMD-AR可选HMR纯网页模式](usage/mmd-human-interface.md#hmr纯网页可选模式)：可选准备模型后重建，缺模型禁用，桌面WebGPU或普通CPU/WASM本地推理。
-- [HMR2 Node独立原图服务与模型准备](<usage/hmr2-node-onnx-service.md>)：项目根 `npm run download:hmr2-model` / `npm run start:hmr2`，默认独立8769/WindowsDML；当前本机校验导入，原Python/8768不替换。
+- [HMR2 Node独立原图服务与模型准备](<../3rd/hmr2-node-onnx/docs/usage/hmr2-node-onnx-service.md>)：项目根 `npm run download:hmr2-model` / `npm run start:hmr2`，默认独立8769/WindowsDML；当前本机校验导入，原Python/8768不替换。
 
 - 棋盘点击无法生效时显示短暂原因提示，连续无效点击不会在下一轮补执行；详见[五子棋](usage/game-gomoku.md#点击无效时的飘字提示)。
 
@@ -33,7 +33,7 @@
 
 - [Node子显示端常驻mpv播放、ASS文本与主题、跨平台命令与画面设置](usage/node-display-mpv.md)（源码已实现，独立包待构建）
 
-- [MMD-AR图片姿态：HMR2 GPU API、当前整图深度与默认关闭弱辅助](<usage/mmd-pose-model-testing.md>)（独立网页；实际GPU/LAN/手机性能待用户环境验收）
+- [MMD-AR图片姿态：HMR2 GPU API、当前整图深度与默认关闭弱辅助](<../3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md>)（独立网页；实际GPU/LAN/手机性能待用户环境验收）
 
 私聊中点击“清空”会清除当前助手、当前会话的聊天记录和模型续接上下文。显示端收到成功回包后立即刷新消息列表，旧流式回复和迟到消息不会重新插入；失败时保留记录并显示原因。下次发送消息时会开启新的模型会话；同一助手的其他私聊会话和其他助手不受影响。服务代码包更新后生效。
 
@@ -80,7 +80,7 @@ ZIP上限100 MiB，解压上限256 MiB，单文件64 MiB，最多5000个文件�
 
 qwen/qwen-api/doubao/doubaapi由同一模型映射和应用服务分流；旧文字别名继续，TTS可配置qiaoxiaojiao→qwen-api/qwen-audio-3.1-tts-flash及默认音色qiaoxiaojiao_v3.1。两路API凭据改由Chat2API账户管理手动配置，不自动迁移旧密钥；首批文字与TTS，未接入媒体明确拒绝。接口示例、账号准备和部署边界见[统一应用使用说明](usage/chat2api-unified-applications.md)。
 
-独立MMD-AR测试网页的「GPU物理直连骨骼纹理」开关、默认手部防穿模同步兼容和诊断/编辑行为见[XPBD WebGL2使用说明](usage/mmd-xpbd-webgl.md)。本地实现，尚未发布。
+独立MMD-AR测试网页的「GPU物理直连骨骼纹理」开关、默认手部防穿模同步兼容和诊断/编辑行为见[XPBD WebGL2使用说明](../3rd/mmd-ar-test/docs/usage/mmd-xpbd-webgl.md)。本地实现，尚未发布。
 
 全身IK的图片姿态区域现支持青色实际骨架叠加、固定投影/等比对齐，以及「匹配图片视角（估计）」和恢复。先让3D人物姿态接近参考图，再估计视角并拖点微调；当前为单图单帧，连续动作与运镜尚未接入。详见[Human图片对照操作](usage/mmd-human-interface.md)。
 
@@ -114,18 +114,18 @@ Cookie-only旧账号需要正常重新登录补齐同账号nodeProfile后才能�
 
 ## 独立MMD-AR统一灯光预设（本地构建，2026-10-11）
 
-「灯光 → 灯光预设」统一提供保存、覆盖、删除及JSON导入导出，保存整个灯光面板（含抗锯齿/Canvas倍率）。列表增加可选“傍晚”，首次补入后保留用户的修改/删除结果。分类可折叠，刷新保留预设；导入后手动选择应用。首次缺省及「恢复默认」采用用户文件中的完整“日光”配置，已有保存值优先。详见[灯光预设使用说明](usage/mmd-ar-lighting-presets.md)。
+「灯光 → 灯光预设」统一提供保存、覆盖、删除及JSON导入导出，保存整个灯光面板（含抗锯齿/Canvas倍率）。列表增加可选“傍晚”，首次补入后保留用户的修改/删除结果。分类可折叠，刷新保留预设；导入后手动选择应用。首次缺省及「恢复默认」采用用户文件中的完整“日光”配置，已有保存值优先。详见[灯光预设使用说明](../3rd/mmd-ar-test/docs/usage/mmd-ar-lighting-presets.md)。
 
 
 ## 独立MMD-AR Human 生理与后天行为（本地构建，2026-10-10）
 
-本机姿态试验现只保留HMR2.0b与人物分割（含真人左右腿候选）及其必需共享依赖，入口与复测见[模型测试方法](usage/mmd-pose-model-testing.md)。正式默认仍为MediaPipe Pose检测＋33点估计world，使用既有角色骨长重定向及VaM物理；图片粘贴、实际骨架叠图、相机匹配和3D微调不变。其他模型独立本机报告/权重已清理，只保留历史文档；相对深度不是真实遮挡关节深度。
+本机姿态试验现只保留HMR2.0b与人物分割（含真人左右腿候选）及其必需共享依赖，入口与复测见[模型测试方法](../3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md)。正式默认仍为MediaPipe Pose检测＋33点估计world，使用既有角色骨长重定向及VaM物理；图片粘贴、实际骨架叠图、相机匹配和3D微调不变。其他模型独立本机报告/权重已清理，只保留历史文档；相对深度不是真实遮挡关节深度。
 
 打开「动作 → Human 生理与后天行为」，可配置呼吸/眨眼，登记VMD或MPL行为、组合表情及事件反射；MPL支持覆写/增量和行为新版本，原VMD持续运行。动作库按模型保存在浏览器，并支持导出/导入。操作与API见[Human使用说明](usage/mmd-human-interface.md)。当前已生成web-dist，尚未发布外网。
 
 ## 独立MMD-AR AI回复与高级动作（本地构建，2026-10-10）
 
-打开「动作 → AI 回复」，粘贴完整回复，可解析标记或无声预览。表情、身体动作和口型并行；「高级动作」提供点头、摇头、挥手、鞠躬、歪头及服务器待机/跳舞。默认待机，跳舞手选；时长留空按服务器原时长播放，「物理 → 手部防穿模」开关保存选择。高级动作可载入MPL编辑、预览和下载，暂不保存；目录扩展见[Human使用说明](usage/mmd-human-interface.md)，原MPL分类为「MPL 低级动作」。操作示例与页面API见[回复动作使用说明](usage/mmd-ar-ai-reply.md)。当前只在本地独立web-dist提供，尚未发布外网；正式TTS功能范围保持。
+打开「动作 → AI 回复」，粘贴完整回复，可解析标记或无声预览。表情、身体动作和口型并行；「高级动作」提供点头、摇头、挥手、鞠躬、歪头及服务器待机/跳舞。默认待机，跳舞手选；时长留空按服务器原时长播放，「物理 → 手部防穿模」开关保存选择。高级动作可载入MPL编辑、预览和下载，暂不保存；目录扩展见[Human使用说明](usage/mmd-human-interface.md)，原MPL分类为「MPL 低级动作」。操作示例与页面API见[回复动作使用说明](../3rd/mmd-ar-test/docs/usage/mmd-ar-ai-reply.md)。当前只在本地独立web-dist提供，尚未发布外网；正式TTS功能范围保持。
 
 ## 正式显示端 TTS 口型（2026-10-10，v62已发布）
 
@@ -177,13 +177,13 @@ TAA/FSR2需要WebGL2；不支持时禁用抗锯齿控件，倍率仍可使用。
 
 ## 六轴IMU共享3D测试网页（2026-10-03）
 
-2026-10-31：多帧降噪已改为保持冲量/时间矩的区间积分，APK显示死区与运动积分分开；数据面板同时提供显示值及实际积分加速度。新版8769已启动，刷新网页、APK重新连接即可，无需重装；[操作说明](usage/imu-six-axis-test.md)。
+2026-10-31：多帧降噪已改为保持冲量/时间矩的区间积分，APK显示死区与运动积分分开；数据面板同时提供显示值及实际积分加速度。新版8769已启动，刷新网页、APK重新连接即可，无需重装；[操作说明](../3rd/imu-six-axis-test/docs/usage/imu-six-axis-test.md)。
 
-2026-10-31：快速运动时序修复已接入，APK已有配对时间字段自动选择“瞬时端点预积分”，模拟器/旧输入保留区间约定；处理诊断显示来源、源时间和积分间隔，详见[使用说明](usage/imu-six-axis-test.md)。更新8769并刷新网页后生效，无新增APK要求。
+2026-10-31：快速运动时序修复已接入，APK已有配对时间字段自动选择“瞬时端点预积分”，模拟器/旧输入保留区间约定；处理诊断显示来源、源时间和积分间隔，详见[使用说明](../3rd/imu-six-axis-test/docs/usage/imu-six-axis-test.md)。更新8769并刷新网页后生效，无新增APK要求。
 
-2026-10-31：APK观察页新增默认开启的“减速后快停”，复用300ms未来窗口与原静稳兜底；支持关闭对照、查看future/legacy来源与源时间。刷新8769网页生效，无需重装采集APK，持机验收待做。详情见[快停操作](usage/imu-six-axis-test.md#移动后快停2026-10-31)。
+2026-10-31：APK观察页新增默认开启的“减速后快停”，复用300ms未来窗口与原静稳兜底；支持关闭对照、查看future/legacy来源与源时间。刷新8769网页生效，无需重装采集APK，持机验收待做。详情见[快停操作](../3rd/imu-six-axis-test/docs/usage/imu-six-axis-test.md#移动后快停2026-10-31)。
 
-`npm run start:imu:six-axis-test`启动独立8769端口。页面和左右3D视口使用亮色主题；电脑默认加入`AASCIMU1`（可手动指定房间），左侧显示估计场景、分轴位置误差，右侧为图形模拟器，模拟器静稳后自动清零速度；手机可通过浏览器或原生APK采集。APK默认连接`192.168.1.39:8769`并回传固定房间`AASCIMU1`，单独显示含重力原始加速度和可选平台线性加速度，发送积压时自动丢弃旧样本。服务提供仅本机可读的状态、样本和轨迹接口：同时返回逐帧实时历史，以及按浏览器显示规则抽稀的估计/真值轨迹。操作、构建、校准、精度及诊断说明见[六轴IMU测试页使用说明](usage/imu-six-axis-test.md)。专用自测：`npm run test:imu:six-axis-test`。 新版独立APK支持可选磁场采集与重力倾斜补偿航向，页面显示精度及回退原因；磁场可信才启用辅助，旧APK继续六轴。 手机输入默认开启300ms运动对齐多帧降噪，可调50..1000ms，姿态/轨迹同步延迟；本次网页处理更新不需重装APK。 estimatedTrail已增加每点源时间、速度与状态，读取脚本使用point.position；旧点未知值为null。
+`npm run start:imu:six-axis-test`启动独立8769端口。页面和左右3D视口使用亮色主题；电脑默认加入`AASCIMU1`（可手动指定房间），左侧显示估计场景、分轴位置误差，右侧为图形模拟器，模拟器静稳后自动清零速度；手机可通过浏览器或原生APK采集。APK默认连接`192.168.1.39:8769`并回传固定房间`AASCIMU1`，单独显示含重力原始加速度和可选平台线性加速度，发送积压时自动丢弃旧样本。服务提供仅本机可读的状态、样本和轨迹接口：同时返回逐帧实时历史，以及按浏览器显示规则抽稀的估计/真值轨迹。操作、构建、校准、精度及诊断说明见[六轴IMU测试页使用说明](../3rd/imu-six-axis-test/docs/usage/imu-six-axis-test.md)。专用自测：`npm run test:imu:six-axis-test`。 新版独立APK支持可选磁场采集与重力倾斜补偿航向，页面显示精度及回退原因；磁场可信才启用辅助，旧APK继续六轴。 手机输入默认开启300ms运动对齐多帧降噪，可调50..1000ms，姿态/轨迹同步延迟；本次网页处理更新不需重装APK。 estimatedTrail已增加每点源时间、速度与状态，读取脚本使用point.position；旧点未知值为null。
 
 ## 正式端衣服受风（2026-10-02）
 
@@ -372,7 +372,7 @@ XPBD包含刚体形状之间的离散碰撞和摩擦/反弹，遵守分组/掩�
 
 本轮同步本地 `3rd/mmd-ar-test/web-dist`，未更新现有APK或发布外网。正式显示端未设置此测试参数时保留原AO门限；10°是可调整的起始值，实际模型近距离观感待手工验收。
 
-独立 MMD AR 测试APK已同步网页全部功能并修复灯光面板；原生摄像头预览跟随手机横竖屏旋转，方向变化同步角色投影。本地目录/PMX/两类VMD、模拟输入、原生定位与标定见 [MMD AR 测试APK使用](usage/mmd-ar-native-slam.md)。
+独立 MMD AR 测试APK已同步网页全部功能并修复灯光面板；原生摄像头预览跟随手机横竖屏旋转，方向变化同步角色投影。本地目录/PMX/两类VMD、模拟输入、原生定位与标定见 [MMD AR 测试APK使用](../3rd/mmd-ar-test/docs/usage/mmd-ar-native-slam.md)。
 
 ## TTS 内存音频下发（2026-09-30，待重启/发布后生效）
 
@@ -936,7 +936,7 @@ GPU需要WebGL2、浮点渲染目标及足够纹理容量；不可用会回退CP
 
 ## 刚体XPBD WebGL2测试版
 
-动作面板选择、子步含义、能力回退及性能限制见[使用说明](usage/mmd-xpbd-webgl.md)。
+动作面板选择、子步含义、能力回退及性能限制见[使用说明](../3rd/mmd-ar-test/docs/usage/mmd-xpbd-webgl.md)。
 
 ### 当前顶点模式：骨骼跟随与自碰撞
 
@@ -1076,7 +1076,7 @@ main {
 
 网页构建前运行 `npm run prepare:mmd-ar-blender-engine` 安装固定版本构建依赖，再运行 `npm run build:web:mmd-ar-test`。HTTPS 桌面 Chromium 打开网页后，点击左上角“Blender工程”，浏览器会立即询问本地目录读写权限；选择含 `.blend` 的工程目录，再点“打开工程”。选中目录后才下载 Blender 工作区代码与预览资源；选择并打开 `.blend` 时再下载约38 MB压缩核心WASM/数据并启动引擎。用户取消目录选择、普通首屏与测试 APK 都不下载这些资源。
 
-工作区显示 Blender 工程预览，可旋转观察、请求 Cycles PNG 渲染、保存并关闭。改动写回用户选择目录中的原生 `.blend`，同目录图片/贴图按相对路径供 Blender 使用；工程文件不会上传服务端。目录句柄保存在当前 HTTPS origin 的 IndexedDB，权限失效时点“重新授权目录”。部署服务器必须返回 `COOP: same-origin` 与 `COEP: credentialless`，并按 `Content-Encoding: br` 提供 `.br` WASM 资源。Apache 部署还需启用 `mod_headers`，并在引擎资源目录允许 `.htaccess` 使用 `Header` 指令。首期不支持 Firefox、Safari、APK；未编入引擎的 Blender 插件和自定义扩展不会自动安装。实现边界见 `docs/design/mmd-ar-blender-workbench.md`。
+工作区显示 Blender 工程预览，可旋转观察、请求 Cycles PNG 渲染、保存并关闭。改动写回用户选择目录中的原生 `.blend`，同目录图片/贴图按相对路径供 Blender 使用；工程文件不会上传服务端。目录句柄保存在当前 HTTPS origin 的 IndexedDB，权限失效时点“重新授权目录”。部署服务器必须返回 `COOP: same-origin` 与 `COEP: credentialless`，并按 `Content-Encoding: br` 提供 `.br` WASM 资源。Apache 部署还需启用 `mod_headers`，并在引擎资源目录允许 `.htaccess` 使用 `Header` 指令。首期不支持 Firefox、Safari、APK；未编入引擎的 Blender 插件和自定义扩展不会自动安装。实现边界见 `3rd/mmd-ar-test/docs/design/mmd-ar-blender-workbench.md`。
 
 ### 移除西施2（2026-10-06）
 

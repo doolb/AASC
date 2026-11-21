@@ -691,7 +691,7 @@ AndroidResponses := 直连首轮13字/7311ms、续聊25字/3755ms；网页首轮
 边界 := HTTP mock不等于真实GPU联网，UI stub不等于VaM实际效果，合成PMX回环不等于识图精度；深度计算进度不是细粒度WASM栈观测
 ```
 
-参见[接入结果](<../task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。
+参见[接入结果](<../../3rd/hmr2-node-onnx/docs/task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。
 
 ## 192.168.1.39当前豆包双传输复测（2026-10-21）
 
@@ -863,7 +863,7 @@ Edge报告切四候选 → 模型来源、实验标签、原图叠点与24骨段
 工具通过不等于姿态准确；真人膝左右对应错误则不接VAM
 ```
 
-本机`tmp/mmd-pose/depth-eval/hmr2-sam3d/`已用官方checkpoint内的SMPL层张量完成三图真实推理，无需单独SMPL文件。Python3.10 CPU严格权重加载、SMPL张量/BODY25顺序、有限坐标检查通过；Edge三图真实JSON与绘图、390px、本机GET检查通过。峰值工作集约5.9GiB；真人坐姿抬高膝更接近模型右膝而用户确认属于左腿，姿态质量未通过。详细复现见[模型测试方法](../usage/mmd-pose-model-testing.md)。
+本机`tmp/mmd-pose/depth-eval/hmr2-sam3d/`已用官方checkpoint内的SMPL层张量完成三图真实推理，无需单独SMPL文件。Python3.10 CPU严格权重加载、SMPL张量/BODY25顺序、有限坐标检查通过；Edge三图真实JSON与绘图、390px、本机GET检查通过。峰值工作集约5.9GiB；真人坐姿抬高膝更接近模型右膝而用户确认属于左腿，姿态质量未通过。详细复现见[模型测试方法](../../3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md)。
 
 ## 二维投影刚体与深度辅助（2026-10-16，本机评估完成，质量未达标）
 
@@ -877,7 +877,7 @@ Edge报告切四候选 → 模型来源、实验标签、原图叠点与24骨段
 生命周期 := 每支finally原生分配归零；报告只读切图，运行中推理取消/手机/WebGPU/联合相机未验；生产未改
 ```
 
-完整身份、参数、失败与命令见[执行记录](../task/20261016_MMDAR二维投影驱动刚体姿态评估.md)和[测试方法](../usage/mmd-pose-model-testing.md)。本机可运行工具在忽略目录，不作为正式可分发自测模块。
+完整身份、参数、失败与命令见[执行记录](../../3rd/mmd-ar-test/docs/task/20261016_MMDAR二维投影驱动刚体姿态评估.md)和[测试方法](../../3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md)。本机可运行工具在忽略目录，不作为正式可分发自测模块。
 
 ## XYZ左右腿对应候选（2026-10-16，本机完成）
 
@@ -935,7 +935,7 @@ Edge报告切四候选 → 模型来源、实验标签、原图叠点与24骨段
 ```text
 资料 := 实际探针/历史JSON/当前核心与资源配置 → 核对MP/RTM/DW/OP预后处理、权重SHA、输出和人体左右映射
 隔离 := 历史MediaPipe探针依赖旧Worker检测结果 → 当前RTMPose构建不直接复用；未纳入Git的临时工具明确列为本机历史方法
-文档 := docs/usage/mmd-pose-model-testing.md → 原始推理/四模型展示/当前IK集成三层 + 全图/同框/色序/尺度变体 + 缺点和计时边界
+文档 := 3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md → 原始推理/四模型展示/当前IK集成三层 + 全图/同框/色序/尺度变体 + 缺点和计时边界
 验证 := 核对引用文件、临时工具参数/输出文件名、固定模型摘要、Markdown链接与差异检查；本轮不重新运行模型推理
 ```
 
@@ -3197,7 +3197,7 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 目视质量 → 真人左右腿、动漫手脚不通过，不自动接入VAM
 ```
 
-复现路径与命令见docs/usage/mmd-pose-model-testing.md的NLF-S章节。
+复现路径与命令见3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md的NLF-S章节。
 
 ## Android60FPS与系统栏检查边界（2026-10-16）
 

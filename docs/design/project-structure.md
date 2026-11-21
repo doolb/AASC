@@ -37,6 +37,7 @@ src/                -> 分层主代码（core/framework/external/apps）
 1. 新增业务代码优先进入 `src/` 分层目录，不直接放根目录。
 2. 新增运行时资源文件优先进入 `res/` 对应子目录。
 3. 新增任务完成后必须同步更新：`readme.md`、`docs/design.md`、`docs/spec.md`、`changelog.md`。
+4. **子项目与第三方文档隔离规则**：仅涉及单个 `3rd/<组件名>/` 或 `subproject/<子项目名>/` 自身的设计、实现、使用说明、任务记录、待办和变更日志，统一放入 `3rd/<组件名>/docs/` 或 `subproject/<子项目名>/docs/`，不再放在根目录 `docs/`；根目录 `docs/` 仅维护主工程及跨端集成文档，并在索引中保留指向各子目录 `docs/` 的导航链接。
 
 ## 验收标准
 

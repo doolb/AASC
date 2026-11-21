@@ -38,7 +38,12 @@ function ValidateNewFilePlacement(filePath):
         assert filePath under src/
 
     if filePath is doc:
-        assert filePath under docs/
+        if filePath belongs solely to 3rd/<name>:
+            assert filePath under 3rd/<name>/docs/
+        else if filePath belongs solely to subproject/<name>:
+            assert filePath under subproject/<name>/docs/
+        else:
+            assert filePath under docs/
 ```
 
 ## 4. 变更发布清单伪代码

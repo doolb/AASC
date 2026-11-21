@@ -47,11 +47,12 @@ npm start
 ```text
 web-mediacenter/
 ├── package.json                 # npm 配置
-├── 3rd/                         # 第三方组件
+├── 3rd/                         # 第三方组件（各组件专属文档在 3rd/<名>/docs/）
 │   ├── voice-display/           # Go 子显示端
 │   └── voice-display-cs/        # C# 子显示端
+├── subproject/                  # 子工程（各子工程专属文档在 subproject/<名>/docs/）
 ├── config/                      # 业务配置（json）
-├── docs/                        # 项目文档（design/spec/task/todo）
+├── docs/                        # 主工程及跨端集成文档（design/spec/usage/task/todo）
 ├── res/                         # 统一资源目录（models/uploads/temp/certs）
 ├── skills/                      # 技能配置
 ├── src/                         # 分层代码主目录
@@ -75,7 +76,7 @@ web-mediacenter/
 | [docs/usage.md](docs/usage.md) | 使用说明 |
 | [docs/rules.md](docs/rules.md) | 代码规范 |
 | [docs/todo.md](docs/todo.md) | 未完成任务列表 |
-| [docs/self-test-results/](docs/self-test-results/) | 自测结果归档目录 |
+| [docs/self-test-results/](docs/self-test-results) | 自测结果归档目录 |
 
 ## 技术栈
 

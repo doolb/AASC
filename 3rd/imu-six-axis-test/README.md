@@ -86,7 +86,7 @@ npm run test:imu:six-axis-test
 
 13项：11算法/轴向/相机与航向时间边界、1真实WebSocket、1Chromium真实鼠标平移/旋转及双设备共享。浏览器自动测试使用项目puppeteer-core和/usr/bin/chromium，手机事件注入不作为真机精度验证。测试截图保存到/tmp，不提交仓库。
 
-设计：docs/design/imu-six-axis-test.md；伪代码：docs/spec/imu-six-axis-test.md；任务：docs/task/20261017_六轴IMU原生APK固定房间转发.md。本APK为独立debug构建，不进入Offline发布或外网服务包。
+设计：3rd/imu-six-axis-test/docs/design/imu-six-axis-test.md；伪代码：3rd/imu-six-axis-test/docs/spec/imu-six-axis-test.md；任务：3rd/imu-six-axis-test/docs/task/20261017_六轴IMU原生APK固定房间转发.md。本APK为独立debug构建，不进入Offline发布或外网服务包。
 
 2026-10-03位置偏移修复：姿态与加速度按同一区间去重力，滤波仅作用世界线性加速度；倾斜纠偏只在静置校准或显式停稳假设下进行。默认处理的无噪声10秒纯旋转误差0m、纯平移约1.4mm、复合约1.55cm。带噪默认仍需要校准；这些模拟误差不代表真实手机精度。更新后刷新页面重新开始实验，旧会话的已积累偏移不会自动消除。
 

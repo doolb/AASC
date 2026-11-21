@@ -508,4 +508,4 @@ MapPanel
 
 - [设计文档](../design/map-visualization.md)
 - [任务文档](../task/2026-04-02_执行者能力可视化管理.md)
-- [AASC 架构](./aasc.md)
+- [AASC 架构](aasc.md)
