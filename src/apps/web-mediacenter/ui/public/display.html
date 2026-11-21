@@ -4425,7 +4425,10 @@
                     mediaVideo.addEventListener('ended', ps.videoEndedHandler);
                 }
                 const fallbackOnError = mediaVideo.onerror;
-                mediaVideo.onerror = item.bilibiliDash ? fallbackOnError : onVideoFailure;
+                mediaVideo.onerror = item.bilibiliDash ? fallbackOnError : () => {
+                    if (fallbackOnError?.() === true) return;
+                    onVideoFailure();
+                };
             } else if (item.mediaType === 'audio') {
                 // 音频按自然时长播放，结束后等待间隔再切换，和视频批量语义一致。
                 mediaAudio.loop = false;
@@ -4437,7 +4440,9 @@
                     };
                     mediaAudio.addEventListener('ended', ps.audioEndedHandler);
                 }
+                const fallbackOnError = mediaAudio.onerror;
                 mediaAudio.onerror = function() {
+                    if (fallbackOnError?.() === true) return;
                     // 音频加载失败：等待间隔后播下一个，避免单项错误卡住列表。
                     mediaAudio.onerror = null;
                     if (ps.paused) return;
@@ -4449,10 +4454,13 @@
                 };
             } else {
                 // 图片按间隔时间切换
+                const fallbackOnError = mediaImage.onerror;
                 mediaImage.onerror = function() {
+                    if (fallbackOnError?.() === true) return;
                     // 图片加载失败：等间隔后播下一个，不卡死循环
                     mediaImage.onerror = null;
                     if (ps.paused) return;
+                    if (ps.timer) clearTimeout(ps.timer);
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
                 if (!ps.paused) ps.timer = setTimeout(playlistNext, ps.interval);
@@ -5533,13 +5541,13 @@
                 element.src = url;
             };
             element.onerror = () => {
-                if (loadSequence !== mediaLoadSequence) return;
+                if (loadSequence !== mediaLoadSequence) return true;
                 if (element === mediaVideo && element.hasAttribute('crossorigin')) {
                     const directSource = element.src;
                     element.removeAttribute('crossorigin');
                     element.src = directSource;
                     if (reload) element.load();
-                    return;
+                    return true;
                 }
                 if (!fallbackUsed && safeFallbackUrl && safeFallbackUrl !== safeDirectUrl) {
                     fallbackUsed = true;
@@ -5547,7 +5555,9 @@
                     if (reload && typeof element.load === 'function') {
                         element.load();
                     }
+                    return true;
                 }
+                return false;
             };
             if (source) setSource(source);
             if (reload && typeof element.load === 'function') {

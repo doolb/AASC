@@ -388,6 +388,8 @@ Node子显示端下载/Buffer播放不再写audio_*.wav。Windows使用已有Win
 
 其他客户端接入显示端、单媒体、背景媒体及批量播放，请参见[显示端与媒体播放 API](usage/display-media-api.md)。
 
+外部控制端可通过 `playlistUrlRequest` 按顺序提交 HTTP(S) 媒体地址列表，显示端按需读取；URL 必须能从显示端访问。
+
 ### 1.1 安装依赖
 
 ```bash

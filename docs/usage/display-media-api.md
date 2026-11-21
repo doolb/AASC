@@ -142,6 +142,14 @@ curl --fail-with-body --get 'https://192.168.1.10:8081/api/media-libraries/LIBRA
 
 `jump` 需要额外的零基索引，例如 `{"type":"playlistControl","displayIds":["DISPLAY_ID"],"action":"jump","index":0}`。这些控制不会返回统一成功确认；根据 `playlistProgress` 和 `getState` 判断实际状态。
 
+外部控制端可以发送 URL 列表，无需上传媒体内容：
+
+```json
+{"type":"playlistUrlRequest","displayIds":["DISPLAY_ID"],"urls":[{"url":"http://192.168.1.39:3089/api/storage/file?path=site%2Fimage.jpg&libraryId=local","mediaType":"image","fileName":"图片"},{"url":"https://example.com/video.mp4","mediaType":"video","fileName":"视频"}],"interval":5,"loop":true}
+```
+
+`urls` 按输入顺序播放，支持 1–10000 项，每项提供无凭据的绝对 HTTP(S) `url` 和 `mediaType`（`image`、`gif`、`video`、`audio`、`html`、`text`）；`fileName` 可选，文本可指定 `format` 为 `plain` 或 `markdown`。无效项会使整个请求返回 `playlistError`。列表复用普通播放列表的 `playlistStarted`、进度、控制和重连恢复；显示端按需读取 URL，媒体服务地址必须能从显示端访问，签名地址过期后需重新发送。URL 列表不能与临时文件模式 `temp: true` 混用。
+
 如需临时批量文件，发送 `playlistRequest`，设置 `temp: true` 和 `files` 数组；每项包含 `name`、不带前缀的 Base64 `data`、`mediaType`，可附 `mimeType` 和文本 `format`。临时批量内容不会作为完整 Base64 列表持久化，重连恢复能力与媒体库列表不同。
 
 ## 对接时需要注意
