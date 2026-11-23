@@ -1,8 +1,9 @@
 import * as scene from './scene.mjs';
 import {sheet,bounds,corners,fold,cut,snapIndex} from './fold.mjs';
 import {adjustedCurl,heldFaces,validHeldFold,flattenHeldFold} from './held-fold.mjs';
-import {recordCreases,validPaperTopology,paperThickness,PAPER_THICKNESS,validThickness,LAYER_SPACING_VERSION} from './paper-topology.mjs';
+import {recordCreases,validPaperTopology,paperThickness,PAPER_THICKNESS,validThickness,LAYER_SPACING_VERSION,pointOnFace} from './paper-topology.mjs';
 import {safeTurnCrease,resizedPaper,migratedLayerSpacing} from './paper-contact.mjs';
+import {separationPick,sameCreaseAxis} from './separate.mjs';
 import {sound,unlock,paperSound} from './sound.mjs';
 const $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
 const storageKey='gami.desks.v1';
@@ -22,7 +23,7 @@ function save(){
 }
 function remember(){history.push(structuredClone(desk));if(history.length>25)history.shift()}
 function savedAction(){save();reset();render()}
-let snappedIndex=-1,snapAnchor=null;
+let snappedIndex=-1,snapAnchor=null,separateAxis=null;
 function reset(){snappedIndex=-1;snapAnchor=null;selected=[];target=null;preview=null;previewLayers=null;candidate=null;err=''}
 function grid(){const r=$('rows').valueAsNumber,c=$('cols').valueAsNumber;return Number.isInteger(r)&&Number.isInteger(c)&&r>0&&c>0&&r*c>=2&&r*c<=64?[r,c]:null}
 const isHand=()=>$('foldType').value==='hand';
@@ -32,8 +33,8 @@ function render(){
   for(const key of ['thickness','thicknessValue']){$(key).value=percent;$(key).disabled=!item||!!gesture}
   if(item?.heldFold)$('foldType').value='hand';
   $('foldType').disabled=!!item?.heldFold;
-  for(const key of ['fold','cut','place'])$(key+'Tools').hidden=tool!==key;
-  document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===tool));
+  for(const key of ['fold','separate','cut','place'])$(key+'Tools').hidden=tool!==key;
+  document.querySelectorAll('[data-tool]').forEach(b=>{b.classList.toggle('on',b.dataset.tool===tool);b.setAttribute('aria-pressed',String(b.dataset.tool===tool))});
   $('undo').disabled=!history.length;$('commit').disabled=!preview;
   $('center').disabled=!selected.length||item?.placed;
   $('slice').disabled=!g||item?.placed||item?.folded||!!item?.heldFold;$('place').disabled=!item||item.placed||!!item.heldFold;
@@ -41,14 +42,15 @@ function render(){
   for(const k of ['angleLabel','center','commit'])$(k).hidden=isHand();
   $('flatten').hidden=!isHand()||!item?.heldFold;$('flatten').disabled=!item?.heldFold;
   const hints={fold:{hand:item?.heldFold?'拖动纸上的点或边继续调整，点「压平」留下折痕。拖空白处环视。':'拖动点或边折纸；拖动已有折痕可展开。松手保持形状，拖空白处环视。',corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
+    separate:item?.heldFold?'请先在「折叠」中压平，留下折痕后再分开。':item?.creases?.length?'沿高亮折痕展开纸瓣，松手保持角度。拖空白处环视。':'这张纸还没有折痕，请先折叠并压平。',
     cut:item?.folded?'请选择尚未折叠的纸片。':g?'预览 '+g[0]+' × '+g[1]+'，共 '+g[0]*g[1]+' 片。':'请输入正整数，共 2 至 64 片。',
     place:'选中纸片后加入陈列；拖动成品可调整位置。拖空白处环视。'};
   $('hint').textContent=err||(item?.placed&&tool!=='place'?'已摆放的作品，可切换摆放工具移动或旋转。':hints[tool]);
   if(snappedIndex>=0&&!err)$('hint').textContent='已吸附角点 · 拖远可解除';
-  scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?(snapAnchor||{point:target}):null,previewLayers);
+  scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?(snapAnchor||{point:target}):null,previewLayers,separateAxis);
 }
 function enter(d){
-  desk=structuredClone(d);id=desk.active||desk.items[0].id;history=[];reset();tool='fold';
+  desk=structuredClone(d);id=desk.active||desk.items[0].id;history=[];reset();separateAxis=null;tool='fold';
   let migrated=false,warning='';
   desk.items=desk.items.map(item=>{
     try{const next=migratedLayerSpacing(item);migrated||=next!==item;return next}
@@ -58,6 +60,7 @@ function enter(d){
   if(migrated)save();if(warning)say(warning);
 }
 function home(){
+  if(gesture)finishGesture({type:'pointercancel',pointerId:gesture.pid});
   $('studio').hidden=true;$('home').hidden=false;scene.mode(true);$('resume').disabled=!saves.length;
   $('last').textContent=saves.length?saves[0].name:'暂无存档';
   $('new').classList.toggle('lead',!saves.length);$('resume').classList.toggle('lead',!!saves.length);
@@ -155,7 +158,10 @@ $('flatten').onclick=()=>{
   try{flattenHeldFold(next)}catch(e){say(e.message);return}
   remember();Object.assign(item,next);delete item.heldFold;delete item.layers;delete item.layerSpacingVersion;paperSound('fold');savedAction();
 };
-document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{tool=b.dataset.tool;reset();render()});
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{
+  if(gesture)finishGesture({type:'pointercancel',pointerId:gesture.pid});
+  tool=b.dataset.tool;separateAxis=null;reset();render();
+});
 for(const k of ['rows','cols'])$(k).oninput=()=>{if($('link').checked)$(k==='rows'?'cols':'rows').value=$(k).value;render()};
 $('link').onchange=()=>{if($('link').checked)$('cols').value=$('rows').value;render()};
 document.querySelectorAll('[data-size]').forEach(b=>b.onclick=()=>{$('rows').value=$('cols').value=b.dataset.size;render()});
@@ -187,6 +193,40 @@ function hitPaperControl(item,e,faces=item.faces){
   const point=points[0]?.distance<=radius?points[0].value:null,edge=edges[0]?.distance<=radius?edges[0].value:null;
   return {controls,point,edge,distance:point?points[0].distance:edge?edges[0].distance:Infinity};
 }
+function beginCrease(item,edge,options,extra={}){
+  Object.assign(gesture,{action:'crease',edge,edgeOptions:options,faces:structuredClone(item.faces),layers:item.layers?structuredClone(item.layers):undefined,spacingVersion:item.layers?(item.layerSpacingVersion??0):LAYER_SPACING_VERSION,...extra});
+}
+function beginSeparation(item,e){
+  reset();
+  if(item.heldFold||item.placed){render();return}
+  const {controls,point,edge}=hitPaperControl(item,e);
+  if(!point&&!edge){gesture.action='orbit';render();return}
+  const pick=separationPick(item,point,edge,separateAxis);
+  if(!pick){err='所选点或边还没有可展开的折痕，请先折叠并压平。';render();return}
+  const value=pick.edge,face=item.faces[value.face];
+  value.points=[pointOnFace(face,value.a),pointOnFace(face,value.b)];
+  value.screens=value.points.map(p=>scene.projectedFacePoint(item,value.face,p));
+  value.midScreen=scene.projectedFacePoint(item,value.face,value.points[0].map((v,i)=>(v+value.points[1][i])/2));
+  const center=face.reduce((sum,p)=>sum.map((v,i)=>v+p[i]/face.length),[0,0,0]);
+  value.centerScreen=scene.projectedFacePoint(item,value.face,center);
+  const options=pick.direct?controls.edges.filter(p=>p.crease&&sameCreaseAxis(p,value)):[value];
+  separateAxis={a:value.a,b:value.b};
+  beginCrease(item,value,options,{separating:true,side:pick.side,handleUV:pick.handleUV,direct:pick.direct});
+  render();
+}
+// 用实际材料点的小角度安全试转建立屏幕拖动方向，背面和斜视仍沿所见纸瓣运动。
+function separationDirection(item,g,drag){
+  const uv=g.direct?g.edge.centerUV:g.handleUV;
+  const start=scene.projectedMaterialPoint(item,uv,g.faces,g.layers),probes=[];
+  for(const sign of [1,-1]){
+    const candidate=safeTurnCrease(g.faces,g.edge,g.side,0,sign*3,paperThickness(item),g.layers,g.spacingVersion);
+    if(Math.abs(candidate.angle)<.5)continue;
+    const end=scene.projectedMaterialPoint(item,uv,candidate.faces,candidate.layers),dx=end.x-start.x,dy=end.y-start.y,length=Math.hypot(dx,dy);
+    if(length<.01)continue;
+    const vector=[dx/length,dy/length];probes.push({vector,sign,score:vector[0]*drag[0]+vector[1]*drag[1]});
+  }
+  return probes.sort((a,b)=>b.score-a.score)[0]||null;
+}
 $('view').onpointerdown=e=>{
   if($('studio').hidden)return;
   if(gesture){
@@ -199,7 +239,7 @@ $('view').onpointerdown=e=>{
   }
   const hit=scene.pointer(e);
   // 纸边和折痕恰在两个面片的接缝上时，射线可能未命中三角面；仍按可见点边的屏幕容差拾取。
-  if(!hit.id&&tool==='fold'){
+  if(!hit.id&&(tool==='fold'||tool==='separate')){
     let closest=Infinity;
     for(const item of desk.items){
       if(item.placed)continue;
@@ -209,10 +249,11 @@ $('view').onpointerdown=e=>{
   }
   $('view').setPointerCapture(e.pointerId);
   gesture={pid:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,start:hit.world,action:'orbit'};
-  if(!hit.id&&tool==='fold'){reset();render()}
+  if(!hit.id&&(tool==='fold'||tool==='separate')){reset();render()}
   if(!hit.id||!hit.world)return;
-  if(id!==hit.id){id=hit.id;reset()}const item=current();
+  if(id!==hit.id){id=hit.id;separateAxis=null;reset()}const item=current();
   gesture.action='select';
+  if(tool==='separate'){beginSeparation(item,e);return}
   if(tool==='place'&&item.placed){gesture.action='move';gesture.origin=[item.x,item.y]}
   if(tool==='fold'&&!item.placed){
     const pts=corners(item.faces),q=local(item,hit.world),type=$('foldType').value;
@@ -242,7 +283,7 @@ $('view').onpointerdown=e=>{
         const value=edge;
         if(value.crease){
           const matches=p=>Math.hypot(p.a[0]-value.a[0],p.a[1]-value.a[1])<1e-7&&Math.hypot(p.b[0]-value.b[0],p.b[1]-value.b[1])<1e-7;
-          Object.assign(gesture,{action:'crease',edge:value,edgeOptions:controls.edges.filter(p=>p.crease&&matches(p)),faces:structuredClone(item.faces),layers:item.layers?structuredClone(item.layers):undefined,spacingVersion:item.layers?(item.layerSpacingVersion??0):LAYER_SPACING_VERSION});
+          beginCrease(item,value,controls.edges.filter(p=>p.crease&&matches(p)));
         }else{
           Object.assign(gesture,{action:'fold',kind:'edge',pick:value.points[0].slice(0,2),other:value.points[1].slice(0,2)});selected=[0];
           gesture.dragHeight=value.midScreen.world[1];gesture.start=scene.pointer(e,gesture.dragHeight).world;
@@ -271,7 +312,7 @@ $('view').onpointermove=e=>{
     if(isHand()&&g.action==='fold'&&!g.baseTarget){target=null;preview=null;candidate=null;snappedIndex=-1;render()}
     return;
   }
-  const w=scene.pointer(e,g.dragHeight||0).world,item=current();if(!w||!g.start)return;
+  const w=scene.pointer(e,g.dragHeight||0).world,item=current();if((!w||!g.start)&&g.action!=='crease')return;
   if(g.action==='move'){
     if(!g.changed)remember();item.x=Math.max(-5,Math.min(5,g.origin[0]+w[0]-g.start[0]));item.y=Math.max(-3,Math.min(3,g.origin[1]+w[1]-g.start[1]));g.changed=true;
   }
@@ -290,12 +331,14 @@ $('view').onpointermove=e=>{
     }
     const [a,b]=g.edge.screens,dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
     const shift=len?((e.clientX-g.x)*(-dy)+(e.clientY-g.y)*dx)/len:0;
-    const angle=Math.max(-180,Math.min(180,shift*1.5*scene.facingSign()));
     try{
+      if(g.separating&&!g.direction)g.direction=separationDirection(item,g,[e.clientX-g.x,e.clientY-g.y]);
+      const amount=g.separating&&g.direction?((e.clientX-g.x)*g.direction.vector[0]+(e.clientY-g.y)*g.direction.vector[1])*g.direction.sign:shift*scene.facingSign();
+      const angle=Math.max(-180,Math.min(180,amount*1.5));
       const safe=safeTurnCrease(g.faces,g.edge,g.side,g.safeAngle||0,angle,paperThickness(item),g.layers,g.spacingVersion);
       if(!validPaperTopology({...item,faces:safe.faces,layers:safe.layers}))throw Error('纸面分区过多，请减少折叠次数');
       preview=safe.faces;previewLayers=safe.layers;g.previewSpacingVersion=safe.layerSpacingVersion;g.safeAngle=safe.angle;g.changedCrease=Math.abs(safe.angle)>1e-6;
-      err=safe.blocked?'纸层相互接触，已停在可折叠的位置':safe.limited?'已调整到安全位置，请分步继续拖动':'沿已有折痕调整纸瓣，松手保持当前角度';
+      err=safe.blocked?(g.separating?'纸层相互接触，请先展开压在上面的纸瓣。':'纸层相互接触，已停在可折叠的位置'):safe.limited?'已调整到安全位置，请分步继续拖动':g.separating?'正在沿已有折痕分开，松手保持当前角度':'沿已有折痕调整纸瓣，松手保持当前角度';
     }catch(error){err=error.message}
   }
   if(g.action==='fold'){
@@ -328,7 +371,7 @@ function finishGesture(e){
     if(e.type==='pointerup'&&preview&&candidate){remember();current().heldFold=structuredClone(candidate);save()}
     reset();render();
   }
-  if(isHand()&&g.action==='crease'){
+  if(g.action==='crease'){
     if(e.type==='pointerup'&&preview&&g.changedCrease){remember();current().faces=preview;current().layers=previewLayers;if(g.previewSpacingVersion)current().layerSpacingVersion=g.previewSpacingVersion;else delete current().layerSpacingVersion;current().folded=true;save()}
     reset();render();
   }

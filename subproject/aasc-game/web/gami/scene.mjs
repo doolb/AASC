@@ -2,6 +2,7 @@ import * as T from './three.mjs';
 import {bounds,corners} from './fold.mjs';
 import {heldFaces} from './held-fold.mjs';
 import {buildTopology,clipMaterialSegment,faceNormal,layerDisplacements,pointOnFace,paperThickness} from './paper-topology.mjs';
+import {sameCreaseAxis} from './separate.mjs';
 const scene=new T.Scene(), camera=new T.PerspectiveCamera(38,1,.1,90);
 const renderer=new T.WebGLRenderer({canvas:document.querySelector('#view'),antialias:true});
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
@@ -186,10 +187,15 @@ function coordinateProjection(group,item,faces,p,offsets){
   });
   return nearestSurface(matches)||surfaceProjection(group,item,faces,0,[p[0],p[1],0],offsets);
 }
-export function projectedMaterialPoint(item,uv,faces){
+export function projectedMaterialPoint(item,uv,faces,layers){
   const group=works.children.find(o=>o.userData.id===item.id);if(!group)return null;
-  const actual=faces||group.userData.faces,offsets=actual===group.userData.faces?group.userData.offsets:actual===item.faces&&item.layers?item.layers:layerDisplacements(actual,paperThickness(item));
+  const actual=faces||group.userData.faces,offsets=layers||(actual===group.userData.faces?group.userData.offsets:actual===item.faces&&item.layers?item.layers:layerDisplacements(actual,paperThickness(item)));
   return materialProjection(group,item,actual,uv,offsets);
+}
+// 展开轴可被活动纸瓣遮挡；仅为已拾取的可见材料面投影辅助轴，不放宽点边遮挡规则。
+export function projectedFacePoint(item,index,point){
+  const group=works.children.find(o=>o.userData.id===item.id);if(!group)return null;
+  return surfaceProjection(group,item,group.userData.faces,index,point,group.userData.offsets);
 }
 export function projectedCorner(item,p){
   const group=works.children.find(o=>o.userData.id===item.id);if(!group)return null;
@@ -224,7 +230,7 @@ function clear(){
 function line(group,a,b,color){
   const geo=new T.BufferGeometry().setFromPoints([a,b]);group.add(new T.Line(geo,new T.LineBasicMaterial({color})));
 }
-export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers){
+export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers,separateAxis){
   clear();
   for(const item of desk.items){
     const group=new T.Group(),faces=item.id===id&&preview?preview:heldFaces(item);
@@ -258,17 +264,22 @@ export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers){
     const edgeGeometry=new T.BufferGeometry();edgeGeometry.setAttribute('position',new T.Float32BufferAttribute(sides,3));edgeGeometry.computeVertexNormals();
     const edgeMesh=new T.Mesh(edgeGeometry,mat(0xddd3bf,{side:T.DoubleSide}));edgeMesh.userData.id=item.id;edgeMesh.userData.paperSurface=true;edgeMesh.castShadow=true;group.add(edgeMesh);
     if(item.creases?.length){
-      const lines=[],topology=buildTopology(faces,item.creases);
+      const lines=[],active=[],topology=buildTopology(faces,item.creases),separating=tool==='separate'&&item.id===id;
       faces.forEach((f,k)=>{
         const n=paperNormal(f).multiplyScalar(thickness/2+.001);
         for(const edge of topology.edges){
           if(!edge.crease)continue;
           const p=pointOnFace(f,edge.a),q=pointOnFace(f,edge.b);if(!p||!q)continue;
-          for(const sign of [1,-1])for(const v of [p,q]){const position=paperPosition(v,offsets[k]).addScaledVector(n,sign);lines.push(position.x,position.y,position.z)}
+          const target=separating&&sameCreaseAxis(edge,separateAxis)?active:lines;
+          for(const sign of [1,-1])for(const v of [p,q]){const position=paperPosition(v,offsets[k]).addScaledVector(n,sign);target.push(position.x,position.y,position.z)}
         }
       });
       const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(lines,3));
-      group.add(new T.LineSegments(geo,new T.LineBasicMaterial({color:0x776a5b,transparent:true,opacity:.55})));
+      group.add(new T.LineSegments(geo,new T.LineBasicMaterial({color:separating?0x287c78:0x776a5b,transparent:true,opacity:separating?1:.55})));
+      if(active.length){
+        const highlighted=new T.BufferGeometry();highlighted.setAttribute('position',new T.Float32BufferAttribute(active,3));
+        group.add(new T.LineSegments(highlighted,new T.LineBasicMaterial({color:0xf08d36})));
+      }
     }
     if(item.id!==id)continue;
     if(focusedId!==id){
@@ -290,12 +301,12 @@ export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers){
       for(let k=1;k<rows;k++){const y=b+(d-b)*k/rows;line(group,vec(a,level,y),vec(c,level,y),0x4c5d4e)}
       for(let k=1;k<cols;k++){const x=a+(c-a)*k/cols;line(group,vec(x,level,b),vec(x,level,d),0x4c5d4e)}
     }
-    if(tool==='fold'){
+    if(tool==='fold'||tool==='separate'){
       const topology=buildTopology(faces,item.creases),seen=new Set();
       faces.forEach((face,k)=>topology.vertices.forEach(uv=>{
         const p=pointOnFace(face,uv);if(!p)return;
         const center=paperPosition(p,offsets[k]),id=center.toArray().map(n=>Math.round(n*1e6)).join(',');if(seen.has(id))return;seen.add(id);
-        const marker=new T.Mesh(new T.SphereGeometry(.032,12,8),mat(0xffedb2));marker.material.depthTest=true;marker.userData.id=item.id;marker.userData.corner={center,normal:paperNormal(face),halfThickness:thickness/2};marker.position.copy(center);group.add(marker);
+        const marker=new T.Mesh(new T.SphereGeometry(.032,12,8),mat(tool==='separate'?0xa5ece1:0xffedb2));marker.material.depthTest=true;marker.userData.id=item.id;marker.userData.corner={center,normal:paperNormal(face),halfThickness:thickness/2};marker.position.copy(center);group.add(marker);
       }));
     }
   }

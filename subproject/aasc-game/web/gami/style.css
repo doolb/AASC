@@ -2,3 +2,6 @@
 
 /* 材料参数单独成行，百分比数值保留足够输入宽度。 */
 #paperTools{position:absolute;top:64px;left:18px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;max-width:94vw;padding:8px 12px;border:1px solid #c8bda7;border-radius:6px;background:var(--paper);box-shadow:0 3px 12px #3c302f20;font-size:13px}#paperTools input[type=number],#newThickness{width:68px}#paperTools small{color:#756c5c}
+
+/* 五个工具在窄屏保持同排，分开提示允许换行，避免横向溢出遮住纸角。 */
+#separateTools{font-size:13px;color:#35665e}.tabs{flex-wrap:wrap}@media(max-width:430px){#panel{padding:10px 12px}.tabs{gap:4px}#panel .tabs button{flex:1;padding:6px 8px;white-space:nowrap}}
