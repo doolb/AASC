@@ -145,14 +145,14 @@ test('每纸厚度独立、旧存档缺省兼容并拒绝损坏厚度',async()=>
 });
 test('厚度调整保持叠层分离及候选独立，穿透或计算超限时保留原纸',async()=>{
   const {sheet,fold}=await import('../web/gami/fold.mjs');
-  const {layerDisplacements}=await import('../web/gami/paper-topology.mjs');
+  const {layerDisplacements,layerPitch,LAYER_SPACING_VERSION}=await import('../web/gami/paper-topology.mjs');
   const {resizedPaper,faceCollision}=await import('../web/gami/paper-contact.mjs');
-  const item={faces:fold(sheet(),[[-1,0]],[1,0],180),thickness:.008};
+  const item={faces:fold(sheet(),[[-1,0]],[1,0],180),thickness:.008,layerSpacingVersion:LAYER_SPACING_VERSION};
   item.layers=layerDisplacements(item.faces,item.thickness);
   const original=JSON.stringify(item);
   for(const thickness of [.002,.008,.02]){
     const next=resizedPaper(item,thickness);assert.equal(next.thickness,thickness);
-    assert.ok(Math.abs(Math.hypot(...next.layers[1])-thickness)<1e-8);
+    assert.ok(Math.abs(Math.hypot(...next.layers[1])-layerPitch(thickness))<1e-8);
     assert.equal(faceCollision(next.faces[0],next.layers[0],next.faces[1],next.layers[1],thickness),false);
     assert.equal(JSON.stringify(item),original);
   }
@@ -166,7 +166,64 @@ test('厚度调整保持叠层分离及候选独立，穿透或计算超限时�
   assert.equal(changed.thickness,.01);assert.equal(changed.layers,undefined,'临时弯纸条带不写入材料层位移');
 });
 
-test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继续调整、压平与撤销', {timeout:480000}, async(t)=>{
+test('叠层表面保留四分之一纸厚的间隙，立起和背面仍遵守同一间距',async()=>{
+  const {sheet,fold}=await import('../web/gami/fold.mjs');
+  const {layerDisplacements}=await import('../web/gami/paper-topology.mjs');
+  let faces=fold(sheet(),[[-1,0]],[1,0],180);faces=fold(faces,[[.5,-1]],[.5,1],180);
+  for(const thickness of [.002,.008,.02])for(const transform of [([x,y,z,u,v])=>[x,y,z,u,v],([x,y,z,u,v])=>[z,y,x,u,v],([x,y,z,u,v])=>[x,y,-z,u,v]]){
+    const actual=faces.map(f=>f.map(transform)),layers=layerDisplacements(actual,thickness);
+    const ranks=layers.map(p=>Math.hypot(...p)).sort((a,b)=>a-b);
+    assert.equal(ranks.length,4);
+    for(let i=1;i<ranks.length;i++)assert.ok(Math.abs(ranks[i]-ranks[i-1]-thickness-thickness*.25)<1e-8);
+  }
+});
+test('旧层位移只迁移一次，非共面层位移可兼容，碰撞时保留原存档',async()=>{
+  const {sheet,fold}=await import('../web/gami/fold.mjs');
+  const {layerDisplacements,validPaperTopology,buildTopology,foldCreases}=await import('../web/gami/paper-topology.mjs');
+  const {migratedLayerSpacing,safeTurnCrease}=await import('../web/gami/paper-contact.mjs');
+  const faces=fold(sheet(),[[-1,0]],[1,0],180),layers=layerDisplacements(faces,.008).map(p=>p.map(n=>n/1.25));
+  const old={faces,layers,thickness:.008},original=JSON.stringify(old),next=migratedLayerSpacing(old);
+  assert.equal(JSON.stringify(old),original);assert.equal(next.layerSpacingVersion,1);assert.ok(Math.abs(next.layers[1][2]-.01)<1e-8);
+  for(let i=0;i<3;i++)assert.deepEqual(migratedLayerSpacing(JSON.parse(JSON.stringify(next))),JSON.parse(JSON.stringify(next)));
+  assert.equal(validPaperTopology(next),true);assert.equal(validPaperTopology({...next,layerSpacingVersion:2}),false);
+  const edge=buildTopology(faces,foldCreases(sheet(),[[-1,0]],[1,0])).edges.find(e=>e.crease);
+  const legacyOpened=safeTurnCrease(faces,edge,-1,0,30,.008,layers,0);
+  assert.equal(legacyOpened.blocked,false);assert.equal(legacyOpened.angle,30);assert.equal(legacyOpened.layerSpacingVersion,0,'旧纸形先按旧距离展开，不误标记新间距');
+  const raised=safeTurnCrease(faces,edge,-1,0,30,.008,layerDisplacements(faces,.008));
+  assert.ok(raised.faces.flat().some(p=>Math.abs(p[2])>.1));
+  const legacy={faces:raised.faces,thickness:.008,layers:raised.layers.map(p=>p.map(n=>n/1.25))};
+  const migrated=migratedLayerSpacing(legacy);assert.ok(migrated.layers.every((p,i)=>p.every((n,k)=>Math.abs(n-raised.layers[i][k])<1e-10)));
+  const a=[[0,0,0,0,0],[1,0,0,1,0],[0,1,0,0,1]],b=a.map(([x,y,z,u,v])=>[x,y,.009,u+2,v+2]);
+  const trapped={faces:[a,b],layers:[[0,0,0],[0,0,0]],thickness:.008},before=JSON.stringify(trapped);
+  assert.throws(()=>migratedLayerSpacing(trapped),/穿透/);assert.equal(JSON.stringify(trapped),before);
+});
+
+test('细小真实重叠片仍保留层间隙，共边和数值噪声不产生层高台阶',async()=>{
+  const {sheet}=await import('../web/gami/fold.mjs');
+  const {layerDisplacements}=await import('../web/gami/paper-topology.mjs');
+  const {faceCollision,resizedPaper}=await import('../web/gami/paper-contact.mjs');
+  const faces=[sheet()[0],[[.2,.2,0,2,2],[.20012,.2,0,3,2],[.2,.20012,0,2,3]]],layers=layerDisplacements(faces,.008);
+  assert.ok(Math.abs(layers[1][2]-.01)<1e-8,'面积 7.2e-9 的重叠片也必须分层');
+  assert.equal(faceCollision(faces[0],layers[0],faces[1],layers[1],.01),false);
+  assert.equal(resizedPaper({faces,thickness:.008},.01).thickness,.01);
+  const neighbors=[sheet(-1,-1,1,2)[0],sheet(0,-1,1,2)[0]];
+  for(const noise of [0,-1e-14]){
+    const actual=[neighbors[0],neighbors[1].map(p=>[p[0]+noise,...p.slice(1)])];
+    assert.ok(layerDisplacements(actual,.008).every(p=>Math.hypot(...p)<1e-12));
+  }
+});
+
+test('沿已有折痕展开后的微小平面残差不会让下一次平折漏分层',async()=>{
+  const {sheet,fold}=await import('../web/gami/fold.mjs');
+  const {resizedPaper}=await import('../web/gami/paper-contact.mjs');
+  const source=sheet().map(face=>face.map(p=>[p[0],p[1],(1-p[1])*1.2e-8,p[3],p[4]])),before=JSON.stringify(source);
+  const faces=fold(source,[[-1,0]],[1,0],180);
+  assert.equal(JSON.stringify(source),before,'平面恢复不能改写原存档');
+  assert.ok(faces.flat().every(p=>p[2]===0));assert.equal(resizedPaper({faces,thickness:.008},.01).thickness,.01);
+  assert.throws(()=>fold(sheet().map(f=>f.map(p=>[p[0],p[1],.01,p[3],p[4]])),[[-1,0]],[1,0],180),/平面/);
+});
+
+test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继续调整、压平与撤销', {timeout:600000}, async(t)=>{
   const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
   const chromium=process.env.PUPPETEER_EXECUTABLE_PATH||'/usr/bin/chromium';
   if(!process.env.DISPLAY){t.skip('需要指定图形会话 DISPLAY');return}
@@ -214,6 +271,7 @@ test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继�
   await page.mouse.up();
   const held=await saved();assert.ok(held.heldFold,'有效松手应保存待压平折形');
   assert.deepEqual(held.heldFold.dest,[1,1]);assert.equal(held.heldFold.curl,0);assert.equal(held.heldFold.snapped,true);
+  assert.deepEqual(held.heldFold.snapTarget,[1,1],'吸附保存目标材料坐标');
   const {heldFaces}=await import('../web/gami/held-fold.mjs');
   const tip=heldFaces(held).flat().find(p=>p[3]===0&&p[4]===0);
   assert.ok(tip&&Math.hypot(tip[0]-1,tip[1]-1,tip[2])<1e-8,'纸尖须与吸附角点实际重合');
@@ -309,7 +367,9 @@ test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继�
   const fromIntersection=await saved();assert.ok(fromIntersection.heldFold,'拖动内部交点应生成新折叠');
   assert.ok(Math.hypot(...fromIntersection.heldFold.pick.map((v,i)=>v-intersection.point[i]))<1e-6,'新折叠应来自内部交点');
   await page.click('#flatten');assert.ok((await saved()).creases.length>crossed.creases.length);
-  await numberThickness(.5);const persisted=await saved();assert.equal(persisted.thickness,.01);
+  const beforeResize=await saved();await numberThickness(.5);const persisted=await saved();
+  if(persisted.thickness!==.01)fs.writeFileSync('/tmp/gami-gap-resize-fixture.json',JSON.stringify({beforeResize,persisted,message:await page.$eval('#message',e=>e.textContent)}));
+  assert.equal(persisted.thickness,.01,await page.$eval('#message',e=>e.textContent));
   await page.reload({waitUntil:'domcontentloaded'});await page.click('#resume');
   assert.deepEqual(await saved(),persisted);assert.equal(await page.$eval('#thicknessValue',e=>e.value),'0.5');
   // 实际导出文件再经导入入口恢复，覆盖字段校验和副本保存。
@@ -327,5 +387,40 @@ test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继�
   await page.click('#close');await (await page.$('#file')).uploadFile(exportFile);
   await page.waitForSelector('#confirmImport');await page.click('#confirmImport');
   assert.deepEqual(await saved(),persisted);assert.equal(await page.$eval('#thicknessValue',e=>e.value),'0.5');
+  // 用实际截图中的橙色像素验证标记，避免只比较两段使用同一错误公式的投影代码。
+  for(const view of ['正面','斜视','背面']){
+    const expected=await page.evaluate(async view=>{
+      const scene=await import('./scene.mjs'),{sheet,fold}=await import('./fold.mjs');
+      if(view==='斜视'){scene.orbit(45,-45);scene.zoom(.8)}
+      if(view==='背面')scene.orbit(0,-230);
+      const item={id:'projection-check',faces:fold(sheet(),[[-1,0]],[1,0],180),thickness:.02,front:'#668f99',back:'#f5ead3',seed:1,x:0,y:0,rot:.3};
+      scene.show({items:[item]},item.id,null,[],null,'fold',{uv:[0,0]});
+      const anchor=scene.projectedMaterialPoint(item,[0,0]);
+      return {x:anchor.x,y:anchor.y,world:anchor.world};
+    },view);
+    const screenshot=await page.screenshot({encoding:'base64'});
+    const orange=await page.evaluate(async({screenshot,expected})=>{
+      const image=new Image();image.src='data:image/png;base64,'+screenshot;await image.decode();
+      const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;
+      const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);const scale=image.width/innerWidth;
+      const left=Math.max(0,Math.floor((expected.x-25)*scale)),top=Math.max(0,Math.floor((expected.y-25)*scale));
+      const width=Math.min(Math.ceil(50*scale),image.width-left),height=Math.min(Math.ceil(50*scale),image.height-top);
+      const data=ctx.getImageData(left,top,width,height).data,colors=new Map();
+      for(let row=0;row<height;row++)for(let col=0;col<width;col++){
+        const i=(row*width+col)*4,r=data[i],g=data[i+1],b=data[i+2];
+        if(r>180&&g>95&&g<220&&b<135&&r>g*1.12){
+          const key=[r,g,b].join(','),group=colors.get(key)||{count:0,x:0,y:0,color:key};
+          group.count++;group.x+=(left+col+.5)/scale;group.y+=(top+row+.5)/scale;colors.set(key,group);
+        }
+      }
+      // 无光照的橙色标记内部颜色恒定；用众数隔离背面纸张中相近的暖色纹理。
+      const mode=[...colors.values()].sort((a,b)=>b.count-a.count)[0];
+      return mode?{count:mode.count,x:mode.x/mode.count,y:mode.y/mode.count,color:mode.color}:{count:0};
+    },{screenshot,expected});
+    assert.ok(orange.count>4,view+'应看到橙色吸附标记');
+    assert.ok(Math.hypot(orange.x-expected.x,orange.y-expected.y)<1.5,view+'标记中心应贴合实际表面投影：'+JSON.stringify({orange,expected}));
+    t.diagnostic(view+'吸附标记像素中心误差 '+Math.hypot(orange.x-expected.x,orange.y-expected.y).toFixed(3)+' px，RGB '+orange.color);
+    assert.ok(Math.abs(expected.world[1])>.005,view+'投影必须包含厚度及层位移');
+  }
   assert.deepEqual(errors,[]);
 });

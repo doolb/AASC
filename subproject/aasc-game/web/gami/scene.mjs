@@ -141,39 +141,66 @@ export function draw(){
   }else{
     camera.clearViewOffset();aim.copy(focus);camera.position.set(distance*Math.cos(pitch)*Math.sin(yaw),distance*Math.sin(pitch),distance*Math.cos(pitch)*Math.cos(yaw)).add(aim);
   }
-  camera.lookAt(aim);camera.updateProjectionMatrix();renderer.render(scene,camera);
+  camera.lookAt(aim);camera.updateProjectionMatrix();
+  // 操作点跟随可见的正背表面，旋转视角后不留在中面或已被覆盖的低层上。
+  works.traverse(object=>{
+    const anchor=object.userData.corner;if(!anchor)return;
+    const world=object.parent.localToWorld(anchor.center.clone()),normal=anchor.normal.clone().transformDirection(object.parent.matrixWorld);
+    const sign=normal.dot(camera.position.clone().sub(world))>=0?1:-1;
+    object.position.copy(anchor.center).addScaledVector(anchor.normal,sign*anchor.halfThickness);
+  });
+  renderer.render(scene,camera);
 }
 const ray=new T.Raycaster(),plane=new T.Plane(vec(0,1,0),0);
-export function pointer(e){
+export function pointer(e,height=0){
   ray.setFromCamera(new T.Vector2(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2),camera);
+  plane.constant=-height;
   const q=Math.abs(ray.ray.direction.y)<.006?null:ray.ray.intersectPlane(plane,vec(0,0,0));const hit=ray.intersectObjects(works.children,true).find(v=>v.object.userData.id);
   return {world:q?[q.x,q.z]:null,id:hit?.object.userData.id};
 }
-// 以屏幕像素计算容差，旋转视角、缩放或切换触控设备时都能准确对齐。
+// 投影、拾取与吸附标记共用实际表面锚点，包含材料高度、层位移及正背面偏移。
 export function facingSign(){return camera.position.y>=0?1:-1}
+function surfaceProjection(group,item,faces,index,point,offsets){
+  const local=paperPosition(point,offsets[index]),center=group.localToWorld(local.clone());
+  const normal=paperNormal(faces[index]),worldNormal=normal.clone().transformDirection(group.matrixWorld);
+  const sign=worldNormal.dot(camera.position.clone().sub(center))>=0?1:-1;
+  local.addScaledVector(normal,sign*paperThickness(item)/2);
+  const world=group.localToWorld(local.clone()),pos=world.clone().project(camera);
+  ray.setFromCamera(new T.Vector2(pos.x,pos.y),camera);
+  const first=ray.intersectObjects(works.children,true).find(hit=>hit.object.userData.paperSurface);
+  const distance=camera.position.distanceTo(world),tolerance=Math.min(.002,paperThickness(item)*.25);
+  return {x:(1+pos.x)*innerWidth/2,y:(1-pos.y)*innerHeight/2,visible:Math.abs(pos.z)<1&&(!first||distance-first.distance<=tolerance),distance,local:local.toArray(),world:world.toArray(),face:index};
+}
+function nearestSurface(points){return points.sort((a,b)=>Number(b.visible)-Number(a.visible)||a.distance-b.distance)[0]||null}
+function materialProjection(group,item,faces,uv,offsets){
+  return nearestSurface(faces.flatMap((face,index)=>{
+    const point=pointOnFace(face,uv);
+    return point?[{...surfaceProjection(group,item,faces,index,point,offsets),point,uv}]:[];
+  }));
+}
+function coordinateProjection(group,item,faces,p,offsets){
+  // 将 XY 暂作仿射查找坐标，同样支持边中点，不能默认使用第一层的高度。
+  const matches=faces.flatMap((face,index)=>{
+    const sample=pointOnFace(face.map(q=>[q[2],q[3],q[4],q[0],q[1]]),p);
+    return sample?[surfaceProjection(group,item,faces,index,[p[0],p[1],sample[0]],offsets)]:[];
+  });
+  return nearestSurface(matches)||surfaceProjection(group,item,faces,0,[p[0],p[1],0],offsets);
+}
+export function projectedMaterialPoint(item,uv,faces){
+  const group=works.children.find(o=>o.userData.id===item.id);if(!group)return null;
+  const actual=faces||group.userData.faces,offsets=actual===group.userData.faces?group.userData.offsets:actual===item.faces&&item.layers?item.layers:layerDisplacements(actual,paperThickness(item));
+  return materialProjection(group,item,actual,uv,offsets);
+}
 export function projectedCorner(item,p){
-  const group=works.children.find(o=>o.userData.id===item.id);
-  const pos=group.localToWorld(vec(p[0],0,p[1])).project(camera);
-  const ndc=new T.Vector2(pos.x,pos.y);
-  ray.setFromCamera(ndc,camera);
-  const first=ray.intersectObjects(works.children,true).find(hit=>hit.object.userData.id);
-  return {x:(1+pos.x)*innerWidth/2,y:(1-pos.y)*innerHeight/2,visible:Math.abs(pos.z)<1&&(!first||first.object.userData.id===item.id)};
+  const group=works.children.find(o=>o.userData.id===item.id);if(!group)return null;
+  return coordinateProjection(group,item,group.userData.faces,p,group.userData.offsets);
 }
 // 将材料坐标映射到当前纸层，通过射线深度过滤被其它纸层遮挡的点和边。
 export function paperControls(item,faces=item.faces){
   const group=works.children.find(o=>o.userData.id===item.id);
   if(!group)return {points:[],edges:[]};
   const thickness=paperThickness(item),offsets=faces===item.faces&&item.layers?item.layers:layerDisplacements(faces,thickness),topology=buildTopology(item.faces,item.creases),points=[],edges=[];
-  const project=(p,k)=>{
-    const center=group.localToWorld(paperPosition(p,offsets[k]));
-    const normal=paperNormal(faces[k]).transformDirection(group.matrixWorld);
-    const sign=normal.dot(camera.position.clone().sub(center))>=0?1:-1;
-    const world=center.addScaledVector(normal,sign*thickness/2),pos=world.clone().project(camera);
-    ray.setFromCamera(new T.Vector2(pos.x,pos.y),camera);
-    const first=ray.intersectObjects(works.children,true).find(hit=>hit.object.userData.paperSurface);
-    const distance=camera.position.distanceTo(world);
-    return {x:(1+pos.x)*innerWidth/2,y:(1-pos.y)*innerHeight/2,visible:Math.abs(pos.z)<1&&(!first||distance-first.distance<=Math.min(.002,thickness*.25))};
-  };
+  const project=(p,k)=>surfaceProjection(group,item,faces,k,p,offsets);
   faces.forEach((face,k)=>{
     const center=face.reduce((v,p)=>[v[0]+p[0]/face.length,v[1]+p[1]/face.length,v[2]+p[2]/face.length],[0,0,0]);
     const centerUV=face.reduce((v,p)=>[v[0]+p[3]/face.length,v[1]+p[4]/face.length],[0,0]);
@@ -202,7 +229,7 @@ export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers){
   for(const item of desk.items){
     const group=new T.Group(),faces=item.id===id&&preview?preview:heldFaces(item);
     const thickness=paperThickness(item),offsets=item.id===id&&preview?(previewLayers||layerDisplacements(faces,thickness)):item.heldFold?layerDisplacements(faces,thickness):(item.layers||layerDisplacements(faces,thickness));
-    group.userData.id=item.id;
+    group.userData.id=item.id;group.userData.faces=faces;group.userData.offsets=offsets;
     group.position.set(item.x,0,item.y);group.rotation.y=item.rot;works.add(group);
     const tex=paperTexture(item.front,item.seed),back=paperTexture(item.back,item.seed+1),bump=creaseBump(tex,item.creases);
     for(const side of [0,1]){
@@ -249,8 +276,12 @@ export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers){
       focus.copy(center);focusedId=id;
     }
     if(snapped){
+      group.updateWorldMatrix(true,true);
+      const anchor=snapped.uv?materialProjection(group,item,faces,snapped.uv,offsets):coordinateProjection(group,item,faces,snapped.point,offsets);
+      if(anchor){
       const indicator=new T.Mesh(new T.SphereGeometry(.048,16,12),new T.MeshBasicMaterial({color:0xff952f,depthTest:false}));
-      indicator.position.set(snapped[0],0,snapped[1]);indicator.renderOrder=3;group.add(indicator);
+      indicator.position.fromArray(anchor.local);indicator.renderOrder=3;group.add(indicator);
+      }
     }
     if(item.placed||preview||item.heldFold)continue;
     const points=corners(item.faces), level=.037+faces.length*.001;
@@ -263,8 +294,8 @@ export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers){
       const topology=buildTopology(faces,item.creases),seen=new Set();
       faces.forEach((face,k)=>topology.vertices.forEach(uv=>{
         const p=pointOnFace(face,uv);if(!p)return;
-        const id=p.map(n=>Math.round(n*1e6)).join(',');if(seen.has(id))return;seen.add(id);
-        const marker=new T.Mesh(new T.SphereGeometry(.032,12,8),mat(0xffedb2));marker.material.depthTest=true;marker.userData.id=item.id;marker.position.copy(paperPosition(p,offsets[k]));group.add(marker);
+        const center=paperPosition(p,offsets[k]),id=center.toArray().map(n=>Math.round(n*1e6)).join(',');if(seen.has(id))return;seen.add(id);
+        const marker=new T.Mesh(new T.SphereGeometry(.032,12,8),mat(0xffedb2));marker.material.depthTest=true;marker.userData.id=item.id;marker.userData.corner={center,normal:paperNormal(face),halfThickness:thickness/2};marker.position.copy(center);group.add(marker);
       }));
     }
   }

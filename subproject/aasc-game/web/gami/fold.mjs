@@ -36,6 +36,8 @@ function clip(face,dist){
 }
 export function fold(faces,starts,target,degrees,curl=0){
   if(faces.flat().some(p=>Math.abs(p[2])>.00001))throw Error('请先沿已有折痕展开到平面，再建立新的折线。');
+  // 通过公共平面检查后统一恢复精确平面，避免展开残差使固定面与翻折面被误分为不同平面。
+  faces=faces.map(face=>face.map(([x,y,z,u,v])=>[x,y,0,u,v]));
   const axes=starts.map(a=>{
     const dx=a[0]-target[0],dy=a[1]-target[1],len=Math.hypot(dx,dy);
     if(len<1e-5)throw Error('请把目标移离起点');
@@ -44,6 +46,7 @@ export function fold(faces,starts,target,degrees,curl=0){
   });
   let fixed=faces;const moved=[];
   const angle=degrees*Math.PI/180;
+  const sine=degrees===0||Math.abs(degrees)===180?0:Math.sin(angle);
   for(const axis of axes){
     const {dist,nx,ny}=axis;
     const flap=faces.map(f=>clip(f,dist)).filter(f=>f.length);
@@ -66,7 +69,7 @@ export function fold(faces,starts,target,degrees,curl=0){
       }else strips.push(face);
       for(const strip of strips)moved.push(strip.map(([x,y,z,u,v])=>{
         const d=dist([x,y]);
-        let horizontal=d*Math.cos(angle),height=d*Math.sin(angle);
+        let horizontal=d*Math.cos(angle),height=d*sine;
         if(width>1e-6){
           const theta=Math.min(Math.PI,Math.max(0,d/radius));
           horizontal=radius*Math.sin(theta)-Math.max(0,d-width);

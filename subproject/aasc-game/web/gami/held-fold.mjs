@@ -26,6 +26,7 @@ export function validHeldFold(item){
   if(h.other!==undefined&&!point(h.other))return false;
   if(h.material!==undefined&&!point(h.material))return false;
   if(h.snapped!==undefined&&h.snapped!==true)return false;
+  if(h.snapTarget!==undefined&&(!h.snapped||!point(h.snapTarget)))return false;
   if(![180,-180].includes(h.angle)||!Number.isFinite(h.curl)||h.curl<0||h.curl>.42)return false;
   try{heldFaces(item);return true}catch{return false}
 }
@@ -35,6 +36,6 @@ export function flattenHeldFold(item){
   if(!h)return false;
   const faces=fold(item.faces,h.starts,h.dest,h.angle);
   recordCreases(item,h.starts,h.dest);
-  item.faces=faces;item.folded=true;delete item.heldFold;delete item.layers;
+  item.faces=faces;item.folded=true;delete item.heldFold;delete item.layers;delete item.layerSpacingVersion;
   return true;
 }

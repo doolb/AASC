@@ -1,8 +1,8 @@
 import * as scene from './scene.mjs';
 import {sheet,bounds,corners,fold,cut,snapIndex} from './fold.mjs';
 import {adjustedCurl,heldFaces,validHeldFold,flattenHeldFold} from './held-fold.mjs';
-import {recordCreases,validPaperTopology,paperThickness,PAPER_THICKNESS,validThickness} from './paper-topology.mjs';
-import {safeTurnCrease,resizedPaper} from './paper-contact.mjs';
+import {recordCreases,validPaperTopology,paperThickness,PAPER_THICKNESS,validThickness,LAYER_SPACING_VERSION} from './paper-topology.mjs';
+import {safeTurnCrease,resizedPaper,migratedLayerSpacing} from './paper-contact.mjs';
 import {sound,unlock,paperSound} from './sound.mjs';
 const $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
 const storageKey='gami.desks.v1';
@@ -22,8 +22,8 @@ function save(){
 }
 function remember(){history.push(structuredClone(desk));if(history.length>25)history.shift()}
 function savedAction(){save();reset();render()}
-let snappedIndex=-1;
-function reset(){snappedIndex=-1;selected=[];target=null;preview=null;previewLayers=null;candidate=null;err=''}
+let snappedIndex=-1,snapAnchor=null;
+function reset(){snappedIndex=-1;snapAnchor=null;selected=[];target=null;preview=null;previewLayers=null;candidate=null;err=''}
 function grid(){const r=$('rows').valueAsNumber,c=$('cols').valueAsNumber;return Number.isInteger(r)&&Number.isInteger(c)&&r>0&&c>0&&r*c>=2&&r*c<=64?[r,c]:null}
 const isHand=()=>$('foldType').value==='hand';
 function render(){
@@ -45,11 +45,17 @@ function render(){
     place:'选中纸片后加入陈列；拖动成品可调整位置。拖空白处环视。'};
   $('hint').textContent=err||(item?.placed&&tool!=='place'?'已摆放的作品，可切换摆放工具移动或旋转。':hints[tool]);
   if(snappedIndex>=0&&!err)$('hint').textContent='已吸附角点 · 拖远可解除';
-  scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?target:null,previewLayers);
+  scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?(snapAnchor||{point:target}):null,previewLayers);
 }
 function enter(d){
   desk=structuredClone(d);id=desk.active||desk.items[0].id;history=[];reset();tool='fold';
+  let migrated=false,warning='';
+  desk.items=desk.items.map(item=>{
+    try{const next=migratedLayerSpacing(item);migrated||=next!==item;return next}
+    catch{warning='部分旧纸形暂时无法安全增加间隙，已保留原形，请先展开纸张';return item}
+  });
   $('dialog').close();$('home').hidden=true;$('studio').hidden=false;scene.mode(false);render();
+  if(migrated)save();if(warning)say(warning);
 }
 function home(){
   $('studio').hidden=true;$('home').hidden=false;scene.mode(true);$('resume').disabled=!saves.length;
@@ -128,7 +134,7 @@ function makePreview(curl=0){
   try{
     preview=fold(item.faces,starts,dest,angle,curl);
     if(!validPaperTopology({...item,faces:preview,layers:undefined}))throw Error('纸面分区过多，请减少折叠次数');
-    if(isHand())candidate={starts,dest,angle,curl,kind:gesture.kind,index:selected[0],...(gesture.pick?{pick:gesture.pick}:{}),...(gesture.material?{material:gesture.material}:{}),...(gesture.other?{other:gesture.other}:{}),...(snappedIndex>=0?{snapped:true}:{})};
+    if(isHand())candidate={starts,dest,angle,curl,kind:gesture.kind,index:selected[0],...(gesture.pick?{pick:gesture.pick}:{}),...(gesture.material?{material:gesture.material}:{}),...(gesture.other?{other:gesture.other}:{}),...(snappedIndex>=0?{snapped:true,...(snapAnchor?.uv?{snapTarget:snapAnchor.uv}:{})}:{})};
   }catch(e){preview=null;err=e.message}
 }
 $('center').onclick=()=>{snappedIndex=-1;const [a,b,c,d]=bounds(current().faces);target=[(a+c)/2,(b+d)/2];makePreview();render()};
@@ -140,14 +146,14 @@ function commitFold(){
   try{if(Math.abs(+$('angle').value)===180)recordCreases(next,starts,dest)}catch(e){say(e.message);return}
   // 先记录旧状态，再一次性写入面片和折痕；失败时不产生半次折叠。
   remember();if(next.creases)item.creases=next.creases;
-  item.faces=preview;delete item.layers;item.folded=true;paperSound('fold');savedAction();
+  item.faces=preview;delete item.layers;delete item.layerSpacingVersion;item.folded=true;paperSound('fold');savedAction();
 }
 $('commit').onclick=commitFold;
 $('flatten').onclick=()=>{
   const item=current();if(!item?.heldFold)return;
   const next=structuredClone(item);
   try{flattenHeldFold(next)}catch(e){say(e.message);return}
-  remember();Object.assign(item,next);delete item.heldFold;delete item.layers;paperSound('fold');savedAction();
+  remember();Object.assign(item,next);delete item.heldFold;delete item.layers;delete item.layerSpacingVersion;paperSound('fold');savedAction();
 };
 document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{tool=b.dataset.tool;reset();render()});
 for(const k of ['rows','cols'])$(k).oninput=()=>{if($('link').checked)$(k==='rows'?'cols':'rows').value=$(k).value;render()};
@@ -214,7 +220,15 @@ $('view').onpointerdown=e=>{
       const h=item.heldFold,hit=hitPaperControl(item,e,heldFaces(item));
       if(!hit.point&&!hit.edge){gesture.action='orbit';return}
       reset();selected=[h.index];target=h.dest.slice();
-      Object.assign(gesture,{action:'fold',kind:h.kind,angle:h.angle,baseTarget:h.dest.slice(),pick:h.pick,other:h.other,material:h.material,controls:h.material?hit.controls:undefined});
+      Object.assign(gesture,{action:'fold',kind:h.kind,angle:h.angle,baseTarget:h.dest.slice(),baseScreen:h.material?scene.projectedMaterialPoint(item,h.material):null,pick:h.pick,other:h.other,material:h.material,controls:h.material?hit.controls:undefined});
+      gesture.dragHeight=(gesture.baseScreen||hit.point?.screen||hit.edge?.midScreen)?.world[1]||0;
+      gesture.start=scene.pointer(e,gesture.dragHeight).world;
+      if(h.snapTarget&&gesture.controls){
+        const points=gesture.controls.points,anchor=scene.projectedMaterialPoint(item,h.snapTarget);
+        if(anchor&&!points.some(p=>Math.hypot(p.uv[0]-h.snapTarget[0],p.uv[1]-h.snapTarget[1])<1e-7))points.push({uv:h.snapTarget,point:anchor.point,screen:anchor});
+        snappedIndex=points.findIndex(p=>Math.hypot(p.uv[0]-h.snapTarget[0],p.uv[1]-h.snapTarget[1])<1e-7);
+        if(snappedIndex>=0)snapAnchor={uv:h.snapTarget};
+      }
       render();return;
     }
     if(type==='hand'){
@@ -222,19 +236,22 @@ $('view').onpointerdown=e=>{
       reset();
       if(point){
         gesture.kind='corner';gesture.pick=point.point.slice(0,2);gesture.material=point.uv;gesture.controls=controls;
+        gesture.dragHeight=point.screen.world[1];gesture.start=scene.pointer(e,gesture.dragHeight).world;
         selected=[0];gesture.action='fold';
       }else if(edge){
         const value=edge;
         if(value.crease){
           const matches=p=>Math.hypot(p.a[0]-value.a[0],p.a[1]-value.a[1])<1e-7&&Math.hypot(p.b[0]-value.b[0],p.b[1]-value.b[1])<1e-7;
-          Object.assign(gesture,{action:'crease',edge:value,edgeOptions:controls.edges.filter(p=>p.crease&&matches(p)),faces:structuredClone(item.faces),layers:item.layers?structuredClone(item.layers):undefined});
+          Object.assign(gesture,{action:'crease',edge:value,edgeOptions:controls.edges.filter(p=>p.crease&&matches(p)),faces:structuredClone(item.faces),layers:item.layers?structuredClone(item.layers):undefined,spacingVersion:item.layers?(item.layerSpacingVersion??0):LAYER_SPACING_VERSION});
         }else{
           Object.assign(gesture,{action:'fold',kind:'edge',pick:value.points[0].slice(0,2),other:value.points[1].slice(0,2)});selected=[0];
+          gesture.dragHeight=value.midScreen.world[1];gesture.start=scene.pointer(e,gesture.dragHeight).world;
         }
       }else gesture.action='orbit';
       render();return;
     }
     const [i,d]=nearestIndex(pts,q,type==='edge');
+    gesture.dragHeight=scene.projectedCorner(item,pts[i]).world[1];gesture.start=scene.pointer(e,gesture.dragHeight).world;
     snappedIndex=-1;
     if(type==='multi'&&selected.length&&d>.15){target=q;makePreview()}
     else{selected=type==='multi'?(selected.includes(i)?selected.filter(j=>j!==i):[...selected,i]):[i];target=null;preview=null;err='';gesture.action='fold'}
@@ -254,7 +271,7 @@ $('view').onpointermove=e=>{
     if(isHand()&&g.action==='fold'&&!g.baseTarget){target=null;preview=null;candidate=null;snappedIndex=-1;render()}
     return;
   }
-  const w=scene.pointer(e).world,item=current();if(!w)return;
+  const w=scene.pointer(e,g.dragHeight||0).world,item=current();if(!w||!g.start)return;
   if(g.action==='move'){
     if(!g.changed)remember();item.x=Math.max(-5,Math.min(5,g.origin[0]+w[0]-g.start[0]));item.y=Math.max(-3,Math.min(3,g.origin[1]+w[1]-g.start[1]));g.changed=true;
   }
@@ -275,9 +292,9 @@ $('view').onpointermove=e=>{
     const shift=len?((e.clientX-g.x)*(-dy)+(e.clientY-g.y)*dx)/len:0;
     const angle=Math.max(-180,Math.min(180,shift*1.5*scene.facingSign()));
     try{
-      const safe=safeTurnCrease(g.faces,g.edge,g.side,g.safeAngle||0,angle,paperThickness(item),g.layers);
+      const safe=safeTurnCrease(g.faces,g.edge,g.side,g.safeAngle||0,angle,paperThickness(item),g.layers,g.spacingVersion);
       if(!validPaperTopology({...item,faces:safe.faces,layers:safe.layers}))throw Error('纸面分区过多，请减少折叠次数');
-      preview=safe.faces;previewLayers=safe.layers;g.safeAngle=safe.angle;g.changedCrease=Math.abs(safe.angle)>1e-6;
+      preview=safe.faces;previewLayers=safe.layers;g.previewSpacingVersion=safe.layerSpacingVersion;g.safeAngle=safe.angle;g.changedCrease=Math.abs(safe.angle)>1e-6;
       err=safe.blocked?'纸层相互接触，已停在可折叠的位置':safe.limited?'已调整到安全位置，请分步继续拖动':'沿已有折痕调整纸瓣，松手保持当前角度';
     }catch(error){err=error.message}
   }
@@ -286,13 +303,14 @@ $('view').onpointermove=e=>{
     if($('foldType').value!=='edge'&&g.kind!=='edge'){
       const controls=isHand()&&g.controls?g.controls.points:null;
       const pts=controls?controls.map(p=>p.point.slice(0,2)):corners(item.faces),radius=e.pointerType==='touch'?24:14;
-      const targetScreen=g.baseTarget?scene.projectedCorner(item,target):{x:e.clientX,y:e.clientY};
+      const targetScreen=g.baseScreen?{x:g.baseScreen.x+e.clientX-g.x,y:g.baseScreen.y+e.clientY-g.y}:g.baseTarget?scene.projectedCorner(item,target):{x:e.clientX,y:e.clientY};
       const distances=pts.map((p,i)=>{
         if(controls?(g.material?Math.hypot(controls[i].uv[0]-g.material[0],controls[i].uv[1]-g.material[1])<1e-7:Math.hypot(p[0]-g.pick[0],p[1]-g.pick[1])<1e-7):selected.includes(i))return Infinity;
-        const screen=controls?controls[i].screen:scene.projectedCorner(item,p);
-        return screen.visible?Math.hypot(screen.x-targetScreen.x,screen.y-targetScreen.y):Infinity;
+        const screen=controls?(scene.projectedMaterialPoint(item,controls[i].uv)||controls[i].screen):scene.projectedCorner(item,p);
+        return screen.visible||i===snappedIndex?Math.hypot(screen.x-targetScreen.x,screen.y-targetScreen.y):Infinity;
       });
       snappedIndex=snapIndex(distances,radius,snappedIndex);
+      snapAnchor=snappedIndex>=0?(controls?{uv:controls[snappedIndex].uv}:{point:pts[snappedIndex]}):null;
       if(snappedIndex>=0)target=pts[snappedIndex];
     }
     g.curl=isHand()?(g.baseTarget?adjustedCurl(item.heldFold,target):Math.min(.42,Math.hypot(w[0]-g.start[0],w[1]-g.start[1])*.45)):0;
@@ -311,7 +329,7 @@ function finishGesture(e){
     reset();render();
   }
   if(isHand()&&g.action==='crease'){
-    if(e.type==='pointerup'&&preview&&g.changedCrease){remember();current().faces=preview;current().layers=previewLayers;current().folded=true;save()}
+    if(e.type==='pointerup'&&preview&&g.changedCrease){remember();current().faces=preview;current().layers=previewLayers;if(g.previewSpacingVersion)current().layerSpacingVersion=g.previewSpacingVersion;else delete current().layerSpacingVersion;current().folded=true;save()}
     reset();render();
   }
   if(g.changed)save();gesture=null;render();

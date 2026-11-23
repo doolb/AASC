@@ -1,4 +1,4 @@
-import {layerDisplacements,PAPER_THICKNESS,paperThickness,validThickness,pointOnFace,turnCrease} from './paper-topology.mjs';
+import {layerDisplacements,layerPitch,LAYER_SPACING_VERSION,PAPER_THICKNESS,paperThickness,validThickness,pointOnFace,turnCrease} from './paper-topology.mjs';
 
 const EPS=1e-8;
 const sub=(a,b)=>a.map((v,i)=>v-b[i]);
@@ -53,35 +53,50 @@ export function faceCollision(a,offsetA,b,offsetB,thickness=PAPER_THICKNESS){
   return false;
 }
 
+// 按表面最大位移扫描层距或厚度变更，碰撞体额外包含净间隙，纸面网格仍只绘制材料厚度。
+function checkLayerTransition(faces,base,layers,fromEnvelope,toEnvelope){
+  if(faces.length>64)throw Error('纸层过多，无法安全调整层间距，请先展开或减少折叠');
+  const travel=Math.max(...layers.map((p,i)=>Math.hypot(...sub(p,base[i]))),0)+Math.abs(toEnvelope-fromEnvelope)/2;
+  const steps=Math.max(1,Math.ceil(travel/(Math.min(fromEnvelope,toEnvelope)*.5))),pairs=faces.length*(faces.length-1)/2;
+  if(steps*pairs>16000)throw Error('层间距调整超出安全计算预算，请先展开纸张');
+  for(let step=1;step<=steps;step++){
+    const t=step/steps,value=fromEnvelope+(toEnvelope-fromEnvelope)*t;
+    const offsets=layers.map((p,i)=>p.map((n,k)=>base[i][k]+(n-base[i][k])*t));
+    for(let i=0;i<faces.length;i++)for(let j=i+1;j<faces.length;j++){
+      if(faceCollision(faces[i],offsets[i],faces[j],offsets[j],value))throw Error('此层间距或厚度会使纸层穿透，请先展开纸张');
+    }
+  }
+}
+
+// 旧存档的层位移不含净间隙；只转换未标记的数据，失败时调用者保留原存档。
+export function migratedLayerSpacing(item){
+  if(!item.layers||item.layerSpacingVersion===LAYER_SPACING_VERSION)return item;
+  const thickness=paperThickness(item),layers=item.layers.map(p=>p.map(n=>n*1.25));
+  checkLayerTransition(item.faces,item.layers,layers,thickness,layerPitch(thickness));
+  return {...item,layers,layerSpacingVersion:LAYER_SPACING_VERSION};
+}
+
 // 修改材料厚度时扫描过渡层位移；候选独立计算，失败不污染存档或撤销历史。
 export function resizedPaper(item,thickness,faces=item.faces){
   if(!validThickness(thickness))throw Error('厚度请输入原纸边长的 0.1%～1%');
   if(faces.length>64)throw Error('纸层过多，无法安全调整厚度，请先展开或减少折叠');
-  const old=paperThickness(item),base=faces===item.faces&&item.layers?item.layers:layerDisplacements(faces,old);
-  const travel=Math.abs(thickness-old)*(Math.max(...base.map(p=>Math.hypot(...p)/old),0)+.5);
-  const steps=Math.max(1,Math.ceil(travel/(Math.min(old,thickness)*.5))),pairs=faces.length*(faces.length-1)/2;
-  if(steps*pairs>16000)throw Error('厚度调整超出安全计算预算，请先展开纸张');
-  let layers;
-  for(let step=1;step<=steps;step++){
-    const value=old+(thickness-old)*step/steps;
-    layers=base.map(p=>p.map(n=>n*value/old));
-    for(let i=0;i<faces.length;i++)for(let j=i+1;j<faces.length;j++){
-      if(faceCollision(faces[i],layers[i],faces[j],layers[j],value))throw Error('此厚度会使纸层穿透，请先展开纸张');
-    }
-  }
-  const next={...item,thickness};
+  const source=migratedLayerSpacing(item),old=paperThickness(source),base=faces===source.faces&&source.layers?source.layers:layerDisplacements(faces,old);
+  const layers=base.map(p=>p.map(n=>n*thickness/old));
+  checkLayerTransition(faces,base,layers,layerPitch(old),layerPitch(thickness));
+  const next={...source,thickness};
   // 弯纸预览条带不是持久材料面；其层位移由新的厚度即时重建。
-  if(faces===item.faces)next.layers=layers;
+  if(faces===item.faces){next.layers=layers;next.layerSpacingVersion=LAYER_SPACING_VERSION}
   return next;
 }
 
 // 扫描中间折角，避免一次快速鼠标移动跳过薄纸；超出计算预算时保留上个安全形状。
-export function safeTurnCrease(faces,edge,side,from,to,thickness=PAPER_THICKNESS,layers){
+export function safeTurnCrease(faces,edge,side,from,to,thickness=PAPER_THICKNESS,layers,spacingVersion=LAYER_SPACING_VERSION){
   if(faces.length>64)throw Error('纸层过多，无法安全计算接触，请先减少折叠');
   const axisFace=faces.find(f=>pointOnFace(f,edge.a)&&pointOnFace(f,edge.b));
   if(!axisFace)throw Error('无法定位当前折痕');
   const axisOrigin=pointOnFace(axisFace,edge.a),axis=normalize(sub(pointOnFace(axisFace,edge.b),axisOrigin));
   const baseOffsets=layers||layerDisplacements(faces,thickness);
+  const envelope=spacingVersion===LAYER_SPACING_VERSION?layerPitch(thickness):thickness;
   const length=Math.max(...faces.flatMap((face,i)=>face.map(p=>Math.hypot(...sub(p.slice(0,3),axisOrigin))+Math.hypot(...baseOffsets[i]))),1);
   const requestedSteps=Math.max(1,Math.ceil(Math.abs(to-from)*Math.PI/180*length/(thickness*.5)));
   const steps=Math.min(requestedSteps,1600,Math.max(1,Math.floor(16000/(faces.length*faces.length))));
@@ -114,16 +129,20 @@ export function safeTurnCrease(faces,edge,side,from,to,thickness=PAPER_THICKNESS
   for(let step=1;step<=steps;step++){
     const next=from+(to-from)*step/requestedSteps,candidate=turnCrease(faces,edge,side,next);
     const candidateLayers=physicalLayers(candidate,next);
+    if(spacingVersion!==LAYER_SPACING_VERSION&&Math.abs(Math.abs(next)-180)<1e-7){
+      try{checkLayerTransition(candidate,candidateLayers,candidateLayers,layerPitch(thickness),layerPitch(thickness))}
+      catch{return {faces:previous,layers:previousLayers,angle,blocked:true,layerSpacingVersion:spacingVersion}}
+    }
     const fixed=candidate.map((face,i)=>({face,layer:candidateLayers[i]})).filter(({face})=>classify(face)<0),moving=candidate.map((face,i)=>({face,layer:candidateLayers[i]})).filter(({face})=>classify(face)>0);
     let collision=false;
     for(const a of fixed){
       for(const b of moving){
-        if(faceCollision(a.face,a.layer,b.face,b.layer,thickness)){collision=true;break}
+        if(faceCollision(a.face,a.layer,b.face,b.layer,envelope)){collision=true;break}
       }
       if(collision)break;
     }
-    if(collision)return {faces:previous,layers:previousLayers,angle,blocked:true};
+    if(collision)return {faces:previous,layers:previousLayers,angle,blocked:true,layerSpacingVersion:Math.abs(Math.abs(angle)-180)<1e-7?LAYER_SPACING_VERSION:spacingVersion};
     previous=candidate;previousLayers=candidateLayers;angle=next;
   }
-  return {faces:previous,layers:previousLayers,angle,blocked:false,limited:steps<requestedSteps};
+  return {faces:previous,layers:previousLayers,angle,blocked:false,limited:steps<requestedSteps,layerSpacingVersion:Math.abs(Math.abs(angle)-180)<1e-7?LAYER_SPACING_VERSION:spacingVersion};
 }

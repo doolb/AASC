@@ -2,6 +2,9 @@
 const EPS=1e-8;
 export const PAPER_THICKNESS=.008;
 export const MIN_PAPER_THICKNESS=.002,MAX_PAPER_THICKNESS=.02;
+export const LAYER_SPACING_VERSION=1;
+// 中面间距包含纸本身的厚度与四分之一纸厚的空气间隙，表面厚度仍保持原值。
+export const layerPitch=thickness=>thickness*1.25;
 export const validThickness=value=>Number.isFinite(value)&&value>=MIN_PAPER_THICKNESS&&value<=MAX_PAPER_THICKNESS;
 // 厚度属于每张纸的材料属性；旧存档缺少此字段时使用原默认值。
 export const paperThickness=item=>item.thickness===undefined?PAPER_THICKNESS:item.thickness;
@@ -49,6 +52,7 @@ export function recordCreases(item,starts,target){
 
 export function validPaperTopology(item){
   if(item.thickness!==undefined&&!validThickness(item.thickness))return false;
+  if(item.layerSpacingVersion!==undefined&&item.layerSpacingVersion!==LAYER_SPACING_VERSION)return false;
   if(!Array.isArray(item.faces)||item.faces.reduce((sum,f)=>sum+(Array.isArray(f)?f.length:2049),0)>2048)return false;
   if(item.layers!==undefined&&(!Array.isArray(item.layers)||item.layers.length!==item.faces.length||!item.layers.every(p=>Array.isArray(p)&&p.length===3&&p.every(n=>Number.isFinite(n)&&Math.abs(n)<10000))))return false;
   if(item.creases===undefined)return true;
@@ -185,20 +189,16 @@ export function turnCrease(faces,edge,side,degrees){
 }
 
 function polygonArea(points){return points.reduce((sum,p,i)=>sum+cross(p,points[(i+1)%points.length]),0)/2}
-function overlapArea(left,right){
-  let polygon=left.map(p=>p.slice(0,2));
-  const clip=right.map(p=>p.slice(0,2)),sign=Math.sign(polygonArea(clip));
-  if(!sign)return 0;
-  for(let i=0;i<clip.length&&polygon.length;i++){
-    const a=clip[i],b=clip[(i+1)%clip.length],edge=sub(b,a),dist=p=>cross(edge,sub(p,a))*sign,next=[];
-    for(let j=0;j<polygon.length;j++){
-      const p=polygon[j],q=polygon[(j+1)%polygon.length],dp=dist(p),dq=dist(q);
-      if(dp>=-EPS)next.push(p);
-      if(dp*dq<-EPS*EPS)next.push(lerp(p,q,dp/(dp-dq)));
-    }
-    polygon=next;
+function overlappingPolygons(left,right){
+  // 分层与棱柱接触使用相同量纲的线性容差，不能用面积阈值忽略细小重叠片。
+  let tested=false;
+  for(const polygon of [left,right])for(let i=0;i<polygon.length;i++){
+    const a=polygon[i],b=polygon[(i+1)%polygon.length],dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy);
+    if(length<EPS)continue;tested=true;
+    const project=p=>(-dy*p[0]+dx*p[1])/length,aa=left.map(project),bb=right.map(project);
+    if(Math.max(...aa)<=Math.min(...bb)+EPS||Math.max(...bb)<=Math.min(...aa)+EPS)return false;
   }
-  return polygon.length>=3?Math.abs(polygonArea(polygon)):0;
+  return tested;
 }
 
 export function faceNormal(face){
@@ -225,11 +225,11 @@ export function layerDisplacements(faces,thickness=PAPER_THICKNESS){
       const a=planes[i],b=planes[j],parallel=a.normal.every((n,k)=>Math.abs(n-b.normal[k])<EPS);
       if(!parallel||Math.abs(a.distance-b.distance)>EPS)continue;
       const project=face=>face.map(p=>a.axes.map(k=>p[k]));
-      if(overlapArea(project(faces[i]),project(faces[j]))>EPS)rank=Math.max(rank,ranks[j]+1);
+      if(overlappingPolygons(project(faces[i]),project(faces[j])))rank=Math.max(rank,ranks[j]+1);
     }
     ranks.push(rank);
   }
-  return ranks.map((rank,i)=>planes[i].normal.map(n=>n*rank*thickness));
+  return ranks.map((rank,i)=>planes[i].normal.map(n=>n*rank*layerPitch(thickness)));
 }
 
 export function layerOffsets(faces,thickness=PAPER_THICKNESS){return layerDisplacements(faces,thickness).map(d=>d[2])}
