@@ -34,7 +34,7 @@ function clip(face,dist){
   });
   return area(out)>1e-9?out:[];
 }
-export function fold(faces,starts,target,degrees){
+export function fold(faces,starts,target,degrees,curl=0){
   if(faces.flat().some(p=>Math.abs(p[2])>.00001))throw Error('立体纸形可直接摆放，或撤销后继续折。');
   const axes=starts.map(a=>{
     const dx=a[0]-target[0],dy=a[1]-target[1],len=Math.hypot(dx,dy);
@@ -50,10 +50,31 @@ export function fold(faces,starts,target,degrees){
     if(!flap.length || !faces.some(f=>clip(f,p=>-dist(p)).length))throw Error('折线需要穿过纸面');
     for(const prev of axes.slice(0,axes.indexOf(axis)))if(flap.some(f=>clip(f,prev.dist).length))throw Error('纸瓣重叠，请分步折叠');
     fixed=fixed.map(f=>clip(f,p=>-dist(p))).filter(f=>f.length);
-    moved.push(...flap.reverse().map(f=>f.map(([x,y,z,u,v])=>{
-      const d=dist([x,y]), offset=d*(Math.cos(angle)-1);
-      return [x+offset*nx,y+offset*ny,d*Math.sin(angle),u,v];
-    })));
+    // 手工预览将折线附近弯成圆柱面。条带宽取自实际纸瓣，沿弧的纸长保持不变。
+    const width=curl>0?Math.min(Math.max(...flap.flat().map(dist)),curl):0;
+    const radius=width/Math.PI;
+    for(const face of flap.reverse()){
+      const strips=[];
+      if(width>1e-6){
+        for(let i=0;i<8;i++){
+          const from=width*i/8,to=width*(i+1)/8;
+          const band=clip(clip(face,p=>dist(p)-from),p=>to-dist(p));
+          if(band.length)strips.push(band);
+        }
+        const tip=clip(face,p=>dist(p)-width);
+        if(tip.length)strips.push(tip);
+      }else strips.push(face);
+      for(const strip of strips)moved.push(strip.map(([x,y,z,u,v])=>{
+        const d=dist([x,y]);
+        let horizontal=d*Math.cos(angle),height=d*Math.sin(angle);
+        if(width>1e-6){
+          const theta=Math.min(Math.PI,Math.max(0,d/radius));
+          horizontal=radius*Math.sin(theta)-Math.max(0,d-width);
+          height=Math.sign(degrees)*radius*(1-Math.cos(theta));
+        }
+        return [x+(horizontal-d)*nx,y+(horizontal-d)*ny,height,u,v];
+      }));
+    }
   }
   return degrees<0?[...moved,...fixed]:[...fixed,...moved];
 }

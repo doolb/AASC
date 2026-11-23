@@ -130,6 +130,7 @@ export function pointer(e){
   return {world:q?[q.x,q.z]:null,id:hit?.object.userData.id};
 }
 // 以屏幕像素计算容差，旋转视角、缩放或切换触控设备时都能准确对齐。
+export function facingSign(){return camera.position.y>=0?1:-1}
 export function projectedCorner(item,p){
   const group=works.children.find(o=>o.userData.id===item.id);
   const pos=group.localToWorld(vec(p[0],0,p[1])).project(camera);

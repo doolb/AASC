@@ -18,3 +18,16 @@ test('角点吸附选最近点，并在越过释放半径时退出',async()=>{
   assert.equal(snapIndex([Infinity,25,22],14,2),-1);
   assert.equal(snapIndex([Infinity,22],24,-1),1);
 });
+test('手工弯纸预览分段抬起，松手平折保留精确坐标和下一折能力',async()=>{
+  const {sheet,fold}=await import('../web/gami/fold.mjs');
+  for(const sign of [1,-1]){
+    const source=sheet(),start=[[-1,-1]],end=[1,1];
+    const curled=fold(source,start,end,sign*180,.3);
+    const flat=fold(source,start,end,sign*180);
+    assert.ok(curled.length>flat.length);
+    assert.ok(curled.flat().some(p=>p[2]*sign>.1));
+    assert.ok(flat.flat().every(p=>Math.abs(p[2])<1e-8));
+    assert.ok(flat.flat().some(p=>p[3]===0&&p[4]===0&&Math.hypot(p[0]-1,p[1]-1)<1e-8));
+    assert.deepEqual(source,sheet());
+  }
+});

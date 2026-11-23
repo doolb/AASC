@@ -22,7 +22,10 @@ function savedAction(){save();reset();render()}
 let snappedIndex=-1;
 function reset(){snappedIndex=-1;selected=[];target=null;preview=null;err=''}
 function grid(){const r=$('rows').valueAsNumber,c=$('cols').valueAsNumber;return Number.isInteger(r)&&Number.isInteger(c)&&r>0&&c>0&&r*c>=2&&r*c<=64?[r,c]:null}
+const isHand=()=>$('foldType').value==='hand';
+let settling=0;
 function render(){
+  cancelAnimationFrame(settling);
   const item=current(),g=grid();
   for(const key of ['fold','cut','place'])$(key+'Tools').hidden=tool!==key;
   document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===tool));
@@ -30,7 +33,8 @@ function render(){
   $('center').disabled=!selected.length||item?.placed;
   $('slice').disabled=!g||item?.placed||item?.folded;$('place').disabled=!item||item.placed;
   $('rotate').disabled=!item?.placed;
-  const hints={fold:{corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
+  for(const k of ['angleLabel','center','commit'])$(k).hidden=isHand();
+  const hints={fold:{hand:'捏住纸角或边缘往里翻，松手压平。拖空白处环视。',corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
     cut:item?.folded?'请选择尚未折叠的纸片。':g?'预览 '+g[0]+' × '+g[1]+'，共 '+g[0]*g[1]+' 片。':'请输入正整数，共 2 至 64 片。',
     place:'选中纸片后加入陈列；拖动成品可调整位置。拖空白处环视。'};
   $('hint').textContent=err||(item?.placed&&tool!=='place'?'已摆放的作品，可切换摆放工具移动或旋转。':hints[tool]);
@@ -83,21 +87,30 @@ $('import').onclick=()=>$('file').click();$('file').onchange=async()=>{
     $('confirmImport').onclick=()=>{d.id=uid();d.active=d.items[0].id;enter(d);save()};
   }catch{say('文件损坏、过大或版本不支持')}
 };
-function makePreview(){
-  preview=null;err='';if(!selected.length||!target)return;
+function foldEndpoints(){
   const item=current(),pts=corners(item.faces);
   let starts=selected.map(i=>pts[i]),dest=target;
-  if($('foldType').value==='edge'){
+  if(($('foldType').value==='edge')||(isHand()&&gesture?.kind==='edge')){
     const a=starts[0],b=pts[(selected[0]+1)%pts.length],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);
     const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2],nx=-dy/len,ny=dx/len,d=(target[0]-mid[0])*nx+(target[1]-mid[1])*ny;
     starts=[mid];dest=[mid[0]+nx*d,mid[1]+ny*d];
   }
-  try{preview=fold(item.faces,starts,dest,+$('angle').value)}catch(e){err=e.message}
+  return {starts,dest};
+}
+function makePreview(curl=0){
+  preview=null;err='';if(!selected.length||!target)return;
+  const {starts,dest}=foldEndpoints();
+  const item=current();
+  try{preview=fold(item.faces,starts,dest,isHand()?180*scene.facingSign():+$('angle').value,curl)}catch(e){err=e.message}
 }
 $('center').onclick=()=>{snappedIndex=-1;const [a,b,c,d]=bounds(current().faces);target=[(a+c)/2,(b+d)/2];makePreview();render()};
 $('angle').oninput=()=>{$('degrees').textContent=$('angle').value+'°';makePreview();render();paperSound('drag')};
 $('foldType').onchange=()=>{reset();render()};
-$('commit').onclick=()=>{if(!preview)return;remember();current().faces=preview;current().folded=true;paperSound('fold');savedAction()};
+function commitFold(){
+  if(!preview)return;
+  remember();current().faces=preview;current().folded=true;paperSound('fold');savedAction();
+}
+$('commit').onclick=commitFold;
 document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{tool=b.dataset.tool;reset();render()});
 for(const k of ['rows','cols'])$(k).oninput=()=>{if($('link').checked)$(k==='rows'?'cols':'rows').value=$(k).value;render()};
 $('link').onchange=()=>{if($('link').checked)$('cols').value=$('rows').value;render()};
@@ -131,12 +144,24 @@ $('view').onpointerdown=e=>{
   }
   const hit=scene.pointer(e);$('view').setPointerCapture(e.pointerId);
   gesture={pid:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,start:hit.world,action:'orbit'};
+  if(!hit.id&&tool==='fold'){reset();render()}
   if(!hit.id||!hit.world)return;
   if(id!==hit.id){id=hit.id;reset()}const item=current();
   gesture.action='select';
   if(tool==='place'&&item.placed){gesture.action='move';gesture.origin=[item.x,item.y]}
   if(tool==='fold'&&!item.placed){
     const pts=corners(item.faces),q=local(item,hit.world),type=$('foldType').value;
+    if(type==='hand'){
+      const screen=pts.map(p=>{const v=scene.projectedCorner(item,p);return [v.x,v.y]});
+      const cursor=[e.clientX,e.clientY],radius=e.pointerType==='touch'?24:14;
+      const [corner,dc]=nearestIndex(screen,cursor,false),[edge,de]=nearestIndex(screen,cursor,true);
+      reset();
+      if(dc<=radius||de<=radius){
+        gesture.kind=dc<=radius?'corner':'edge';
+        selected=[dc<=radius?corner:edge];gesture.action='fold';
+      }
+      render();return;
+    }
     const [i,d]=nearestIndex(pts,q,type==='edge');
     snappedIndex=-1;
     if(type==='multi'&&selected.length&&d>.15){target=q;makePreview()}
@@ -153,14 +178,17 @@ $('view').onpointermove=e=>{
   }
   if(e.pointerId!==g.pid)return;
   if(g.action==='orbit'){scene.orbit(e.clientX-g.lastX,e.clientY-g.lastY);g.lastX=e.clientX;g.lastY=e.clientY;return}
-  if(Math.hypot(e.clientX-g.x,e.clientY-g.y)<4)return;
+  if(Math.hypot(e.clientX-g.x,e.clientY-g.y)<4){
+    if(isHand()&&g.action==='fold'){target=null;preview=null;snappedIndex=-1;render()}
+    return;
+  }
   const w=scene.pointer(e).world,item=current();if(!w)return;
   if(g.action==='move'){
     if(!g.changed)remember();item.x=Math.max(-5,Math.min(5,g.origin[0]+w[0]-g.start[0]));item.y=Math.max(-3,Math.min(3,g.origin[1]+w[1]-g.start[1]));g.changed=true;
   }
   if(g.action==='fold'){
     target=local(item,w);
-    if($('foldType').value!=='edge'){
+    if($('foldType').value!=='edge'&&g.kind!=='edge'){
       const pts=corners(item.faces),radius=e.pointerType==='touch'?24:14;
       const distances=pts.map((p,i)=>{
         if(selected.includes(i))return Infinity;
@@ -170,11 +198,38 @@ $('view').onpointermove=e=>{
       snappedIndex=snapIndex(distances,radius,snappedIndex);
       if(snappedIndex>=0)target=pts[snappedIndex];
     }
-    makePreview();paperSound('drag');
+    g.curl=isHand()?Math.min(.42,Math.hypot(w[0]-g.start[0],w[1]-g.start[1])*.45):0;
+    makePreview(g.curl);paperSound('drag');
+    clearTimeout(g.restTimer);
+    if(isHand()&&preview)g.restTimer=setTimeout(()=>{
+      if(gesture!==g||!target)return;
+      g.curl*=.25;makePreview(g.curl);render();
+    },240);
   }
   render();
 };
-$('view').onpointerup=$('view').onpointercancel=e=>{if(e.pointerId===gesture?.pid||e.pointerId===gesture?.second){if(gesture.changed)save();gesture=null}};
+// 松手时先保存精确平折，再从临时弯曲形状过渡到权威几何。任何新操作均可打断动画。
+function finishGesture(e){
+  const g=gesture;
+  if(!g||(e.pointerId!==g.pid&&e.pointerId!==g.second))return;
+  clearTimeout(g.restTimer);
+  if(isHand()&&g.action==='fold'){
+    if(e.type==='pointerup'&&preview){
+      const original=current().faces,{starts,dest}=foldEndpoints();
+      const angle=180*scene.facingSign(),begin=performance.now();
+      makePreview();commitFold();
+      const settle=now=>{
+        const t=Math.max(0,1-(now-begin)/140);
+        if(t===0){render();return}
+        scene.show(desk,id,fold(original,starts,dest,angle,g.curl*t*t),[],null,tool,null);
+        settling=requestAnimationFrame(settle);
+      };
+      settling=requestAnimationFrame(settle);
+    }else{reset();render()}
+  }
+  if(g.changed)save();gesture=null;
+}
+$('view').onpointerup=$('view').onpointercancel=$('view').onlostpointercapture=finishGesture;
 $('view').onwheel=e=>{if(!$('studio').hidden){e.preventDefault();scene.zoom(e.deltaY>0?1.08:.92)}};
 for(const k of ['music','sfx']){
   const refresh=()=>{$(k).textContent=(k==='music'?'♫ 音乐':'♪ 音效')+(sound[k]?' 开':' 关');$(k).setAttribute('aria-pressed',String(sound[k]))};
