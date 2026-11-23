@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123c';
-import { createTextureLibrary } from './textures.mjs?v=20261123c';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123c';
-import { createScenery } from './scenery.mjs?v=20261123c';
-import { createGrass } from './grass.mjs?v=20261123c';
-import { createParticles } from './particles.mjs?v=20261123c';
-import { createEnvironment } from './environment.mjs?v=20261123c';
-import { createHoloUI } from './holo-ui.mjs?v=20261123c';
-import { createAudioSystem } from './audio.mjs?v=20261123c';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123c';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123d';
+import { createTextureLibrary } from './textures.mjs?v=20261123d';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123d';
+import { createScenery } from './scenery.mjs?v=20261123d';
+import { createGrass } from './grass.mjs?v=20261123d';
+import { createParticles } from './particles.mjs?v=20261123d';
+import { createEnvironment } from './environment.mjs?v=20261123d';
+import { createHoloUI } from './holo-ui.mjs?v=20261123d';
+import { createAudioSystem } from './audio.mjs?v=20261123d';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123d';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -99,9 +99,14 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     let viewW = container.clientWidth || window.innerWidth || 1280;
     let viewH = container.clientHeight || window.innerHeight || 720;
     let baseDist = 24;
-    let yaw = 0, targetYaw = 0;
+    let yaw = 0, targetYaw = 0, yawVel = 0, lastSpinAt = 0;
     let pitch = 0.91, targetPitch = 0.91;
     let zoom = 1.0, targetZoom = 1.0;
+
+    // 随缩放高度自动计算俯仰角：默认 1.0 对应 0.91(约 52°)，拉近低空放平(约 33°)，拉远高空俯瞰(约 71°)
+    function autoPitchForZoom(z) {
+        return THREE.MathUtils.clamp(0.91 + (z - 1.0) * 0.72, 0.58, 1.24);
+    }
     const baseLookTarget = new THREE.Vector3(0, 0, 0);
     const panOffset = new THREE.Vector2(0, 0);
     const targetPan = new THREE.Vector2(0, 0);
@@ -203,9 +208,12 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     }
 
     function resetCamera() {
+        const tau = Math.PI * 2;
+        yaw = ((yaw % tau) + Math.PI * 3) % tau - Math.PI;
         targetYaw = 0;
-        targetPitch = 0.91;
+        yawVel = 0;
         targetZoom = 1.0;
+        targetPitch = autoPitchForZoom(1.0);
         targetPan.set(0, 0);
     }
 
@@ -570,8 +578,17 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         return {
             midX: (a.x + b.x) / 2,
             midY: (a.y + b.y) / 2,
-            dist: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y))
+            dist: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)),
+            angle: Math.atan2(b.y - a.y, b.x - a.x)
         };
+    }
+
+    function applySpin(dYaw) {
+        targetYaw += dYaw;
+        const now = performance.now();
+        const dtSpin = Math.max(0.008, (now - (lastSpinAt || now - 16)) / 1000);
+        lastSpinAt = now;
+        yawVel = THREE.MathUtils.clamp(yawVel * 0.45 + (dYaw / dtSpin) * 0.55, -7.5, 7.5);
     }
 
     const domEl = renderer.domElement;
@@ -586,6 +603,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
 
     const onPointerDown = e => {
         audio.unlock();
+        yawVel = 0;
+        lastSpinAt = 0;
         const rect = domEl.getBoundingClientRect();
         const x = e.clientX - rect.left, y = e.clientY - rect.top;
         activePointers.set(e.pointerId, { x, y });
@@ -615,11 +634,15 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         if (activePointers.size === 2 && prevPinch) {
             const cur = pinchInfo();
             const dx = cur.midX - prevPinch.midX;
-            const dy = cur.midY - prevPinch.midY;
-            targetYaw = THREE.MathUtils.clamp(targetYaw - dx * 0.0055, -0.62, 0.62);
-            targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.61, 1.36);
+            let dAngle = cur.angle - prevPinch.angle;
+            if (dAngle > Math.PI) dAngle -= Math.PI * 2;
+            else if (dAngle < -Math.PI) dAngle += Math.PI * 2;
+            // 双指只控制垂直轴（yaw）无极旋转与缩放高度，俯仰由缩放高度自动计算；拧转为主、纯平行横滑补充
+            const parallelSpin = Math.abs(dAngle) < 0.012 ? -dx * 0.0085 : 0;
+            applySpin(dAngle + parallelSpin);
             const ratio = prevPinch.dist / cur.dist;
             targetZoom = THREE.MathUtils.clamp(targetZoom * ratio, 0.65, 1.45);
+            targetPitch = autoPitchForZoom(targetZoom);
             prevPinch = cur;
             return;
         }
@@ -636,8 +659,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             if (Math.hypot(x - downX, y - downY) > 8) dragged = true;
             if (dragged) {
                 if (rightRotating || (e.buttons & 2) === 2) {
-                    targetYaw = THREE.MathUtils.clamp(targetYaw - dx * 0.0055, -0.62, 0.62);
-                    targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.61, 1.36);
+                    applySpin(-dx * 0.0075);
+                    targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.35, 1.38);
                 } else {
                     applyPan(dx, dy);
                 }
@@ -652,7 +675,18 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         const rect = domEl.getBoundingClientRect();
         const x = e.clientX - rect.left, y = e.clientY - rect.top;
         activePointers.delete(e.pointerId);
-        if (activePointers.size < 2) prevPinch = null;
+        if (activePointers.size < 2) {
+            prevPinch = null;
+            if (performance.now() - lastSpinAt > 90) yawVel = 0;
+        }
+        // 双指依次抬起 1 指时同步剩余手指坐标，防止镜头瞬移和松手误触
+        if (activePointers.size === 1) {
+            const [rem] = activePointers.values();
+            downX = lastX = rem.x;
+            downY = lastY = rem.y;
+            dragged = true;
+            return;
+        }
 
         if (pointerConsumedByUi) {
             holoUI.handlePointerUp(x, y);
@@ -682,6 +716,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         const rect = domEl.getBoundingClientRect();
         if (holoUI.handleWheel(e.deltaY, e.clientX - rect.left, e.clientY - rect.top)) return;
         targetZoom = THREE.MathUtils.clamp(targetZoom + e.deltaY * 0.0008, 0.65, 1.45);
+        targetPitch = autoPitchForZoom(targetZoom);
     };
 
     const onDblClick = () => resetCamera();
@@ -734,6 +769,11 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         elapsedTotal += dt;
 
         post.recordFrame(dt);
+
+        if (activePointers.size < 2 && !rightRotating && Math.abs(yawVel) > 0.002) {
+            targetYaw += yawVel * dt;
+            yawVel *= Math.exp(-3.8 * dt);
+        }
 
         const damp = Math.min(1, dt * 10);
         yaw = THREE.MathUtils.lerp(yaw, targetYaw, damp);

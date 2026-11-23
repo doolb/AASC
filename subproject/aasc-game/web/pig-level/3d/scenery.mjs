@@ -1,7 +1,7 @@
 // 手绘吉卜力风场景：修剪草坪棋盘、卵石边、石板路、高脚木屋、栅栏、季节树、小花与远坡风车。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261123c';
-import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight } from './geometry.mjs?v=20261123c';
+import { seededRandom } from './presets.mjs?v=20261123d';
+import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight } from './geometry.mjs?v=20261123d';
 
 // 为大草地与棋盘草坪注入柔和空气透视雾化（20～36 米平滑低饱和融入地平线）
 function enhanceGroundAerial(material, sharedHorizon) {

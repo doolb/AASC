@@ -297,8 +297,8 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
             assert.equal(mobMetrics.grass, mobMetrics.tier === 'high' ? 36000 : 22000, `手机端草叶数应每档降一档 (当前 tier=${mobMetrics.tier}, grass=${mobMetrics.grass})`);
             assert.ok(mobMetrics.fit.widthRatio >= 0.88 && mobMetrics.fit.heightRatio <= 0.99, `竖屏默认镜头应贴紧宽边填满 (${JSON.stringify(mobMetrics.fit)})`);
 
-            // 验证移动端单指平移与双指旋转/缩放
-            const mobGesture = await mobPage.evaluate(() => {
+            // 验证移动端单指平移、双指无极 Z 轴旋转（不手动改俯仰 + 惯性滑行）及高度自动计算俯仰
+            const mobGesture = await mobPage.evaluate(async () => {
                 const cv = document.querySelector('#scene3d canvas');
                 const fire = (type, id, x, y) => cv.dispatchEvent(new PointerEvent(type, {
                     pointerId: id, clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true
@@ -308,17 +308,31 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
                 fire('pointermove', 101, 240, 430);
                 fire('pointerup', 101, 240, 430);
                 const c1 = window.__pig3d.getCameraState();
+
+                // 双指同距同角纯粹上下平移：pitch 不应被竖向拖拽改变
                 fire('pointerdown', 201, 140, 380);
                 fire('pointerdown', 202, 240, 380);
-                fire('pointermove', 201, 190, 340);
-                fire('pointermove', 202, 330, 340);
-                fire('pointerup', 201, 190, 340);
-                fire('pointerup', 202, 330, 340);
-                const c2 = window.__pig3d.getCameraState();
-                return { c0, c1, c2 };
+                fire('pointermove', 201, 140, 480);
+                fire('pointermove', 202, 240, 480);
+                const cVert = window.__pig3d.getCameraState();
+
+                // 双指顺时针大角度拧转突破 ±0.62 限制 + 张开拉近降低俯仰角
+                fire('pointermove', 201, 190, 290);
+                fire('pointermove', 202, 190, 470); // 旋转约 +90° (1.57 rad) 且距离由 100 拉大到 180
+                fire('pointerup', 201, 190, 290);
+                fire('pointerup', 202, 190, 470);
+                const cRelease = window.__pig3d.getCameraState();
+                await new Promise(r => setTimeout(r, 150));
+                const cInertia = window.__pig3d.getCameraState();
+                return { c0, c1, cVert, cRelease, cInertia };
             });
             assert.ok(Math.hypot(mobGesture.c1.panX - mobGesture.c0.panX, mobGesture.c1.panZ - mobGesture.c0.panZ) > 0.05, '移动端单指拖拽应平移视角');
-            assert.ok(Math.abs(mobGesture.c2.yaw - mobGesture.c1.yaw) > 0.05 && mobGesture.c2.zoom < mobGesture.c1.zoom, '移动端双指拖动应旋转视角且张开手指应放大视角');
+            assert.ok(Math.abs(mobGesture.cVert.pitch - mobGesture.c1.pitch) < 1e-4, `双指纯纵向平移不应直接改动俯仰角 (${mobGesture.c1.pitch} -> ${mobGesture.cVert.pitch})`);
+            assert.ok(mobGesture.cRelease.yaw > 0.75, `双指应支持突破 ±0.62 弧度的无极旋转 (yaw=${mobGesture.cRelease.yaw})`);
+            assert.ok(mobGesture.cRelease.zoom < mobGesture.c1.zoom && mobGesture.cRelease.pitch < mobGesture.c1.pitch,
+                `双指张开拉近降低高度时俯仰角应自动放平 (zoom ${mobGesture.c1.zoom}->${mobGesture.cRelease.zoom}, pitch ${mobGesture.c1.pitch}->${mobGesture.cRelease.pitch})`);
+            assert.ok(mobGesture.cInertia.yaw > mobGesture.cRelease.yaw + 0.02,
+                `双指快滑松手后应继续惯性无极旋转 (${mobGesture.cRelease.yaw} -> ${mobGesture.cInertia.yaw})`);
         } finally {
             await mobPage.close().catch(() => {});
         }

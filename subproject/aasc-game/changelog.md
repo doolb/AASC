@@ -1,3 +1,9 @@
+- ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123d`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；核验全量 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-23] 改为双指 360° 无极滑动/拧转旋转与缩放高度自动计算俯仰角（`?v=20261123d`）
+  - `web/pig-level/3d/view.mjs`：去掉 `targetYaw` 的 `±0.62` 限制并加入 `applySpin()` / `yawVel` 指数阻尼惯性滑行（按下或复位立即刹停，`resetCamera()` 按 `[-π, π]` 就近回正）；`pinchInfo()` 记录两指角度，双指仅控制垂直轴无极旋转（扭转 `dAngle` 解卷绕 + 纯平行横滑补充）与捏合缩放，不再由 `dy` 手动拉俯仰；新增 `autoPitchForZoom(z)` 让缩放高度自动计算俯仰角（`0.58~1.24 rad`）；双指先后抬指回 1 指时同步残余手指坐标防止镜头瞬移与误点。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/2026-11-23_双指无极旋转与自动俯仰.md`、`tests/pig-level-3d.test.js`：同步升级 `?v=20261123d`、伪代码规格、任务文档与双指无极拧转/惯性/自动俯仰测试。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123c`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；核验全量 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-23] 优化默认镜头内圈棋盘填满适配并将手机端草叶每档降一档（`?v=20261123c`）
