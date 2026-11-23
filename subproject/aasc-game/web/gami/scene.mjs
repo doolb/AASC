@@ -170,7 +170,7 @@ function surfaceProjection(group,item,faces,index,point,offsets){
   ray.setFromCamera(new T.Vector2(pos.x,pos.y),camera);
   const first=ray.intersectObjects(works.children,true).find(hit=>hit.object.userData.paperSurface);
   const distance=camera.position.distanceTo(world),tolerance=Math.min(.002,paperThickness(item)*.25);
-  return {x:(1+pos.x)*innerWidth/2,y:(1-pos.y)*innerHeight/2,visible:Math.abs(pos.z)<1&&(!first||distance-first.distance<=tolerance),distance,local:local.toArray(),world:world.toArray(),face:index};
+  return {x:(1+pos.x)*innerWidth/2,y:(1-pos.y)*innerHeight/2,visible:Math.abs(pos.z)<1&&(!first||distance-first.distance<=tolerance),distance,depth:-world.clone().applyMatrix4(camera.matrixWorldInverse).z,local:local.toArray(),world:world.toArray(),face:index};
 }
 function nearestSurface(points){return points.sort((a,b)=>Number(b.visible)-Number(a.visible)||a.distance-b.distance)[0]||null}
 function materialProjection(group,item,faces,uv,offsets){
@@ -193,6 +193,11 @@ export function projectedMaterialPoint(item,uv,faces,layers){
   return materialProjection(group,item,actual,uv,offsets);
 }
 // 展开轴可被活动纸瓣遮挡；仅为已拾取的可见材料面投影辅助轴，不放宽点边遮挡规则。
+export function projectPaperPosition(item,point){
+  const group=works.children.find(o=>o.userData.id===item.id);
+  const p=group.localToWorld(vec(point[0],point[2],point[1])).project(camera);
+  return {x:(1+p.x)*innerWidth/2,y:(1-p.y)*innerHeight/2};
+}
 export function projectedFacePoint(item,index,point){
   const group=works.children.find(o=>o.userData.id===item.id);if(!group)return null;
   return surfaceProjection(group,item,group.userData.faces,index,point,group.userData.offsets);
@@ -230,7 +235,7 @@ function clear(){
 function line(group,a,b,color){
   const geo=new T.BufferGeometry().setFromPoints([a,b]);group.add(new T.Line(geo,new T.LineBasicMaterial({color})));
 }
-export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers,separateAxis){
+export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers,separateAxis,activeSide){
   clear();
   for(const item of desk.items){
     const group=new T.Group(),faces=item.id===id&&preview?preview:heldFaces(item);
@@ -263,6 +268,19 @@ export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers,s
     });
     const edgeGeometry=new T.BufferGeometry();edgeGeometry.setAttribute('position',new T.Float32BufferAttribute(sides,3));edgeGeometry.computeVertexNormals();
     const edgeMesh=new T.Mesh(edgeGeometry,mat(0xddd3bf,{side:T.DoubleSide}));edgeMesh.userData.id=item.id;edgeMesh.userData.paperSurface=true;edgeMesh.castShadow=true;group.add(edgeMesh);
+    if(item.id===id&&tool==='separate'&&activeSide&&separateAxis){
+      const positions=[],axis=separateAxis;
+      faces.forEach((face,k)=>{
+        const uv=face.reduce((sum,p)=>[sum[0]+p[3]/face.length,sum[1]+p[4]/face.length],[0,0]);
+        const side=Math.sign((axis.b[0]-axis.a[0])*(uv[1]-axis.a[1])-(axis.b[1]-axis.a[1])*(uv[0]-axis.a[0]));
+        if(side!==activeSide)return;
+        for(const sign of [-1,1])for(let i=1;i<face.length-1;i++)for(const p of [face[0],face[i],face[i+1]]){
+          const v=paperPosition(p,offsets[k]).addScaledVector(paperNormal(face),sign*(thickness/2+.0003));positions.push(...v.toArray());
+        }
+      });
+      const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));
+      group.add(new T.Mesh(geometry,new T.MeshBasicMaterial({color:0x72e0cb,transparent:true,opacity:.22,side:T.DoubleSide,depthWrite:false})));
+    }
     if(item.creases?.length){
       const lines=[],active=[],topology=buildTopology(faces,item.creases),separating=tool==='separate'&&item.id===id;
       faces.forEach((f,k)=>{

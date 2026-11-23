@@ -408,8 +408,8 @@ test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继�
   }
   assert.ok(exported,'浏览页应导出 JSON');const exportFile=path.join(exportDir,exported);
   assert.deepEqual(JSON.parse(fs.readFileSync(exportFile,'utf8')).items[0],persisted);
-  await page.click('#close');await (await page.$('#file')).uploadFile(exportFile);
-  await page.waitForSelector('#confirmImport');await page.click('#confirmImport');
+  await page.click('#close');await page.$eval('#content',e=>e.replaceChildren());await (await page.$('#file')).uploadFile(exportFile);
+  await page.waitForSelector('#confirmImport',{visible:true});await page.click('#confirmImport');
   assert.deepEqual(await saved(),persisted);assert.equal(await page.$eval('#thicknessValue',e=>e.value),'0.5');
   // 用实际截图中的橙色像素验证标记，避免只比较两段使用同一错误公式的投影代码。
   for(const view of ['正面','斜视','背面']){
@@ -422,6 +422,8 @@ test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继�
       const anchor=scene.projectedMaterialPoint(item,[0,0]);
       return {x:anchor.x,y:anchor.y,world:anchor.world};
     },view);
+    // 等浏览器完成新场景合成后再验证像素。
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     const screenshot=await page.screenshot({encoding:'base64'});
     const orange=await page.evaluate(async({screenshot,expected})=>{
       const image=new Image();image.src='data:image/png;base64,'+screenshot;await image.decode();
@@ -463,7 +465,7 @@ test('独立分开模式点边展开、取消、撤销、刷新与窄屏触控',
   const xauth=process.env.XAUTHORITY||fs.readdirSync('/tmp').filter(n=>n.startsWith('xauth_')).map(n=>path.join('/tmp',n)).find(f=>fs.existsSync(f));
   const browser=await require('puppeteer-core').launch({executablePath:chromium,headless:false,env:{...process.env,...(xauth?{XAUTHORITY:xauth}:{})},args:['--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--no-proxy-server']});
   t.after(()=>browser.close());const page=await browser.newPage(),errors=[];page.setDefaultNavigationTimeout(120000);page.on('pageerror',e=>errors.push(e.message));
-  await page.setViewport({width:1000,height:760});await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});
+  await page.setViewport({width:1000,height:760});await page.goto(process.env.GAMI_TEST_URL||'http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});
   const {sheet,fold}=await import('../web/gami/fold.mjs'),{foldCreases}=await import('../web/gami/paper-topology.mjs');
   const fixture={id:'paper',front:'#668f99',back:'#f5ead3',seed:91,thickness:.008,x:0,y:0,rot:0,placed:false,folded:true,faces:fold(sheet(),[[-1,0]],[1,0],180),creases:foldCreases(sheet(),[[-1,0]],[1,0])};
   const saved=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('gami.desks.v1'))[0].items[0]);
@@ -489,15 +491,29 @@ test('独立分开模式点边展开、取消、撤销、刷新与窄屏触控',
     const side=pick.side||Math.sign((edge.b[0]-edge.a[0])*(edge.centerUV[1]-edge.a[1])-(edge.b[1]-edge.a[1])*(edge.centerUV[0]-edge.a[0]));
     const uv=pick.direct?edge.centerUV:pick.handleUV,start=scene.projectedMaterialPoint(item,uv);
     for(const sign of [1,-1]){
-      const result=safeTurnCrease(item.faces,edge,side,0,sign*3,item.thickness,item.layers);if(Math.abs(result.angle)<.5)continue;
-      const end=scene.projectedMaterialPoint(item,uv,result.faces,result.layers),dx=end.x-start.x,dy=end.y-start.y,len=Math.hypot(dx,dy);
-      if(len>.01)return {x:control.screen.x+dx/len*pixels,y:control.screen.y+dy/len*pixels};
+      const probe=safeTurnCrease(item.faces,edge,side,0,sign*3,item.thickness,item.layers);if(Math.abs(probe.angle)<.5)continue;
+      const frames=[];let previous=0;
+      for(let i=1;i<=24;i++){
+        const result=safeTurnCrease(item.faces,edge,side,previous,sign*Math.min(180,pixels*1.5)*i/24,item.thickness,item.layers);
+        previous=result.angle;
+        const end=scene.projectedMaterialPoint(item,uv,result.faces,result.layers);
+        frames.push({x:control.screen.x+end.x-start.x,y:control.screen.y+end.y-start.y});
+      }
+      return {...frames.at(-1),frames};
     }
     return null;
   },{item:await saved(),control,pixels});
   const drag=async(control,pixels=60,cancel=false)=>{
     const end=await motion(control,pixels);assert.ok(end,'应存在安全展开方向');
-    await page.mouse.move(control.screen.x,control.screen.y);await page.mouse.down();await page.mouse.move(end.x,end.y,{steps:8});const hint=await page.$eval('#hint',e=>e.textContent);
+    await page.mouse.move(control.screen.x,control.screen.y);await page.mouse.down();for(const frame of end.frames)await page.mouse.move(frame.x,frame.y);
+    if(cancel&&!control.edge){
+      for(const frame of [...end.frames].reverse()){
+        await page.mouse.move(frame.x,frame.y);
+        const projected=await page.evaluate(async({item,uv})=>(await import('./scene.mjs')).projectedMaterialPoint(item,uv),{item:await saved(),uv:control.uv});
+        assert.ok(Math.hypot(projected.x-frame.x,projected.y-frame.y)<4,'回拖抓取点应跟随指针');
+      }
+    }
+    const hint=await page.$eval('#hint',e=>e.textContent);
     if(cancel)await page.$eval('#view',e=>e.dispatchEvent(new PointerEvent('pointercancel',{pointerId:1,bubbles:true})));
     await page.mouse.up();return hint;
   };
@@ -513,19 +529,41 @@ test('独立分开模式点边展开、取消、撤销、刷新与窄屏触控',
   assert.ok(opened.faces.flat().some(p=>Math.abs(p[2])>.1),'角点拖动应该抬起纸瓣');await page.screenshot({path:'/tmp/aasc-gami-separate-desktop.png'});
   await page.click('#undo');assert.deepEqual(await saved(),original);
   const boundary=await handle('boundary');assert.ok(boundary);await drag(boundary,130);
-  const unfolded=await saved();assert.ok(unfolded.faces.flat().every(p=>Math.abs(p[2])<1e-6),'边界应可完全展开');assert.ok(unfolded.faces.flat().some(p=>p[0]<-.9));assert.deepEqual(unfolded.creases,original.creases);
+  const unfolded=await saved();assert.ok(unfolded.faces.flat().every(p=>Math.abs(p[2])<1e-6),'边界应可完全展开：'+JSON.stringify(unfolded.faces.map(f=>f.map(p=>p[2]))));assert.ok(unfolded.faces.flat().some(p=>p[0]<-.9));assert.deepEqual(unfolded.creases,original.creases);
   await page.reload({waitUntil:'domcontentloaded'});await page.click('#resume');assert.deepEqual(await saved(),unfolded);
   await load();const crease=await handle('crease');assert.ok(crease);await page.mouse.click(crease.screen.x,crease.screen.y);assert.deepEqual(await saved(),original,'点折痕只选轴');
   await drag(crease,50);assert.notDeepEqual((await saved()).faces,original.faces,'折痕也应可拖动');
   await load();const switching=await handle(),switchEnd=await motion(switching,45);
-  await page.mouse.move(switching.screen.x,switching.screen.y);await page.mouse.down();await page.mouse.move(switchEnd.x,switchEnd.y,{steps:4});await page.$eval('[data-tool=fold]',e=>e.click());await page.mouse.up();assert.deepEqual(await saved(),original,'切换工具应取消手势');
+  await page.mouse.move(switching.screen.x,switching.screen.y);await page.mouse.down();for(const frame of switchEnd.frames)await page.mouse.move(frame.x,frame.y);await page.$eval('[data-tool=fold]',e=>e.click());await page.mouse.up();assert.deepEqual(await saved(),original,'切换工具应取消手势');
   await page.setViewport({width:390,height:844});await load();
   const layout=await page.evaluate(()=>{const panel=document.querySelector('#panel').getBoundingClientRect();return {left:panel.left,right:panel.right,buttons:[...document.querySelectorAll('.tabs button')].map(e=>e.getBoundingClientRect().right)}});
   assert.ok(layout.left>=0&&layout.right<=390);assert.ok(layout.buttons.every(x=>x<=390));
   const touch=await handle(),touchEnd=await motion(touch,65),cdp=await page.createCDPSession();assert.ok(touchEnd);
   await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
   const touchAt=async(type,p)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:p?[{x:p.x,y:p.y,id:0,radiusX:2,radiusY:2}]:[]});
-  await touchAt('touchStart',touch.screen);for(let i=1;i<=6;i++)await touchAt('touchMove',{x:touch.screen.x+(touchEnd.x-touch.screen.x)*i/6,y:touch.screen.y+(touchEnd.y-touch.screen.y)*i/6});await touchAt('touchEnd');
+  await touchAt('touchStart',touch.screen);for(const frame of touchEnd.frames)await touchAt('touchMove',frame);await touchAt('touchEnd');
   assert.notDeepEqual((await saved()).faces,fixture.faces,'窄屏触控应可展开纸瓣');await page.screenshot({path:'/tmp/aasc-gami-separate-mobile.png'});assert.deepEqual(errors,[]);
   t.diagnostic('分开工具角点、边界、折痕、取消、选轴、撤销、刷新及390×844触控通过，页面错误0');
+});
+
+test('分开抓取轨迹求角支持不同投影、回拖与端点',async()=>{
+  const {orbitPoint,closestOrbitAngle}=await import('../web/gami/separate.mjs');
+  const p=orbitPoint([1,0,0],[0,0,0,.5,0],[0,1,0,.5,1],90);
+  assert.ok(Math.abs(p[0])<1e-10&&Math.abs(p[2]+1)<1e-10);
+  const {sheet,fold}=await import('../web/gami/fold.mjs');
+  const {turnCrease,buildTopology,foldCreases,pointOnFace}=await import('../web/gami/paper-topology.mjs');
+  const faces=fold(sheet(),[[-1,0]],[1,0],180),edge=buildTopology(faces,foldCreases(sheet(),[[-1,0]],[1,0])).edges.find(e=>e.crease);
+  const face=faces.find(f=>f.some(p=>p[3]===0)),a=pointOnFace(face,edge.a),b=pointOnFace(face,edge.b),source=face.find(p=>p[3]===0&&p[4]===0);
+  for(const angle of [-180,-90,-30,30,90,180]){
+    const expected=turnCrease(faces,edge,-1,angle).flat().find(p=>p[3]===0&&p[4]===0),actual=orbitPoint(source.slice(0,3),a,b,angle);
+    assert.ok(Math.hypot(...actual.map((v,i)=>v-expected[i]))<1e-9,'轨迹须与含材料坐标的纸面旋转一致');
+  }
+  for(const skew of [.2,.8,1.5]){
+    const project=angle=>{const r=angle*Math.PI/180;return {x:300+150*Math.cos(r),y:250+100*skew*Math.sin(r)}};
+    let previous=0;
+    for(const angle of [5,20,45,90,135,175,180,175,130,90,45,20,0]){
+      previous=closestOrbitAngle(project,project(angle),previous,0,180);
+      assert.ok(Math.abs(previous-angle)<.05,`投影 ${skew} 目标 ${angle} 实际 ${previous}`);
+    }
+  }
 });

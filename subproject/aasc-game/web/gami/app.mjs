@@ -3,7 +3,7 @@ import {sheet,bounds,corners,fold,cut,snapIndex} from './fold.mjs';
 import {adjustedCurl,heldFaces,validHeldFold,flattenHeldFold} from './held-fold.mjs';
 import {recordCreases,validPaperTopology,paperThickness,PAPER_THICKNESS,validThickness,LAYER_SPACING_VERSION,pointOnFace} from './paper-topology.mjs';
 import {safeTurnCrease,resizedPaper,migratedLayerSpacing} from './paper-contact.mjs';
-import {separationPick,sameCreaseAxis} from './separate.mjs';
+import {separationPick,sameCreaseAxis,orbitPoint,closestOrbitAngle} from './separate.mjs';
 import {sound,unlock,paperSound} from './sound.mjs';
 const $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
 const storageKey='gami.desks.v1';
@@ -42,12 +42,12 @@ function render(){
   for(const k of ['angleLabel','center','commit'])$(k).hidden=isHand();
   $('flatten').hidden=!isHand()||!item?.heldFold;$('flatten').disabled=!item?.heldFold;
   const hints={fold:{hand:item?.heldFold?'拖动纸上的点或边继续调整，点「压平」留下折痕。拖空白处环视。':'拖动点或边折纸；拖动已有折痕可展开。松手保持形状，拖空白处环视。',corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
-    separate:item?.heldFold?'请先在「折叠」中压平，留下折痕后再分开。':item?.creases?.length?'沿高亮折痕展开纸瓣，松手保持角度。拖空白处环视。':'这张纸还没有折痕，请先折叠并压平。',
+    separate:item?.heldFold?'请先在「折叠」中压平，留下折痕后再分开。':item?.creases?.length?'抓住角点或边拉开纸瓣，回拖可收回，松手保持角度。拖空白处环视。':'这张纸还没有折痕，请先折叠并压平。',
     cut:item?.folded?'请选择尚未折叠的纸片。':g?'预览 '+g[0]+' × '+g[1]+'，共 '+g[0]*g[1]+' 片。':'请输入正整数，共 2 至 64 片。',
     place:'选中纸片后加入陈列；拖动成品可调整位置。拖空白处环视。'};
   $('hint').textContent=err||(item?.placed&&tool!=='place'?'已摆放的作品，可切换摆放工具移动或旋转。':hints[tool]);
   if(snappedIndex>=0&&!err)$('hint').textContent='已吸附角点 · 拖远可解除';
-  scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?(snapAnchor||{point:target}):null,previewLayers,separateAxis);
+  scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?(snapAnchor||{point:target}):null,previewLayers,separateAxis,gesture?.separating?gesture.side:null);
 }
 function enter(d){
   desk=structuredClone(d);id=desk.active||desk.items[0].id;history=[];reset();separateAxis=null;tool='fold';
@@ -188,7 +188,9 @@ function hitPaperControl(item,e,faces=item.faces){
   const edges=controls.edges.map(edge=>{
     const [a,b]=edge.screens,dx=b.x-a.x,dy=b.y-a.y,den=dx*dx+dy*dy;
     const t=den?Math.max(0,Math.min(1,((cursor[0]-a.x)*dx+(cursor[1]-a.y)*dy)/den)):0;
-    return {value:edge,distance:Math.hypot(cursor[0]-a.x-dx*t,cursor[1]-a.y-dy*t)};
+    // 屏幕线段参数需还原透视深度，斜视时才能抓住指针下的材料位置。
+    const materialT=t*a.depth/((1-t)*b.depth+t*a.depth);
+    return {value:{...edge,grabUV:edge.a.map((v,i)=>v+(edge.b[i]-v)*materialT)},distance:Math.hypot(cursor[0]-a.x-dx*t,cursor[1]-a.y-dy*t)};
   }).sort((a,b)=>a.distance-b.distance);
   const point=points[0]?.distance<=radius?points[0].value:null,edge=edges[0]?.distance<=radius?edges[0].value:null;
   return {controls,point,edge,distance:point?points[0].distance:edge?edges[0].distance:Infinity};
@@ -211,21 +213,27 @@ function beginSeparation(item,e){
   value.centerScreen=scene.projectedFacePoint(item,value.face,center);
   const options=pick.direct?controls.edges.filter(p=>p.crease&&sameCreaseAxis(p,value)):[value];
   separateAxis={a:value.a,b:value.b};
-  beginCrease(item,value,options,{separating:true,side:pick.side,handleUV:pick.handleUV,direct:pick.direct});
+  beginCrease(item,value,options,{separating:true,side:pick.side||Math.sign((value.b[0]-value.a[0])*(value.centerUV[1]-value.a[1])-(value.b[1]-value.a[1])*(value.centerUV[0]-value.a[0])),handleUV:pick.handleUV,direct:pick.direct});
   render();
 }
-// 用实际材料点的小角度安全试转建立屏幕拖动方向，背面和斜视仍沿所见纸瓣运动。
-function separationDirection(item,g,drag){
-  const uv=g.direct?g.edge.centerUV:g.handleUV;
-  const start=scene.projectedMaterialPoint(item,uv,g.faces,g.layers),probes=[];
-  for(const sign of [1,-1]){
-    const candidate=safeTurnCrease(g.faces,g.edge,g.side,0,sign*3,paperThickness(item),g.layers,g.spacingVersion);
-    if(Math.abs(candidate.angle)<.5)continue;
-    const end=scene.projectedMaterialPoint(item,uv,candidate.faces,candidate.layers),dx=end.x-start.x,dy=end.y-start.y,length=Math.hypot(dx,dy);
-    if(length<.01)continue;
-    const vector=[dx/length,dy/length];probes.push({vector,sign,score:vector[0]*drag[0]+vector[1]*drag[1]});
+// 起拖保存表面抓取点及按下偏移；每次移动按真实投影求角，接触扫描仍处理整张纸。
+function separationAngle(item,g,e){
+  if(!g.orbit){
+    const uv=g.direct?g.edge.centerUV:g.handleUV,face=g.faces[g.edge.face];
+    const anchor=scene.projectedFacePoint(item,g.edge.face,pointOnFace(face,uv));
+    const local=anchor.local,point=[local[0],local[2],local[1]];
+    const a=pointOnFace(face,g.edge.a),b=pointOnFace(face,g.edge.b);
+    const project=angle=>scene.projectPaperPosition(item,orbitPoint(point,a,b,angle));
+    const start=project(0);
+    let min=-180,max=180;
+    for(const sign of [-1,1]){
+      const probe=safeTurnCrease(g.faces,g.edge,g.side,0,sign*3,paperThickness(item),g.layers,g.spacingVersion);
+      if(probe.blocked&&Math.abs(probe.angle)<.5){if(sign<0)min=0;else max=0}
+    }
+    g.orbit={project,start,min,max};
   }
-  return probes.sort((a,b)=>b.score-a.score)[0]||null;
+  const {project,start,min,max}=g.orbit;
+  return closestOrbitAngle(project,{x:start.x+e.clientX-g.x,y:start.y+e.clientY-g.y},g.safeAngle||0,min,max);
 }
 $('view').onpointerdown=e=>{
   if($('studio').hidden)return;
@@ -332,9 +340,7 @@ $('view').onpointermove=e=>{
     const [a,b]=g.edge.screens,dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
     const shift=len?((e.clientX-g.x)*(-dy)+(e.clientY-g.y)*dx)/len:0;
     try{
-      if(g.separating&&!g.direction)g.direction=separationDirection(item,g,[e.clientX-g.x,e.clientY-g.y]);
-      const amount=g.separating&&g.direction?((e.clientX-g.x)*g.direction.vector[0]+(e.clientY-g.y)*g.direction.vector[1])*g.direction.sign:shift*scene.facingSign();
-      const angle=Math.max(-180,Math.min(180,amount*1.5));
+      const angle=g.separating?separationAngle(item,g,e):Math.max(-180,Math.min(180,shift*scene.facingSign()*1.5));
       const safe=safeTurnCrease(g.faces,g.edge,g.side,g.safeAngle||0,angle,paperThickness(item),g.layers,g.spacingVersion);
       if(!validPaperTopology({...item,faces:safe.faces,layers:safe.layers}))throw Error('纸面分区过多，请减少折叠次数');
       preview=safe.faces;previewLayers=safe.layers;g.previewSpacingVersion=safe.layerSpacingVersion;g.safeAngle=safe.angle;g.changedCrease=Math.abs(safe.angle)>1e-6;
