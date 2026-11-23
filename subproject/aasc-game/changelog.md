@@ -1,3 +1,107 @@
+- ✅ [2026-11-22] 基于外网原版底座叠加远景雾化、5 瓣星形花、鲜艳红提示贴花与切窗防误降档（`?v=20261122o`）
+  - `web/pig-level/3d/{environment,scenery,grass}.mjs`：`environment.mjs` 暴露 `getHorizonColor()`；`scenery.mjs`（`groundMat`/`lawnMat`）与 `grass.mjs` 在 `20.0~36.0` 范围按 `uHorizonColor` 做柔和低饱和空气透视雾化；`scenery.mjs` 保留外网花朵数量上限（`1800 / 900 / 420`）与山丘正弦聚簇分布，并将 `high/medium` 升级为 8 顶点交叉双面 5 瓣星形花面片（`high` 带微风摆动、`low` 保持圆片），同步贴合丘陵高度。
+  - `web/pig-level/3d/{textures,models}.mjs`：新增手绘 `flowerSprite()`；`hintDecal()` 改为高饱和鲜艳红（`#ff2432` / `#ff5454`）环形光晕与角标，`models.mjs` `bodyDecalMat` 补全 `#include <tonemapping_fragment>` 与 `#include <colorspace_fragment>`。
+  - `web/pig-level/3d/{post,view,holo-ui}.mjs`、`web/pig-level/{app.mjs,index.html}`：`post.mjs` 改为跳过首轮窗口并需连续 2 个统计周期（约 5 秒）`< 38fps` 才降档，`view.mjs` 在 `visibilitychange` / `focus` / `blur` 时调用 `resetFpsMonitor()` 防切换窗口误降档，所有静态资源版本号统一升至 `?v=20261122o`。
+  - `tests/pig-level-3d.test.js`、`docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md`、`docs/task/2026-11-22_猪了个猪3D场景画面美化.md`：同步伪代码规格、设计/任务记录与连续两周期降档单测。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`4 / 4`）全部通过，零控制台/页面报错；独立 GPU Chromium 实景截图核验 PC `1360×820` `high` 档与手机竖屏 `390×844@2x` `medium` 档渲染正常。
+- ✅ [2026-11-22] 将 3D 场景及网页代码完全还原为外网版本（`?v=20261122c`）
+  - `web/pig-level/{index.html,app.mjs,style.css,engine.mjs}` 与 `web/pig-level/3d/*.mjs`：全部恢复至与外网 `https://c.aasc.us/mnt/game/pig-game/` 完全一致（逐文件 `diff -q` 零差异），取消前述雾化、池塘、星形花面片、夏天改色、去掉底椭圆、默认 78° 俯角与取消双击复位等改动。
+  - `tests/pig-level-3d.test.js`、`docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md`、`docs/task/2026-11-22_猪了个猪3D场景画面美化.md`：同步回退测试断言与文档记录。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过，零控制台/页面报错。
+- ✅ [2026-11-22] 3D 场景整体回归外网原版为主并保留雾化、池塘、当前花朵模型与夏天草色，同步最俯视默认视角与取消双击地板复位（`?v=20261122n`）
+  - `web/pig-level/3d/{presets,textures,models,scenery,grass,environment,post}.mjs`：整体回退为外网版本光照、天气、后期、草地不均匀分布（`140k / 36k / 22k`、棋盘内 `28%`、叶宽 `0.072`）与卵石/栅栏/树木构图，保留并融合：① `scenery.mjs` 与 `grass.mjs` 20～36 格远景雾化（`aerial`）；② 左下角渐变荷花池塘及环境抽屉「池塘」本地开关；③ 花采用外网分布（`1800 / 900 / 420` 环形聚集并避开池塘）搭配现在的 5 瓣星形交叉面片模型（`high` 档风摆、`low` 档圆片）；④ 保持去掉猪底部暗椭圆且猪体受光跟随真实 `sunDir`；⑤ `SEASON_BASE.summer` 保留当前草地与草叶配色（`grassRoot: #61a843`、`grassTip: #94cc56`、`lawn: #94d762`、`ground: #64ab46`、`hillColor: #6bb44d`）。
+  - `web/pig-level/3d/{view,holo-ui}.mjs`、`app.mjs`、`index.html`：`DEFAULT_PITCH` 调整为最俯视 `1.36`（约 `78°`）并改进 `fitCamera()` 按 `holoUI` 安全边距校验全棋盘角点完整入镜；移除画布 `dblclick` 监听以去掉点击/双击地板触发的相机复位（保留「视角复位」按钮与 `V` 键）；环境设置抽屉精简为只保留「池塘」开关；统一递增模块版本号至 `?v=20261122n`。
+  - `tests/pig-level-3d.test.js`、`docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md`、`docs/task/2026-11-22_猪了个猪3D场景画面美化.md`：同步更新预设/池塘开关/双击不复位校验及设计实现文档。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；`DISPLAY=:0` 独立硬件 GPU Chromium 实景截图核验第 48 关春晴、第 48 关夏晴、第 70 关秋晴、第 100 关冬雪竖屏（`390×844`）与第 61 关铁笼关卡（全部 `medium` 档 `60fps`，`0` 报错，全内棋盘完整入画）。
+- ✅ [2026-11-22] 精准还原外网春晴草地与草叶色度并新增草叶菲涅尔天光边缘反光（`?v=20261122m`）
+  - `web/pig-level/3d/post.mjs`、`environment.mjs`、`scenery.mjs`：将后期 `uSaturation` 调回 `1.0`、`uSplitStrength` 设为 `0.0`；晴天 `hemiLight` 恢复纯净 `#fff7e8` 且不叠加 `rimLight` 洗亮平地（仅阴雨/黄昏轻度介入）；统一将云影区间收拢至 `mix(0.82, 1.02, ...)`。
+  - `web/pig-level/3d/grass.mjs`：移除 `hueShift` 还原外网草叶原色与 `vTint > 0.87` 麦草比率，叶片晴天保持 `1.0` 原色基准、阴雨/冬雪/笼夜随 `uGroundLight` 等比联动而草根（`vY<=0.05`）仍严格对齐地面；在 `vY > 0.18` 叠加菲涅尔天光边缘反光 `rim`（`pow(1 - ndv, 3)`，雨湿增强、阴影削弱）。同步更新 `docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md`、`docs/task/2026-11-22_猪了个猪3D场景画面美化.md` 及入口 `?v=20261122m`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立硬件 GPU Chromium（`DISPLAY=:0`）实景对比第 48 关春晴与外网右侧草区均值基本重合（`HSV 85.3° / S 47.0%` vs 外网 `HSV 85.5° / S 46.1%`），并核验春阴、春雨、秋晴、冬雪与第 61 关铁笼月夜（均为 `medium` 档 `60fps`，`0` 报错）。
+- ✅ [2026-11-22] 恢复外网春天草色并统一全季节×全天气草根与地面无缝过渡（`?v=20261122l`）
+  - `web/pig-level/3d/presets.mjs`：恢复 `SEASON_BASE.spring` 外网草地与地面原色（`grassRoot: #74bf54`、`grassTip: #b4e36e`、`lawn / lawnLit: #96d462`、`ground: #78c252`、`hillColor: #7cc458`）。
+  - `web/pig-level/3d/environment.mjs`：按 Three.js `MeshToonMaterial` 水平地表（`N=(0,1,0)`）受光公式累加太阳、月光、轮廓光与半球天光生成权威 `groundLight`，随 `getAtmosphere()` 下发至草地着色器。
+  - `web/pig-level/3d/scenery.mjs` & `grass.mjs`：统一 `scCloud` 区间为 `0.72..1.10`；草根（`vY<=0.05`）直接匹配地面/草坪线性纹理均值与占格 AO，在 `vY=0.05..0.35` 渐入单株色相、15% 麦穗、亮斑、湿润反光与雪尖，消除阴雨/冬雪/笼夜下的草根接缝与亮斑断层。
+  - `web/pig-level/3d/post.mjs`：减弱冷暖分离强度（`uSplitStrength: 0.12 → 0.06`）并仅作用于暗部，同步更新 `docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md`、`docs/task/2026-11-22_猪了个猪3D场景画面美化.md` 与 `?v=20261122l`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立硬件 GPU Chromium（`DISPLAY=:0`）实景截图核验第 48 关春晴/春阴/春雨、第 70 关秋晴、第 100 关冬雪及第 61 关铁笼月夜（均为 `medium` 档 `60fps`，`0` 报错）。
+- ✅ [2026-11-22] 猪了个猪 3D 场景美化设计稿补充阴天/雨天降光设定（仍只做设计，未改代码）
+  - `docs/design/pig-game-3d-scene-polish.md` 与任务文档：下调 `WEATHER_BASE` 阴天（`sunIntensity 1.4→1.05`、`hemiIntensity 1.06→0.88`）与雨天（`sunIntensity 1.08→0.78`、`hemiIntensity 1.02→0.82`）光照强度，拉开晴/阴/雨明暗氛围并突出雨天暖窗与闪电对比。
+- ✅ [2026-11-22] 移除猪底部暗椭圆接触阴影贴片（`?v=20261122k`）
+  - `web/pig-level/3d/models.mjs`：移除 `shadowGeo`、`shadowMat` 与 `createActor()` 中的 `shadowMesh`，统一由实时太阳阴影贴图和棋盘占格 AO 表现接触暗部，画面更清爽且减少约百个 draw call；同步更新 `docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md` 与 `?v=20261122k`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立硬件 GPU Chromium 实景核验第 48 关春晴截图（`medium` 档 `60fps`，`0` 报错）。
+- ✅ [2026-11-22] 提高春天草地与地面明度（`?v=20261122j`）
+  - `web/pig-level/3d/presets.mjs`、`grass.mjs`、`scenery.mjs`：将 `SEASON_BASE.spring` 提亮至 `grassRoot: #84cf62`、`grassTip: '#c5ee7f'`、`ground: '#86ce60'`、`lawn / lawnLit: '#a6df74'`、`hillColor: '#8ad066'`，保持草根与地面无缝衔接；同步更新 `docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md` 与 `?v=20261122j`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立硬件 GPU Chromium 实景核验第 48 关春晴截图（`medium` 档 `60fps`，`0` 报错）。
+- ✅ [2026-11-22] 春、秋、冬三季草色恢复外网原版配色（`?v=20261122i`）
+  - `web/pig-level/3d/presets.mjs`、`grass.mjs`、`scenery.mjs`：恢复外网版本春（`#74bf54 → #b4e36e` / `lawnLit #96d462` / `ground #78c252`）、秋（`#c8a85a → #f0cf72` / `lawnLit #dfc274` / `ground #c6a65c`）、冬（`#9cb5aa → #f6fafc` / `lawnLit #ebf3f7` / `ground #e2ecf2`）三季草色与地面/草坪配色，保留 54k 草叶密度、根部无缝融合与阴雨降亮效果；同步更新 `docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md` 与 `?v=20261122i`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立硬件 GPU Chromium 实景核验第 48 关春晴、第 70 关秋晴与第 100 关冬雪竖屏（`medium` 档 `60fps`，`0` 报错）。
+- ✅ [2026-11-22] 调低春天草地饱和度至柔和水粉嫩绿（`?v=20261122h`）
+  - `web/pig-level/3d/presets.mjs`、`grass.mjs`：将 `SEASON_BASE.spring` 调整为 `grassRoot: #72a85f`、`grassTip: #a1c776`、`ground: #72a75e`、`lawn / lawnLit: #a0cb7d / #a2cc80`、`hillColor: #78ac65`，去掉偏荧光感同时保持草根与地面无缝衔接；同步更新 `docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md` 与 `?v=20261122h`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立硬件 GPU Chromium 实景核验第 48 关春晴截图（`medium` 档 `60fps`，`0` 报错）。
+- ✅ [2026-11-22] 提升草地密度、根部融合度与色彩层次（`?v=20261122g`）
+  - `web/pig-level/3d/grass.mjs`、`presets.mjs`：`medium` 档草叶增至 `54,000`、`low` 档增至 `28,000`（`high` `140,000`），棋盘内占草比例收至 `16%` 并将草叶基底加宽至 `0.082`；移除草叶整体 `* 0.82` 压暗，改为草根（`vY=0`）直接衔接 `uGroundColor` / `uLawnColor` 实现与地面/草坪无缝融合；中上段加入青翠 ↔ 暖嫩绿单株色相变化与 15% 金色麦草秆，并在不过曝前提下恢复大尺度暖阳/冷荫斑块对比；同步更新 `docs/spec/pig-game-3d.md` 与 `?v=20261122g`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立硬件 GPU Chromium 实景核验第 48 关春晴与春雨截图（`medium` 档 `60fps`，`0` 报错），草根自然融入地面、草丛饱满且色差丰富。
+- ✅ [2026-11-22] 下调草地整体亮度并修正猪受光面与投影方向一致（`?v=20261122f`）
+  - `web/pig-level/3d/models.mjs`、`environment.mjs`、`view.mjs`：修复 `models.mjs` 中 `uLightDir` 硬编码为 `(-0.74, 0.44, 0.50)` 与太阳方向 `+X` 相反的问题，改为通过 `environment.getAtmosphere().sunDir` 实时同步主太阳方向，使猪体受光面与地面/树木投影方向一致。
+  - `web/pig-level/3d/grass.mjs`、`presets.mjs`：草叶整体乘以 `0.82` 降亮、收拢 `patchTint`/`cloud` 亮斑上限（`1.05`/`1.04`）并随阴雨天 `uAmbientScale` 自动减弱晒亮斑块；同步微调四季 `grassRoot`/`grassTip` 色阶并更新 `docs/spec/pig-game-3d.md`、递增 `?v=20261122f`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；独立 Chromium 实景截图核验第 48 关春晴/春阴/春雨，草地亮度柔和、猪亮面与投影方向一致且 `0` 报错。
+- ✅ [2026-11-22] 下调阴雨天环境光与着色器同步（`?v=20261122e`）
+  - `web/pig-level/3d/presets.mjs`、`environment.mjs`：阴天调整为 `sunIntensity: 0.85 / hemiIntensity: 0.54 / ambientScale: 0.80`，雨天调整为 `0.58 / 0.44 / 0.68`（晴天 `1.0`、雪天 `0.94`），并在天气过渡时平滑插值 `ambientScale`。
+  - `web/pig-level/3d/grass.mjs`、`models.mjs`、`scenery.mjs`、`view.mjs`、`app.mjs`、`index.html`：草叶、小猪材质与花朵同步接入 `ambientScale`（猪体保留轮廓光确保可读），并同步更新 `docs/spec/pig-game-3d.md`、`docs/design/pig-game-3d-scene-polish.md`、`tests/pig-level-3d.test.js`。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过，独立 Chromium 实景截图核验第 48 关春阴与春雨亮度渐变自然、`0` 报错。
+- ✅ [2026-11-22] 完成猪了个猪 3D 场景画面美化实现与验收
+  - 先更新 `docs/spec/pig-game-3d.md` 伪代码，随后完成 `web/pig-level/3d/{presets,textures,models,scenery,grass,environment,post,holo-ui,view}.mjs` 及 `app.mjs`、`index.html`、`tests/pig-level-3d.test.js` 修改，并统一递增入口与更新模块版本号至 `?v=20261122d`。
+  - 主要改动：棋盘贴地圆角原木框 + 冬季雪檐 + 下沉暖土带与碎卵石；棋盘淡格线与动态猪间占格 AO；6 组微调色差猪材质 + 暖白 Fresnel 轮廓光 + 接触软阴影放大加深；花按画质分档（high 摆动花带 1100 / medium 静止花带 560 / low 收紧散花 420）+ 近环灌木团；加粗栅栏 + 冬/夜暖色灯串；左下渐变荷花池塘；平滑树冠内收与树下季节贴花；木屋暖窗自发光与地面光斑；远景剪影林线与距离色彩透视；阴天（`sun 1.05 / hemi 0.88`）与雨天（`sun 0.78 / hemi 0.82`）降光；铁笼关月夜蓝紫基调、加粗笼杆与 `steelGlow` 发光计数牌；逆光轮廓灯与后期有效饱和度（`1.08`）/冷暖分色/中档柔光（`0.10`）/高档水粉纸纹；环境抽屉新增 4 个本地 `localStorage` 装饰开关。
+  - 验证结果：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`3 / 3`）全部通过；并在 `DISPLAY=:0` 独立硬件 GPU Chromium 下核验第 48 关春晴/雨天、第 70 关秋晴、第 61 关铁笼月夜、第 100 关冬雪竖屏实景截图（`medium` 档 `60fps`，`0` 报错）；已从 `docs/todo.md` 移除已完成条目。
+- ✅ [2026-11-22] 猪了个猪 3D 场景美化设计稿完成定稿（只做设计，未改代码）
+  - 确认最终一项待定项：默认镜头俯角先不降（保持现状约 52°，仅预留 `DEFAULT_PITCH` 常量便于后续调整）。4 项需求已全部落盘至 `docs/design/pig-game-3d-scene-polish.md`、`docs/task/2026-11-22_猪了个猪3D场景画面美化.md`、`docs/design.md` 与 `docs/todo.md`（标记为待实现）。
+- ✅ [2026-11-22] 猪了个猪 3D 场景美化设计稿补充需求确认（仍只做设计）
+  - `docs/design/pig-game-3d-scene-polish.md`：棋盘改为不抬高，用贴地木框和下沉土带区分边界；花按画质分档（high/medium 用花带，low 用收紧散花）；新增“装饰”开关（池塘/灯串/花带灌木/远景林线，存 `localStorage`，不走远端配置）；默认俯角仍待确认。同步更新 task 文档与 `docs/todo.md`。
+- ✅ [2026-11-22] 完成猪了个猪 3D 场景画面美化设计稿（只做设计，未改代码）
+  - 新增 `docs/design/pig-game-3d-scene-polish.md`（8 项现状问题诊断、季节色板、L0～L4 分层构图、光照与后期、季节/天气/铁笼月夜专项、档位性能预算、验收标准）和 `docs/task/2026-11-22_猪了个猪3D场景画面美化.md`；`docs/design.md` 增加索引，`docs/todo.md` 增加待确认实现项。
+  - 依据：本地 Chromium 截取第 48/70/61/100 关现状画面，并生成春季晴天与冬季黄昏概念参考图。
+- ✅ [2026-11-22] 修复冬季积雪草叶未参与阴影计算的问题
+  - 修复 `web/pig-level/3d/grass.mjs` 片元着色器执行顺序：此前冬季草尖积雪（`uSnow`）在方向光与云影之后覆盖为纯白导致约 85% 阴影被抵消；现将 `uSnow` 与 `uWet` 移至 `shadowK` 云影和 5 点 PCF 太阳阴影之前融合，使冬季雪草同样清晰呈现树影、木屋与栅栏冷青投影，并同步递增 `?v=20261122c` 模块版本参数。
+  - 验证与发布：`npm run test:pig-3d`（`3 / 3`）、`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）全部通过；已在 `DISPLAY=:0` 独立 Chromium 核验第 113 关冬季雪草投影截图与公网 `https://c.aasc.us/mnt/game/pig-game/?level=113&weather=sunny` 3D 加载（`0` 报错，SHA-256 一致）。
+- ✅ [2026-11-22] 深化草地阴影线性压暗与丘陵贴合，并统一 ES 模块版本参数彻底消除外网缓存错配
+  - 草地阴影深化与地形贴合（`web/pig-level/3d/geometry.mjs`、`scenery.mjs`、`grass.mjs`）：抽出共享地形高度函数 `groundHeight()`，为草地增加 `aBaseY` 使外围丘陵草叶与树木贴合坡面不再埋地；草地阴影片元改用 `bias=0.0009`、5 点 PCF 采样与匹配地面的线性阴影倍率 `vec3(0.22, 0.30, 0.38)`，实测树影内草叶均色压暗至 `[55, 116, 53]`（受光草叶 `[150, 183, 103]`）。
+  - 修复外网 ES 模块旧缓存报错（`index.html`、`app.mjs`、`3d/*.mjs`）：为入口与全部内部 `.mjs` 导入统一附加 `?v=20261122b` 版本号，解决浏览器旧缓存 `geometry.mjs` 缺少 `shadeGradient` 导出导致回退 2D 的问题。
+  - 验证与发布：`npm run test:pig-3d`（`3 / 3`）、`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）全部通过；已同步至 `https://c.aasc.us/mnt/game/pig-game/` 核验 SHA-256 一致，且独立 Chromium 实测公网与局域网 `192.168.1.39` 3D 加载均 `0` 报错。
+- ✅ [2026-11-22] 强化猪头渐变与饱和度、修复手机端 HiDPI 分辨率模糊，并为草地接入实时阴影采样
+  - 猪头渐变与饱和度（`web/pig-level/3d/geometry.mjs`、`models.mjs`）：新增 `shadeGradient()` 并在 `mergeParts()` 中保留部件顶点色，将猪头着色由单色升级为下颌深珊瑚红（`#d9635e`）→ 额顶暖蜜桃（`#faafa6`）渐变，同步加深躯干/鼻筒/腮红/双耳饱和度，并在 `toonMat` 叠加 `wrapGrad` 曲率渐变。
+  - 手机端高分屏清晰度（`web/pig-level/3d/post.mjs`、`holo-ui.mjs`）：移除高像素手机降为 `low` 的限制，并通过 `computePixelRatio()` 在 `high`/`medium`/`low` 档分别保持 `2.5x`/`2.0x`/`1.75x` DPR 上限；`holo-ui.mjs` 文本画布最高采用 `3x` 采样，消除手机端退化为 `1x` 的模糊感。
+  - 草地实时阴影采样（`web/pig-level/3d/environment.mjs`、`grass.mjs`、`view.mjs`）：`environment.mjs` 暴露主太阳方向光阴影贴图与矩阵，草地着色器通过 4 点 PCF 采样 `uShadowMap`，使树木、木屋、栅栏与小猪阴影直接投射并压暗草叶（冷青阴影 `mix(1.0, [0.54,0.64,0.72])`）。
+  - 验证与发布：`npm run test:pig-3d` `3 / 3`、`npm run test:pig-web` `118 / 118`、`npm run test:pig-animation` `1 / 1` 全部通过（含移动端 `390×844@2x` 画布 `780×1688` 与实景截图核验）；已 `rsync` 发布至 `https://c.aasc.us/mnt/game/pig-game/` 并核对核心文件 SHA-256 一致。
+- ✅ [2026-11-22] 拉开晴天光照亮暗反差、修复眨眼眼球定位与列表背景 Hover、增强关卡列表惯性、新增小鸭逃出动画与计时炸弹实时倒计时
+  - 光照亮暗反差（`web/pig-level/3d/{models,textures,presets,environment,scenery,grass}.mjs`）：`toonMat` 改为侧前斜射双阶水粉着色（亮部 `1.16` + 高光阶、暗部暖玫瑰可可 `vec3(0.48, 0.38, 0.45)`、接触阴影 `0.38`），压深 `gradient3` 四阶暗部，晴天 `sunIntensity=2.55`、`hemiIntensity=0.58`（`groundColor #5a7d3e`），`camBound` 扩至 `22` 并为全部树冠开启 `castShadow/receiveShadow`，草地增加大尺度暖光区（`1.16`）与云影冷区（`0.72`）层次。
+  - 细节与机制完善：
+    - `web/pig-level/3d/models.mjs`：猪眼改为以眼窝中心 `Y=0` 为局部原点构建并整体偏移 `eyeMesh.position.y`，彻底修复眨眼压扁时眼球掉出头部的问题。
+    - `web/pig-level/3d/holo-ui.mjs`：关卡列表拖动启用指数平滑初速度累加（`×52`）与低阻尼长惯性衰减（`pow(0.24, dt)`），滚轮叠加惯性；禁用 `pickerBg` 与 `card` 类底板的 hover 变色与缩放。
+    - `web/pig-level/3d/view.mjs`：小鸭离场时通过空格 BFS 寻路生成至棋盘边缘外路径，播放蹦跳摇摆跑出、压草与尾迹粒子动画；炸弹归零爆炸准确落位在对应炸弹小猪位置。
+    - `web/pig-level/app.mjs`：新增计时炸弹每秒倒计时（`1000ms` tick），归零触爆失败，撤回保底恢复至少 15 秒；最后 10 秒炸弹球体脉冲闪烁提示。
+  - 验证与发布：`npm run test:pig-3d` `3 / 3`、`npm run test:pig-web` `118 / 118`、`npm run test:pig-animation` `1 / 1` 全部通过（在 `DISPLAY=:0` 独立 Chromium 实测第 48 关晴天明暗对比、第 113 关冬晴倒计时 `79->77`、第 63 关小鸭逃出动画及眼位偏移）；已 `rsync` 同步至 `https://c.aasc.us/mnt/game/pig-game/` 并核对 12 个核心文件 SHA-256 一致。
+- ✅ [2026-11-21] 修复 3D 后期渲染色彩空间过饱和与草叶根部偏暗，并切换至 `DISPLAY=:0` 独立硬件 GPU Chromium（DebugPort `9333`）验证发布
+  - 修复 `web/pig-level/3d/post.mjs` 的 `quadMat` 缺少 `#include <tonemapping_fragment>` 与 `#include <colorspace_fragment>` 导致的线性颜色直出过饱和与暗部压深；将饱和度倍增回归 `1.0`、对比度微调柔和化为 `0.08`，并调整桌面端硬件 GPU 2 核设备默认运行于 `medium`（阴影 + 后期、`pixelRatio=1`）。
+  - 同步调整 `web/pig-level/3d/presets.mjs`、`web/pig-level/3d/grass.mjs` 与 `web/pig-level/3d/view.mjs`：提亮草叶根部 `grassRoot`（春 `#74bf54` / 夏 `#68b84c` / 秋 `#c8a85a` / 冬 `#9cb5aa`）、着色器渐变从 `0.25` 起跳并提高云影/色块暗部下限至 `0.93~0.94`，曝光调为 `1.04`、`sunny` 主光 `1.85`、`medium` 草叶数调优为 `36000`。
+  - 更新 `tests/pig-level-3d.test.js`：禁用 SwiftShader 软光栅且不复用 `9222`，自动检索 `/tmp/xauth_*` 在 `DISPLAY=:0` 启动独立 `/usr/bin/chromium`（DebugPort `9333`）验证硬件 GPU 渲染。
+  - 验证与发布：`npm run test:pig-3d` `3 / 3`、`npm run test:pig-web` `118 / 118`、`npm run test:pig-animation` `1 / 1` 全部通过；独立 Chromium 实测为 `ANGLE (Intel, Mesa Intel(R) HD Graphics 610 (KBL GT1), OpenGL 4.6)`、`medium` 档 `60 fps`；已 `rsync` 发布至 `https://c.aasc.us/mnt/game/pig-game/` 并核对核心文件 SHA-256 一致。
+- ✅ [2026-11-21] 完成猪了个猪网页 3D 化改造（手绘水粉风格、可交互草地、四季×四天气、3D 卡通浮动 UI、程序音乐音效）并发布外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 新增 `web/pig-level/3d/` 全部 12 个模块与 `vendor/three.module.min.js`，更新 `index.html`、`style.css`、`app.mjs`、`scripts/serve-pig-level.js`、`package.json`、`tests/pig-level-animation.test.js`（固定 `?view=2d`）及新增 `tests/pig-level-3d.test.js`。
+  - 画面与交互：参考 Painted Valley 实现高饱和水粉草地与短阶明暗对比、金色麦草秆与花丛漂带；草地支持鼠标/手指拨草、点击溅起草屑花瓣与小猪踩踏痕迹；支持春夏秋冬 × 晴雨阴雪 16 种环境平滑过渡、昼夜流转与月夜月亮月光；支持小猪滑行撞障、蓄力冲刺离场（离场未结束即可继续点下一只猪）、受阻撞击与摆动身体、地面+猪背双重表面贴花提示环；支持 PC 右键平移（全局拦截浏览器右键弹窗）与移动端双指平移缩放；内置居中平滑滑动关卡列表（不循环）、“简洁 2D 控件”切换、WebAudio 四季音乐与 14 种程序音效、`?view=2d`/无 WebGL 自动回退 2D。
+  - 验证与发布：`npm run test:pig-web` `118 / 118`、`npm run test:pig-animation` `1 / 1`、`npm run test:pig-3d` `3 / 3` 全部通过；已同步 124 个静态文件至服务器 `/home/as/a/game/pig-game/`（备份旧版至 `pig-game.bak-3d`），公网 SHA-256 校验一致且 Chromium 公网 3D/`?view=2d` 核验 `0` 报错。
+- ✅ [2026-11-21] 将横竖屏自适应一屏布局同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`（服务器 `/home/as/a/game/pig-game/`，旧版保留服务器备份）
+  - 公网逐文件校验：全部 `111 / 111` 个静态文件（包含更新后的 `index.html`、`style.css`、`app.mjs`、`engine.mjs` 及 107 份 `level-*.json`）公网 HTTPS 200 且 SHA-256 与本地一致。
+  - 公网 Chromium 多视口核验：`https://c.aasc.us/mnt/game/pig-game/?level=117` 在 `390×844`、`844×390` 与 `1280×720` 下均满足一屏无滚动（`docH == winH`、`appSH == appCH`）、棋盘比例 `0.706`、横屏左棋右控双栏且第 54 步顶行 `.hint-arrow` 未裁剪；`?level=118` 渲染 91 只猪与自由试玩徽章，全程 `0` 报错。
+- ✅ [2026-11-21] 实现猪了个猪网页横竖屏自适应一屏布局（横竖屏与手机矮屏均不超出一屏）
+  - 布局与样式（`web/pig-level/index.html`、`style.css`、`app.mjs`）：`.app` 固定 `100dvh` 视口高并禁止整页溢出；新增 `.board-stage`（`container-type: size`）配合 `width: min(100cqw, calc(100cqh * var(--cols, 12) / var(--rows, 17)), 560px)` 实现棋盘等比自适应缩放且继续保留顶行 `.hint-arrow` 未裁剪。竖屏保持四段流式一屏排布；横屏（`orientation: landscape` 且 `min-width: 560px`）自动切换为左棋盘满高 + 右标题/控制/规则说明双栏，并对手机矮横屏（`max-height: 520px`）与矮竖屏（`max-height: 700px`）收紧间距。
+  - 验证结果：`npm run test:pig-web` `118 / 118` 通过；`npm run test:pig-animation` 在 Chromium 中通过（同步将方向动画等待从固定 120ms 改为 `waitForFunction` 实际位移判断），覆盖 `390×844`、`360×640`、`844×390`、`1280×720` 视口的一屏无滚动与 `12:17` 棋盘比例校验；外网同步待用户确认后覆盖发布。
+- ✅ [2026-11-21] 发布新版猪了个猪独立网页至外网 `https://c.aasc.us/mnt/game/pig-game/`（服务器 `/home/as/a/game/pig-game/`，覆盖 `2～91、94～95、97～104、112～118` 共 107 关与界面美化版本，旧版保留服务器备份）
+  - 公网逐文件校验：全部 `111 / 111` 个静态文件（`index.html`、`app.mjs`、`engine.mjs`、`style.css` 及 107 个 `level-*.json`）公网 HTTPS 200 且 SHA-256 与本地一致。
+  - 公网 Chromium 加载核验：`https://c.aasc.us/mnt/game/pig-game/?level=117` 显示正常且第 54 步顶行 `.hint-arrow` 位于棋盘上方（`arrowTop=171 < boardTop=193`、`overflow=visible`）、`#modeBadge` 隐藏；`?level=118` 显示 91 只猪与自由试玩徽章、禁用参考下一步按钮，全程 `0` 控制台/页面报错。
+- ✅ [2026-11-21] 第 115～117 关实机无道具通关，第 118 关暂停记录与第 71～118 关网页批量接入暨界面交互美化
+  - 实机进度：第 115（107 步）、116（89 步）、117（112 步）关实机无道具通关，第 118 关在剩余 30 只时经 7448 状态 BFS 与实机探针确认无道具死锁（剩余金币 11005、零道具消耗，实机窗口保持暂停）。
+  - 网页数据与规则引擎：新增并校验接入 37 关（`71～81、83～91、94～95、97～104、112～117` 共 36 个带完整参考步骤通关关卡，以及无步骤自由试玩的第 `118` 关），现网页共支持 `107` 关（`2～91、94～95、97～104、112～118`）；`web/pig-level/engine.mjs` 补充了弹簧猪遇阻回弹、`shape` 大象计入离场解锁计数、带鸭子时限制离场、`timer_bomb` 场内滑停及空步骤计划兼容；同步更新 `scripts/serve-pig-level.js`、`tests/pig-level-web.test.js`、`tests/pig-level-animation.test.js`、`docs/design/pig-game.md`、`docs/spec/pig-game.md` 与 `docs/task/2026-11-21_补全第71至118关网页接入与界面交互美化.md`。
+  - 界面与交互优化：`web/pig-level/style.css`、`index.html`、`app.mjs` 将草地底纹、网格与圆角拆分为独立 `.board-backdrop`（`overflow: hidden`），使 `.board` 改为 `overflow: visible` 彻底修复顶部/边缘猪 `.hint-arrow` 被棋盘裁剪问题；补强小猪耳朵/猪鼻/弹簧圈/倒计时炸弹视觉、新增「上一关 / 下一关」导航、自由试玩徽章、键盘快捷键、错误震动反馈，并修复 `.mode-badge[hidden]` 显示冲突与 `<link rel="icon">` 404。
+  - 测试结果：`npm run test:pig-web` 118 项全部通过（0 失败、0 跳过）；`npm run test:pig-animation` 在 390×844 Chromium 中验证通过（覆盖第 48/40/82 关动画、取消、撤回、`#modeBadge` 显隐、第 117 关第 54 步顶行 `.hint-arrow` 未裁剪及第 118 关自由试玩态）。
 - ✅ [2026-11-15] 第 59 关实机通关并发布网页：首屏与开笼后画面还原 86 猪、四把锁和铁笼，105 步独立重放及实机核对；`web/pig-level/level-59.json`、网页入口和测试清单已更新。`npm run test:pig-cage` 17 项、`npm run test:pig-web` 66 项通过；公网五个核心资源 HTTP 200 且 SHA-256 一致，Chromium 显示 86 猪且无页面错误。胜利截图底部有隐私提示，成功标题可见。
 - ✅ [2026-11-15] 铁笼与锁猪联合核对：`scripts/pig_cage_stage.py` 保守停止未建模锁标，`scripts/pig_level_auto.py` 补充粘连候选，`scripts/play-pig-locked.py` 同时核对笼体与锁标；自动识别样式仍需扩充。
 - 🔄 [2026-11-14] 设计独立静态网页首批关卡集成与外网发布边界：只接收具备完整布局、有效步骤、独立重放和胜利证据且兼容当前网页引擎的关卡；鸭子、小象、动态铁笼和第59关阶段性采集暂不发布。已更新 `docs/design/pig-game.md`、`docs/spec/pig-game.md`、`docs/task/2026-11-14_网页关卡集成与外网发布.md` 和 `docs/todo.md`，代码与外网发布待执行。

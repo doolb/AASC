@@ -63,6 +63,7 @@ export function movePig(level, state, id) {
             }
         }
         pig.gone = true;
+        next.exitCount += 1;
         settleDucks(level, next);
         return { ok: true, state: next, action: { id, from, to: null, exited: true }, won: next.pigs.every(item => item.gone) && !next.ducks.length };
     }
@@ -77,10 +78,12 @@ export function movePig(level, state, id) {
             next.exitCount += 1;
             if (pig.kind === 'scissors') next.remainingScissors -= 1;
             settleDucks(level, next);
-            return { ok: true, state: next, action: { id, from, to: null, exited: true }, won: next.pigs.every(item => item.gone) };
+            return { ok: true, state: next, action: { id, from, to: null, exited: true }, won: next.pigs.every(item => item.gone) && !next.ducks.length };
         }
         const front = Array.from({ length: pig.width || 1 }, (_, side) => `${headX + (horizontal ? 0 : side)},${headY + (horizontal ? side : 0)}`);
         if (front.some(cell => occupied.has(cell))) {
+            // 弹簧猪遇阻不准半途停靠，弹回原位置。
+            if (pig.kind === 'spring') return { ok: false, message: '弹簧猪前方有阻挡，会弹回原位' };
             // 同一次碰撞可能涉及多个占格，按炸弹对象去重后各减一次。
             const struck = [...new Set(front.map(cell => pigCells.get(cell)).filter(Boolean))];
             const bombs = new Set(struck.filter(item => item.kind === 'bomb'));
@@ -103,8 +106,10 @@ export function sameAction(a, b) {
 
 export function verifyPlan(level) {
     let state = createState(level);
-    for (let index = 0; index < level.steps.length; index += 1) {
-        const expected = level.steps[index];
+    const steps = level.steps || [];
+    if (!steps.length) return true;
+    for (let index = 0; index < steps.length; index += 1) {
+        const expected = steps[index];
         const result = movePig(level, state, expected.id);
         if (!result.ok || result.state.failed || !sameAction(result.action, expected)) throw new Error(`第 ${index + 1} 步不符合棋盘规则`);
         state = result.state;

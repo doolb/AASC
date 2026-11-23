@@ -571,3 +571,26 @@ AASC OCR 可选接入 := 自动采集默认启用 OCR（可显式关闭） → �
     采集大象与炸弹 → 中层报告识别缺口并停止点击 → 保留首屏等待复核
     冻结大象和炸弹 → 分阶段独立重放并逐帧核对 → 复核保护区边缘及一次炸弹碰撞（3→2）→ 累计确认 51 只离场
     根据可见画面假设大象占位并离线搜索 → 当前条件下未验证可靠续解 → 保留现场；不将条件搜索结果断言为真实游戏无解
+
+第 71～118 关实机通关与网页批量接入伪代码:
+    实机通关 := 依次完成第 112 关(大象 width=2 length=3 + 双炸弹，116 步)、第 113 关(80s 计时炸弹 + 3 次炸弹，100 步)、第 114 关(150s 计时炸弹 + 3 次炸弹，97 步)、第 115 关(39 铁笼 + 闭笼首步即倒计时 50s 炸弹，107 步)、第 116 关(四枚 50s 计时炸弹，89 步)、第 117 关(3 弹簧猪 + 3 格猪 + 双计时炸弹 + 3 次炸弹，112 步) → 保存完整 play-runs 证据
+    第 118 关卡点核查 := 完成 61 只离场并保存 opened.png（62 锁余 1、剩 30 只）→ 穷举 7448 状态及实机试探 2→7→6→76→81→13 确认 2 占据 (7,1) 形成 2→80→4→12→11→13→2 六猪有向死锁环，无道具不可解 → 关闭移除广告弹窗并保留暂停，不消耗任何道具
+    网页引擎扩展(engine.mjs) := 
+        若 pig.kind == 'spring' 且前方受阻 -> 返回 ok=false（遇阻回弹原位，不允许半途停靠）
+        若 pig.kind == 'elephant' 且无 shape -> 沿用 pig.width=2 与 length=3 通用滑行与通道校验，离场同步 exitCount+1
+        若 pig.kind == 'timer_bomb' -> 支持倒计时字段 timerSeconds，撞停普通猪不触发计数归零爆炸，离场计入 exitCount
+        若 level.steps 为空（如第 118 关）-> verifyPlan 仅校验初始棋盘合法性并返回 true，前端进入自由试玩模式
+    网页关卡批量转换 := 读取 play-runs 中已验证完整布局与步序（71～81、83～91、94～95、97～104、112～117）及第 118 关布局（steps=[]）→ 若第 79 关 level-reviewed 缺少 ducks 则从同目录 plan.json 补齐 → 统一转换为 web/pig-level/level-<id>.json 并全量执行 verifyPlan 校验 → 注册 app.mjs、index.html 与 serve-pig-level.js
+    网页界面与防裁剪优化 :=
+        棋盘底纹与装饰圈迁入独立裁切层 .board-backdrop(overflow:hidden)，.board 自身设为 overflow:visible 且顶部预留提示安全距 → 顶行(y=0)小猪显示提示箭头 .hint-arrow 时永不被棋盘边框裁切
+        美化猪身 SVG（双耳、鼻头、卷尾、红晕）及特殊物件视觉（蓝色弹簧圈、黑红计时炸弹秒数徽章、金色锁徽章、立体感铁笼与浅绿草地格纹）→ 支持关卡快速上下翻关、受阻轻晃反馈、键盘快捷键（←/→ 步进、Z 撤回、R 重置、H 提示）与无步骤关卡提示
+
+横竖屏自适应一屏布局伪代码:
+    入口视口约束 := .app 采用 height: 100dvh(回退 100vh) 与 overflow: hidden，禁止整页超出单屏产生滚动条
+    容器等比棋盘(.board-stage -> .board) :=
+        .board-stage 占据棋盘卡片弹性剩余区域并启用 container-type: size（保持 overflow: visible）
+        .board 宽度 = min(100cqw, 100cqh * 12 / 17, 560px)，height: auto，aspect-ratio: 12 / 17 → 无论横竖屏或矮屏均等比缩放且不拉伸变形
+    竖屏布局(默认 / orientation: portrait) := .app 按 topbar / game-card(1fr) / controls / footnote 四行纵向一屏排布，窄屏适度压缩留白保证 360×640 与 390×844 均完整落入一屏
+    横屏布局(orientation: landscape 且 min-width: 560px) :=
+        .app 切换为双栏三行网格：左列整高放置 .game-card(最大化棋盘显示)，右列依次放置 .topbar、.controls、.footnote
+        矮横屏(max-height: 520px，如 844×390)进一步收紧字号、状态栏与步进按钮高度，并加宽右栏比例防止按钮折行溢出

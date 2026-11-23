@@ -32,6 +32,7 @@
     "start:pig-level": "node scripts/serve-pig-level.js",
     "test:pig-web": "node --test tests/pig-level-web.test.js",
     "test:pig-animation": "node --test tests/pig-level-animation.test.js",
+    "test:pig-3d": "node --test tests/pig-level-3d.test.js",
     "test:pig-ocr": "python3 -m unittest discover -s tests -p 'pig_level_ocr_test.py'",
     "test:pig-lock-hints": "python3 -m unittest discover -s tests -p 'pig_level_lock_hints_test.py'",
     "stage:lock-pig": "python3 scripts/play-pig-lock-stages.py",

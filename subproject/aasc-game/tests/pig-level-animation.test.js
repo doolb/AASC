@@ -5,7 +5,7 @@ const { spawn } = require('node:child_process');
 const { existsSync } = require('node:fs');
 
 // 使用真实浏览器验证动画中与结束后的页面状态，不依赖外部游戏窗口。
-test('离场动画、重复操作和跳转取消保持状态一致', { timeout: 30000 }, async t => {
+test('离场动画、重复操作和跳转取消保持状态一致', { timeout: 60000 }, async t => {
     let puppeteer;
     try { puppeteer = require('puppeteer-core'); } catch (_) { t.skip('需要 puppeteer-core'); return; }
     if (!existsSync('/usr/bin/chromium')) { t.skip('需要 Chromium'); return; }
@@ -21,16 +21,25 @@ test('离场动画、重复操作和跳转取消保持状态一致', { timeout: 
         browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
         const page = await browser.newPage();
         await page.setViewport({ width: 390, height: 844 });
-        await page.goto(`http://127.0.0.1:${port}/?level=48`, { waitUntil: 'networkidle0' });
+        await page.goto(`http://127.0.0.1:${port}/?level=48&view=2d`, { waitUntil: 'networkidle0' });
         await page.waitForSelector('.pig');
         const id = await page.$eval('.pig.hinted', element => element.dataset.pigId);
         const original = await page.$eval(`[data-pig-id="${id}"]`, element => element.getBoundingClientRect().top);
         await page.click('#next');
-        await new Promise(resolve => setTimeout(resolve, 130));
-        assert.equal(await page.$eval('#progressText', element => element.textContent), '0 / 176');
-        assert.equal(await page.$eval('#next', element => element.disabled), true);
-        const moved = await page.$eval(`[data-pig-id="${id}"]`, element => element.getBoundingClientRect().top);
-        assert.ok(moved < original, '第一只猪应向上移动');
+        const midFlight = await page.waitForFunction((pigId, startTop) => {
+            const el = document.querySelector(`[data-pig-id="${pigId}"]`);
+            if (!el) return null;
+            const top = el.getBoundingClientRect().top;
+            if (top >= startTop) return false;
+            return {
+                progress: document.querySelector('#progressText').textContent,
+                nextDisabled: document.querySelector('#next').disabled,
+                top
+            };
+        }, { timeout: 600 }, id, original).then(handle => handle.jsonValue());
+        assert.equal(midFlight.progress, '0 / 176');
+        assert.equal(midFlight.nextDisabled, true);
+        assert.ok(midFlight.top < original, '第一只猪应向上移动');
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '1 / 176');
         assert.equal(await page.$(`[data-pig-id="${id}"]`), null);
         await page.click('#next');
@@ -62,8 +71,13 @@ test('离场动画、重复操作和跳转取消保持状态一致', { timeout: 
             const target = await page.$eval('.pig.hinted', element => element.dataset.pigId);
             const before = await page.$eval(`[data-pig-id="${target}"]`, element => { const rect = element.getBoundingClientRect(); return { x: rect.x, y: rect.y }; });
             await page.click('#next');
-            await new Promise(resolve => setTimeout(resolve, 120));
-            const during = await page.$eval(`[data-pig-id="${target}"]`, element => { const rect = element.getBoundingClientRect(); return { x: rect.x, y: rect.y }; });
+            const during = await page.waitForFunction((pigId, start, dir) => {
+                const el = document.querySelector(`[data-pig-id="${pigId}"]`);
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                const d = { north: start.y - r.y, south: r.y - start.y, west: start.x - r.x, east: r.x - start.x };
+                return d[dir] > 0.5 ? { x: r.x, y: r.y } : false;
+            }, { timeout: 600 }, target, before, direction).then(handle => handle.jsonValue());
             const delta = { north: before.y - during.y, south: during.y - before.y, west: before.x - during.x, east: during.x - before.x };
             assert.ok(delta[direction] > 0, `${direction} 离场应沿朝向移动`);
             await page.waitForFunction(value => document.querySelector('#progressText').textContent.startsWith(`${value} /`), {}, index + 1);
@@ -113,6 +127,69 @@ test('离场动画、重复操作和跳转取消保持状态一致', { timeout: 
         assert.match(await page.$eval('[data-pig-id="87"]', element => element.getAttribute('aria-label')), /剩余 1 次/);
         await page.$eval('#slider', element => { element.value = 104; element.dispatchEvent(new Event('input', { bubbles: true })); });
         assert.equal(await page.$eval('#win', element => element.hidden), false);
+        assert.equal(await page.$eval('#modeBadge', element => element.hidden), true);
+        assert.equal(await page.$eval('#modeBadge', element => getComputedStyle(element).display), 'none');
+        await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.select('#levelSelect', '117')]);
+        await page.waitForSelector('.pig.hinted .hint-arrow');
+        await page.$eval('#slider', element => { element.value = 54; element.dispatchEvent(new Event('input', { bubbles: true })); });
+        const arrowMetrics = await page.evaluate(() => {
+            const card = document.querySelector('.game-card');
+            const board = document.querySelector('#board');
+            const arrow = document.querySelector('.pig.hinted .hint-arrow');
+            const cardRect = card.getBoundingClientRect();
+            const boardRect = board.getBoundingClientRect();
+            const arrowRect = arrow.getBoundingClientRect();
+            return {
+                overflow: getComputedStyle(board).overflow,
+                arrowTop: arrowRect.top,
+                boardTop: boardRect.top,
+                cardTop: cardRect.top,
+                arrowHeight: arrowRect.height
+            };
+        });
+        assert.equal(arrowMetrics.overflow, 'visible');
+        assert.ok(arrowMetrics.arrowHeight > 0 && arrowMetrics.arrowTop < arrowMetrics.boardTop && arrowMetrics.arrowTop >= arrowMetrics.cardTop, '顶部边界猪提示标识不应被棋盘裁剪');
+        await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.select('#levelSelect', '118')]);
+        await page.waitForSelector('.pig');
+        assert.equal(await page.$eval('#modeBadge', element => element.hidden), false);
+        assert.notEqual(await page.$eval('#modeBadge', element => getComputedStyle(element).display), 'none');
+        assert.equal(await page.$eval('#next', element => element.disabled), true);
+        for (const viewport of [
+            { width: 390, height: 844, landscape: false },
+            { width: 360, height: 640, landscape: false },
+            { width: 844, height: 390, landscape: true },
+            { width: 1280, height: 720, landscape: true }
+        ]) {
+            await page.setViewport({ width: viewport.width, height: viewport.height });
+            const fit = await page.evaluate(() => {
+                const app = document.querySelector('.app');
+                const card = document.querySelector('.game-card');
+                const board = document.querySelector('#board');
+                const controls = document.querySelector('.controls');
+                const footnote = document.querySelector('#ruleText');
+                const cardRect = card.getBoundingClientRect();
+                const boardRect = board.getBoundingClientRect();
+                const controlsRect = controls.getBoundingClientRect();
+                const footnoteRect = footnote.getBoundingClientRect();
+                return {
+                    docScrollH: document.documentElement.scrollHeight,
+                    docScrollW: document.documentElement.scrollWidth,
+                    winH: window.innerHeight,
+                    winW: window.innerWidth,
+                    appScrollH: app.scrollHeight,
+                    appClientH: app.clientHeight,
+                    boardRatio: boardRect.width / boardRect.height,
+                    cardRight: cardRect.right,
+                    controlsLeft: controlsRect.left,
+                    controlsBottom: controlsRect.bottom,
+                    footnoteBottom: footnoteRect.bottom
+                };
+            });
+            assert.ok(fit.docScrollH <= fit.winH && fit.docScrollW <= fit.winW, `${viewport.width}x${viewport.height} 整页不应超出一屏`);
+            assert.ok(fit.appScrollH <= fit.appClientH + 1 && fit.footnoteBottom <= fit.winH + 1, `${viewport.width}x${viewport.height} 内容区不应内部裁切溢出`);
+            assert.ok(Math.abs(fit.boardRatio - 12 / 17) < 0.02, `${viewport.width}x${viewport.height} 棋盘应保持 12:17 等比缩放`);
+            if (viewport.landscape) assert.ok(fit.controlsLeft >= fit.cardRight - 2, `${viewport.width}x${viewport.height} 横屏应为左棋盘右控制双栏`);
+        }
     } finally {
         if (browser) await browser.close();
         server.kill();
