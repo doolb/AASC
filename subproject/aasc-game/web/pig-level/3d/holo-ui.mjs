@@ -1,6 +1,6 @@
 // 3D 卡通浮动 UI：高饱和圆角描边卡片、3D 浮漂与视差、居中无限滑动关卡选择、精确包围盒拾取。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261123f';
+import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261123g';
 
 const CARTOON_VERT = /* glsl */`
     uniform vec4 uSelfRect;
@@ -57,7 +57,7 @@ const THEMES = {
 
 export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQualityChange, onAudioToggle, onTimeToggle, onCamReset }) {
     const uiScene = new THREE.Scene();
-    const uiCam = new THREE.OrthographicCamera(0, 1, 1, 0, -100, 100);
+    const uiCam = new THREE.OrthographicCamera(0, 1, 1, 0, -1000, 1000);
     const root = new THREE.Group();
     uiScene.add(root);
 
@@ -144,7 +144,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
             uDisabled: { value: 0 },
             uReveal: { value: 1 },
             uSelfRect: { value: new THREE.Vector4(0, 0, w, h) },
-            uClipRect: { value: new THREE.Vector4(-1e5, -1e5, 1e5, 1e5) },
+            uClipRect: { value: new THREE.Vector4(-32000, -32000, 32000, 32000) },
             uClipFeather: { value: 0 },
             uTextMap: { value: textObj.tex }
         };
@@ -153,10 +153,12 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
             transparent: true,
             depthTest: false,
             depthWrite: false,
+            side: THREE.DoubleSide,
             vertexShader: CARTOON_VERT,
             fragmentShader: CARTOON_FRAG
         });
         const mesh = new THREE.Mesh(geo, mat);
+        mesh.frustumCulled = false;
         mesh.scale.set(w, h, 1);
         mesh.position.z = z;
         mesh.renderOrder = 100 + z;
@@ -706,23 +708,27 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
     }
 
     function resize(w, h) {
-        viewW = Math.max(1, w);
-        viewH = Math.max(1, h);
+        viewW = Math.max(1, Number.isFinite(w) ? w : (window.innerWidth || 1280));
+        viewH = Math.max(1, Number.isFinite(h) ? h : (window.innerHeight || 720));
         layout();
+        sync(lastUi);
     }
 
-    function update(dt, time, yawOffset = 0) {
-        revealTime = Math.min(1, revealTime + dt * 3.5);
+    function update(dt, time, _yawOffset = 0) {
+        const safeDt = Number.isFinite(dt) && dt > 0 ? Math.min(0.25, dt) : 0;
+        const safeTime = Number.isFinite(time) ? time : 0;
+        revealTime = Math.min(1, revealTime + safeDt * 3.5);
         if (levelPickerOpen && !pickerDragging && Math.abs(pickerVel) > 0.01) {
-            pickerScroll += pickerVel * dt;
-            pickerVel *= Math.pow(0.24, dt);
+            pickerScroll += pickerVel * safeDt;
+            pickerVel *= Math.pow(0.24, safeDt);
             layoutPickerCells();
         }
         const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-        root.position.y = reduce ? 0 : Math.sin(time * 1.8) * 1.6;
-        root.rotation.y = reduce ? 0 : THREE.MathUtils.clamp(yawOffset * 0.04, -0.05, 0.05);
+        root.position.y = reduce ? 0 : Math.sin(safeTime * 1.8) * 1.6;
+        // 保持正交 HUD 与屏幕平行，避免移动端旋转视角产生 root.rotation.y 导致的裁剪/精度消失问题
+        root.rotation.y = 0;
         for (const w of widgets) {
-            w.uniforms.uTime.value = time;
+            w.uniforms.uTime.value = safeTime;
             w.uniforms.uReveal.value = revealTime;
             if (!reduce && w.mesh.userData.action && w.name !== 'pickerBg' && w.theme !== 'card') {
                 const s = 1 + w.uniforms.uHover.value * 0.055;

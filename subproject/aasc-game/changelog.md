@@ -1,3 +1,9 @@
+- ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123g`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 10 个变更文件并核验全量 16 个 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-23] 修复手机双指旋转视角后全息 UI 消失隐患并升级资源版本（`?v=20261123g`）
+  - `web/pig-level/3d/holo-ui.mjs`：取消正交 HUD `root.rotation.y` 偏航倾斜（防止旋转视角后在移动端被裁剪或触发着色器异常），扩展 `uiCam` 纵深至 `[-1000, 1000]`、开启 `DoubleSide` 与 `frustumCulled = false`，将默认 `uClipRect` 收敛为 `[-32000, 32000]` 兼容移动端 GLSL ES `mediump float`，并在 `resize()` 时重绘当前状态纹理、对 `update(dt, time)` 做 `Number.isFinite` 守卫。
+  - `web/pig-level/3d/post.mjs`、`web/pig-level/3d/view.mjs`：`applyTier()` 切档时同步调用 `renderer.setSize()`，`low` 档 `renderScene()` 渲染前显式 `renderer.clear()`；`fitCamera()` 保留 `panOffset`、补充 `orientationchange` / `visualViewport` 监听，并对双指捏合旋转 `dx/dAngle/ratio` 做有限值校验；同步更新 `?v=20261123g`、规格与测试。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123f`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 16 个 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-23] 实现 PC 右键/滚轮鼠标地面射线点锚定及手机双指比例中心旋转缩放并优化惯性手感、取消双击地面复位（`?v=20261123f`）
@@ -497,3 +503,18 @@
   - `tests/gami.test.js`：新增含材料坐标的旋转对照、不同投影及回拖求角；SDDM / DISPLAY=:0 / Intel HD 610 下回拖误差小于 4px，角点抬起、边界完全展开、折痕拖动、取消、切换、撤销、刷新和 390×844 触控通过，页面错误 0。修正导入回归匹配旧确认框的时序。
   - `DISPLAY=:0 npm run test:gami` 22/22 通过；补充材料坐标旋转对照测试通过。旧功能浏览器回归通过，正面/斜视/背面吸附标记误差 0.093/0.114/0.108px。设计、伪代码、任务、目标、使用说明和待办同步；真实移动设备手感仍待验收。
   - 公网 11 个资源 HTTP 200，大小与 SHA-256 均一致；旧版备份 `/home/as/a/game/gami.backup-1795446795121`。
+
+### 鸢一折纸
+
+- ✅ [2026-11-23] 调研手工折纸的点边对齐、预折痕、展开及多折痕协同，记录对向抓取交互草案。
+  - 更新 `docs/design/gami.md`、`docs/spec/gami.md`、`docs/todo.md` 及任务文档；当前实现只支持单抓取/单轴，双指仅环视，已记录差距。待确认“对向平行角点”的材料层语义，未修改功能代码或发布。
+
+### 鸢一折纸
+
+- ✅ [2026-11-23] 记录双模式预折痕补充方案：折后保持与压痕后还原起折前姿态分离。
+  - 更新 `docs/design/gami.md`、`docs/spec/gami.md`、`docs/todo.md` 和任务文档；明确恢复原位置/纸形/纸层、保留旧折痕及新增交点边，尚未修改功能代码或发布。
+
+### 鸢一折纸
+
+- ✅ [2026-11-23] 定位弯折时角点球被隐藏的条件，记录持续显示角点及取消未完成弯折方案。
+  - `scene.mjs` 当前在预览或 heldFold 存在时跳过普通标记；拟按材料拓扑映射弯曲表面。同步设计、伪代码、待办及双模式任务文档，尚未修改功能代码。

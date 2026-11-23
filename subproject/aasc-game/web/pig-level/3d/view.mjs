@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123f';
-import { createTextureLibrary } from './textures.mjs?v=20261123f';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123f';
-import { createScenery } from './scenery.mjs?v=20261123f';
-import { createGrass } from './grass.mjs?v=20261123f';
-import { createParticles } from './particles.mjs?v=20261123f';
-import { createEnvironment } from './environment.mjs?v=20261123f';
-import { createHoloUI } from './holo-ui.mjs?v=20261123f';
-import { createAudioSystem } from './audio.mjs?v=20261123f';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123f';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123g';
+import { createTextureLibrary } from './textures.mjs?v=20261123g';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123g';
+import { createScenery } from './scenery.mjs?v=20261123g';
+import { createGrass } from './grass.mjs?v=20261123g';
+import { createParticles } from './particles.mjs?v=20261123g';
+import { createEnvironment } from './environment.mjs?v=20261123g';
+import { createHoloUI } from './holo-ui.mjs?v=20261123g';
+import { createAudioSystem } from './audio.mjs?v=20261123g';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123g';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -190,6 +190,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             }
         };
 
+        const prevPanX = panOffset.x, prevPanY = panOffset.y;
         let lo = 6, hi = 64, best = null;
         for (let iter = 0; iter < 20; iter++) {
             const mid = (lo + hi) / 2;
@@ -204,6 +205,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         best = best || evalFit(hi);
         baseDist = hi;
         baseLookTarget.set(best.tx, 0, best.tz);
+        panOffset.set(prevPanX, prevPanY);
         updateCameraImmediate(baseDist * zoom, yaw, pitch);
     }
 
@@ -713,6 +715,15 @@ export async function createView3D({ container, level, levels, onPick, onAction 
 
         if (activePointers.size === 2 && prevPinch) {
             const cur = pinchInfo();
+            const dx = cur.midX - prevPinch.midX;
+            let dAngle = cur.angle - prevPinch.angle;
+            if (dAngle > Math.PI) dAngle -= Math.PI * 2;
+            else if (dAngle < -Math.PI) dAngle += Math.PI * 2;
+            const ratio = prevPinch.dist / cur.dist;
+            if (!Number.isFinite(dx) || !Number.isFinite(dAngle) || !Number.isFinite(ratio)) {
+                prevPinch = cur;
+                return;
+            }
             const prevMidNdc = localToNdc(prevPinch.midX, prevPinch.midY);
             const curMidNdc = localToNdc(cur.midX, cur.midY);
             pickGroundTarget(prevMidNdc.x, prevMidNdc.y, pivotWorld);
@@ -720,14 +731,9 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             pivotNdcX = curMidNdc.x;
             pivotNdcY = curMidNdc.y;
 
-            const dx = cur.midX - prevPinch.midX;
-            let dAngle = cur.angle - prevPinch.angle;
-            if (dAngle > Math.PI) dAngle -= Math.PI * 2;
-            else if (dAngle < -Math.PI) dAngle += Math.PI * 2;
             // 双指只控制垂直轴（yaw）无极旋转与缩放高度，俯仰由缩放高度自动计算，围绕两指比例中心锚点锁定地面
             const parallelSpin = Math.abs(dAngle) < 0.012 ? -dx * 0.0085 : 0;
             applySpin(dAngle + parallelSpin);
-            const ratio = prevPinch.dist / cur.dist;
             targetZoom = THREE.MathUtils.clamp(targetZoom * ratio, 0.65, 1.45);
             targetPitch = autoPitchForZoom(targetZoom);
             lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
@@ -828,7 +834,12 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
     };
 
+    const resizeTimers = [];
     const onResize = () => fitCamera();
+    const onOrientationChange = () => {
+        fitCamera();
+        resizeTimers.push(setTimeout(fitCamera, 120), setTimeout(fitCamera, 320));
+    };
     const onVisibility = () => {
         audio.setPaused(document.hidden);
         if (!document.hidden) {
@@ -851,6 +862,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     window.addEventListener('pointercancel', onPointerUp);
     domEl.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onOrientationChange);
+    window.visualViewport?.addEventListener('resize', onResize);
     window.addEventListener('focus', onFocusResetFps);
     window.addEventListener('blur', onFocusResetFps);
     document.addEventListener('visibilitychange', onVisibility);
@@ -1200,7 +1213,10 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             window.removeEventListener('pointerup', onPointerUp);
             window.removeEventListener('pointercancel', onPointerUp);
             domEl.removeEventListener('wheel', onWheel);
+            while (resizeTimers.length) clearTimeout(resizeTimers.pop());
             window.removeEventListener('resize', onResize);
+            window.removeEventListener('orientationchange', onOrientationChange);
+            window.visualViewport?.removeEventListener('resize', onResize);
             window.removeEventListener('focus', onFocusResetFps);
             window.removeEventListener('blur', onFocusResetFps);
             document.removeEventListener('visibilitychange', onVisibility);

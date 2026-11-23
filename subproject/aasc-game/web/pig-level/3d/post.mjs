@@ -119,6 +119,7 @@ export function createPostPipeline(renderer, initialTier = 'high', onTierChange 
         tier = nextTier;
         pixelRatio = computePixelRatio(tier, isSoftware);
         renderer.setPixelRatio(pixelRatio);
+        renderer.setSize(width, height, false);
         renderer.shadowMap.enabled = tier !== 'low';
         uniforms.uBloom.value = tier === 'high' ? 0.16 : 0;
         ensureTarget();
@@ -177,6 +178,7 @@ export function createPostPipeline(renderer, initialTier = 'high', onTierChange 
     function renderScene(scene, camera) {
         if (tier === 'low' || !target) {
             renderer.setRenderTarget(null);
+            renderer.clear();
             renderer.render(scene, camera);
             return;
         }

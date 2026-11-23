@@ -166,7 +166,7 @@ createEnvironment(scene, textures, tier):
 createHoloUI({ renderer, levels, levelId, onAction }):
     独立正交/低透视 UI 场景（或 HUD 叠加渲染层），保持清晰中文文本与独立拾取
     卡通着色器(uSelfRect + uClipRect): 支持 UI 像素坐标区域裁剪遮罩与上下边缘柔滑渐隐（默认全屏不裁切）
-    浮动与视差: 面板随镜头偏航做 ±3° 轻视差倾斜与柔和呼吸漂浮（reduced-motion 时关闭）
+    浮动与呼吸: 面板保持正交屏幕平行（取消 `root.rotation.y` 倾斜，避免移动端旋转视角或 `mediump` GPU 裁剪/精度问题导致 UI 消失；关闭视口裁剪 `frustumCulled = false`、`uiCam` 纵深 `[-1000, 1000]`、安全默认 `uClipRect` `[-32000, 32000]`），保留柔和上下呼吸漂浮（reduced-motion 时关闭）
     竖屏 / 横屏自适应布局（根据 viewport aspect 动态重排面板锚点，绝不遮挡中心棋盘安全区）:
         - 顶部全息条: 标题、第 N 关、上/下一关、展开式关卡网格/滑动选择、自由试玩徽章（矮按钮自适应双行字距，防止压字）、剩余与机制计数胶囊
         - 底部全息条: 步骤标题、提示开关、状态提示、上一步/下一步、可拖动全息进度条、撤回、重开

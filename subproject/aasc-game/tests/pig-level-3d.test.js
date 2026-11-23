@@ -395,6 +395,15 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
             });
             assert.ok(mobAnchorCheck.g0 && Math.hypot(mobAnchorCheck.pAfter.x - 120, mobAnchorCheck.pAfter.y - 280) < 8,
                 `移动端双指操作应以两指比例中心地面点为锚点 (${mobAnchorCheck.pAfter.x.toFixed(1)}, ${mobAnchorCheck.pAfter.y.toFixed(1)} vs 120, 280)`);
+            // 验证双指旋转视角及竖↔横屏旋转后 3D 全息 UI 依然存在且可点击生效
+            const mobNextAfterSpin = await mobPage.evaluate(() => window.__pig3d.holoButton('next'));
+            assert.ok(mobNextAfterSpin && mobNextAfterSpin.x > 0 && mobNextAfterSpin.y > 0, '双指旋转视角后移动端全息 UI 按钮应保持可见');
+            await mobPage.setViewport({ width: 844, height: 390, deviceScaleFactor: 2, isMobile: true });
+            await mobPage.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+            const mobNextAfterLand = await mobPage.evaluate(() => window.__pig3d.holoButton('next'));
+            assert.ok(mobNextAfterLand && mobNextAfterLand.x > 400 && mobNextAfterLand.y < 390, '移动端切换横屏后全息 UI 应自动重排且不消失');
+            await mobPage.mouse.click(mobNextAfterLand.x, mobNextAfterLand.y);
+            await mobPage.waitForFunction(() => document.querySelector('#progressText').textContent === '1 / 176', { timeout: 15000 });
         } finally {
             await mobPage.close().catch(() => {});
         }
