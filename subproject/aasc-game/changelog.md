@@ -1,3 +1,9 @@
+- ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123f`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 16 个 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-23] 实现 PC 右键/滚轮鼠标地面射线点锚定及手机双指比例中心旋转缩放并优化惯性手感、取消双击地面复位（`?v=20261123f`）
+  - `web/pig-level/3d/view.mjs`：新增独立探测相机 `probeCam`、`pivotMode`（`none`/`spin`/`wheel`）与 `pickGroundAt()` / `pickGroundTarget()` / `lockPivotToScreen()` 解析闭合反解辅助函数：PC 右键旋转围绕按下处地面射线交点，PC 滚轮缩放锁定光标下方地面交点并清空残余自转速度；手机双指旋转与捏合缩放实时围绕两指比例中心对应地面点；渲染帧 `frame()` 按当前姿态同步反解 `panOffset`（放宽至 `[-28, 28]`）消除过渡弦线漂移，大幅收紧旋转惯性（最大角速度 `7.5 -> 2.6 rad/s`、阻尼 `3.8 -> 8.5/s`、松手停顿 `>45ms` 清零），并移除 `dblclick` 监听以取消点击地面复位（保留 `V` 键与全息复位按钮）。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/2026-11-23_鼠标及双指中心旋转缩放.md`、`tests/pig-level-3d.test.js`：同步升级 `?v=20261123f`、修复 `index.html` 多余闭合标签、更新规格文档、任务记录与 PC/移动端偏心锁点精准度校验。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123d`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；核验全量 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-23] 改为双指 360° 无极滑动/拧转旋转与缩放高度自动计算俯仰角（`?v=20261123d`）

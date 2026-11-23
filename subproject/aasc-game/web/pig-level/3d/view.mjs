@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123d';
-import { createTextureLibrary } from './textures.mjs?v=20261123d';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123d';
-import { createScenery } from './scenery.mjs?v=20261123d';
-import { createGrass } from './grass.mjs?v=20261123d';
-import { createParticles } from './particles.mjs?v=20261123d';
-import { createEnvironment } from './environment.mjs?v=20261123d';
-import { createHoloUI } from './holo-ui.mjs?v=20261123d';
-import { createAudioSystem } from './audio.mjs?v=20261123d';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123d';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123f';
+import { createTextureLibrary } from './textures.mjs?v=20261123f';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123f';
+import { createScenery } from './scenery.mjs?v=20261123f';
+import { createGrass } from './grass.mjs?v=20261123f';
+import { createParticles } from './particles.mjs?v=20261123f';
+import { createEnvironment } from './environment.mjs?v=20261123f';
+import { createHoloUI } from './holo-ui.mjs?v=20261123f';
+import { createAudioSystem } from './audio.mjs?v=20261123f';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123f';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -212,17 +212,21 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         yaw = ((yaw % tau) + Math.PI * 3) % tau - Math.PI;
         targetYaw = 0;
         yawVel = 0;
+        pivotMode = 'none';
+        pinchTransition = false;
         targetZoom = 1.0;
         targetPitch = autoPitchForZoom(1.0);
         targetPan.set(0, 0);
     }
 
     function applyPan(dx, dy) {
+        pivotMode = 'none';
+        yawVel = 0;
         const panScale = (baseDist * zoom) / Math.max(300, viewH) * 1.15;
         const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
         const fwdX = -Math.sin(yaw), fwdZ = -Math.cos(yaw);
-        targetPan.x = THREE.MathUtils.clamp(targetPan.x - (rightX * dx - fwdX * dy) * panScale, -16, 16);
-        targetPan.y = THREE.MathUtils.clamp(targetPan.y - (rightZ * dx - fwdZ * dy) * panScale, -18, 18);
+        targetPan.x = THREE.MathUtils.clamp(targetPan.x - (rightX * dx - fwdX * dy) * panScale, -28, 28);
+        targetPan.y = THREE.MathUtils.clamp(targetPan.y - (rightZ * dx - fwdZ * dy) * panScale, -28, 28);
     }
 
     function applySeasonWeather(nextSeason, nextWeather, persist = true) {
@@ -538,12 +542,73 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     const ndc = new THREE.Vector2();
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const hitPt = new THREE.Vector3();
+    const probeCam = new THREE.PerspectiveCamera(40, 1, 0.4, 240);
+    const pivotWorld = new THREE.Vector3();
+    const tmpHitZero = new THREE.Vector3();
+    let pivotMode = 'none'; // 'none' | 'spin' | 'wheel'
+    let pivotNdcX = 0, pivotNdcY = 0;
 
     const activePointers = new Map();
     let pointerConsumedByUi = false;
     let rightRotating = false;
     let downX = 0, downY = 0, lastX = 0, lastY = 0, dragged = false;
     let prevPinch = null;
+    let pinchTransition = false;
+
+    function clientToNdc(clientX, clientY) {
+        const rect = domEl.getBoundingClientRect();
+        return {
+            x: ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+            y: -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1
+        };
+    }
+
+    function localToNdc(lx, ly) {
+        return {
+            x: (lx / Math.max(1, viewW)) * 2 - 1,
+            y: -(ly / Math.max(1, viewH)) * 2 + 1
+        };
+    }
+
+    // 用独立探测相机在指定姿态下求屏幕坐标与 y=0 地面平面交点，避免修改当前渲染相机
+    function pickGroundAt(ndcX, ndcY, dist, yAng, pAng, tx, tz, outVec = hitPt) {
+        probeCam.aspect = camera.aspect;
+        probeCam.fov = camera.fov;
+        probeCam.updateProjectionMatrix();
+        const horiz = Math.cos(pAng) * dist;
+        probeCam.position.set(tx + Math.sin(yAng) * horiz, Math.sin(pAng) * dist, tz + Math.cos(yAng) * horiz);
+        probeCam.lookAt(tx, 0, tz);
+        probeCam.updateMatrixWorld();
+        ndc.set(ndcX, ndcY);
+        raycaster.setFromCamera(ndc, probeCam);
+        if (raycaster.ray.direction.y > -0.04) return null;
+        if (!raycaster.ray.intersectPlane(groundPlane, outVec)) return null;
+        const len = Math.hypot(outVec.x, outVec.z);
+        if (len > 26) {
+            const s = 26 / len;
+            outVec.x *= s;
+            outVec.z *= s;
+        }
+        return outVec;
+    }
+
+    function pickGroundTarget(ndcX, ndcY, outVec) {
+        const hit = pickGroundAt(
+            ndcX, ndcY, baseDist * targetZoom, targetYaw, targetPitch,
+            baseLookTarget.x + targetPan.x, baseLookTarget.z + targetPan.y, outVec
+        );
+        if (hit) return hit;
+        outVec.set(baseLookTarget.x + targetPan.x, 0, baseLookTarget.z + targetPan.y);
+        return outVec;
+    }
+
+    // 解析反解 targetPan，使地面锚点 anchorWorld 在目标视角下精确保持在屏幕坐标 (ndcX, ndcY)
+    function lockPivotToScreen(anchorWorld, ndcX, ndcY) {
+        const hitZero = pickGroundAt(ndcX, ndcY, baseDist * targetZoom, targetYaw, targetPitch, 0, 0, tmpHitZero);
+        if (!hitZero) return;
+        targetPan.x = THREE.MathUtils.clamp((anchorWorld.x - hitZero.x) - baseLookTarget.x, -28, 28);
+        targetPan.y = THREE.MathUtils.clamp((anchorWorld.z - hitZero.z) - baseLookTarget.z, -28, 28);
+    }
 
     function pickGround(clientX, clientY) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -586,9 +651,9 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     function applySpin(dYaw) {
         targetYaw += dYaw;
         const now = performance.now();
-        const dtSpin = Math.max(0.008, (now - (lastSpinAt || now - 16)) / 1000);
+        const dtSpin = Math.max(0.012, (now - (lastSpinAt || now - 16)) / 1000);
         lastSpinAt = now;
-        yawVel = THREE.MathUtils.clamp(yawVel * 0.45 + (dYaw / dtSpin) * 0.55, -7.5, 7.5);
+        yawVel = THREE.MathUtils.clamp(yawVel * 0.55 + (dYaw / dtSpin) * 0.25, -2.6, 2.6);
     }
 
     const domEl = renderer.domElement;
@@ -605,12 +670,18 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         audio.unlock();
         yawVel = 0;
         lastSpinAt = 0;
+        pinchTransition = false;
         const rect = domEl.getBoundingClientRect();
         const x = e.clientX - rect.left, y = e.clientY - rect.top;
         activePointers.set(e.pointerId, { x, y });
 
         if (activePointers.size === 2) {
             prevPinch = pinchInfo();
+            const ndcMid = localToNdc(prevPinch.midX, prevPinch.midY);
+            pivotNdcX = ndcMid.x;
+            pivotNdcY = ndcMid.y;
+            pickGroundTarget(ndcMid.x, ndcMid.y, pivotWorld);
+            pivotMode = 'spin';
             dragged = true;
             pointerConsumedByUi = false;
             return;
@@ -619,6 +690,15 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         downY = lastY = y;
         dragged = false;
         rightRotating = e.button === 2 || (e.buttons & 2) === 2;
+        if (rightRotating) {
+            const ndcPt = clientToNdc(e.clientX, e.clientY);
+            pivotNdcX = ndcPt.x;
+            pivotNdcY = ndcPt.y;
+            pickGroundTarget(pivotNdcX, pivotNdcY, pivotWorld);
+            pivotMode = 'spin';
+        } else {
+            pivotMode = 'none';
+        }
         if (!rightRotating && holoUI.handlePointerDown(x, y)) {
             pointerConsumedByUi = true;
             return;
@@ -633,16 +713,24 @@ export async function createView3D({ container, level, levels, onPick, onAction 
 
         if (activePointers.size === 2 && prevPinch) {
             const cur = pinchInfo();
+            const prevMidNdc = localToNdc(prevPinch.midX, prevPinch.midY);
+            const curMidNdc = localToNdc(cur.midX, cur.midY);
+            pickGroundTarget(prevMidNdc.x, prevMidNdc.y, pivotWorld);
+            pivotMode = 'spin';
+            pivotNdcX = curMidNdc.x;
+            pivotNdcY = curMidNdc.y;
+
             const dx = cur.midX - prevPinch.midX;
             let dAngle = cur.angle - prevPinch.angle;
             if (dAngle > Math.PI) dAngle -= Math.PI * 2;
             else if (dAngle < -Math.PI) dAngle += Math.PI * 2;
-            // 双指只控制垂直轴（yaw）无极旋转与缩放高度，俯仰由缩放高度自动计算；拧转为主、纯平行横滑补充
+            // 双指只控制垂直轴（yaw）无极旋转与缩放高度，俯仰由缩放高度自动计算，围绕两指比例中心锚点锁定地面
             const parallelSpin = Math.abs(dAngle) < 0.012 ? -dx * 0.0085 : 0;
             applySpin(dAngle + parallelSpin);
             const ratio = prevPinch.dist / cur.dist;
             targetZoom = THREE.MathUtils.clamp(targetZoom * ratio, 0.65, 1.45);
             targetPitch = autoPitchForZoom(targetZoom);
+            lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
             prevPinch = cur;
             return;
         }
@@ -656,11 +744,23 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         if (activePointers.size === 1) {
             const dx = x - lastX, dy = y - lastY;
             lastX = x; lastY = y;
+            if (pinchTransition) {
+                if (Math.hypot(x - downX, y - downY) <= 6) return;
+                pinchTransition = false;
+            }
             if (Math.hypot(x - downX, y - downY) > 8) dragged = true;
             if (dragged) {
                 if (rightRotating || (e.buttons & 2) === 2) {
+                    if (pivotMode !== 'spin') {
+                        const ndcPt = clientToNdc(e.clientX, e.clientY);
+                        pivotNdcX = ndcPt.x;
+                        pivotNdcY = ndcPt.y;
+                        pickGroundTarget(pivotNdcX, pivotNdcY, pivotWorld);
+                        pivotMode = 'spin';
+                    }
                     applySpin(-dx * 0.0075);
                     targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.35, 1.38);
+                    lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
                 } else {
                     applyPan(dx, dy);
                 }
@@ -677,16 +777,18 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         activePointers.delete(e.pointerId);
         if (activePointers.size < 2) {
             prevPinch = null;
-            if (performance.now() - lastSpinAt > 90) yawVel = 0;
+            if (performance.now() - lastSpinAt > 45) yawVel = 0;
         }
-        // 双指依次抬起 1 指时同步剩余手指坐标，防止镜头瞬移和松手误触
+        // 双指依次抬起 1 指时同步剩余手指坐标，防止镜头瞬移和松手误触，并保留甩手惯性直到次指同步抬起或发生实质单指拖拽
         if (activePointers.size === 1) {
             const [rem] = activePointers.values();
             downX = lastX = rem.x;
             downY = lastY = rem.y;
+            pinchTransition = true;
             dragged = true;
             return;
         }
+        pinchTransition = false;
 
         if (pointerConsumedByUi) {
             holoUI.handlePointerUp(x, y);
@@ -715,11 +817,17 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         e.preventDefault();
         const rect = domEl.getBoundingClientRect();
         if (holoUI.handleWheel(e.deltaY, e.clientX - rect.left, e.clientY - rect.top)) return;
+        yawVel = 0;
+        const ndcPt = clientToNdc(e.clientX, e.clientY);
+        pivotNdcX = ndcPt.x;
+        pivotNdcY = ndcPt.y;
+        pickGroundTarget(pivotNdcX, pivotNdcY, pivotWorld);
+        pivotMode = 'wheel';
         targetZoom = THREE.MathUtils.clamp(targetZoom + e.deltaY * 0.0008, 0.65, 1.45);
         targetPitch = autoPitchForZoom(targetZoom);
+        lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
     };
 
-    const onDblClick = () => resetCamera();
     const onResize = () => fitCamera();
     const onVisibility = () => {
         audio.setPaused(document.hidden);
@@ -742,7 +850,6 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
     domEl.addEventListener('wheel', onWheel, { passive: false });
-    domEl.addEventListener('dblclick', onDblClick);
     window.addEventListener('resize', onResize);
     window.addEventListener('focus', onFocusResetFps);
     window.addEventListener('blur', onFocusResetFps);
@@ -770,16 +877,28 @@ export async function createView3D({ container, level, levels, onPick, onAction 
 
         post.recordFrame(dt);
 
-        if (activePointers.size < 2 && !rightRotating && Math.abs(yawVel) > 0.002) {
+        if (activePointers.size === 0 && !rightRotating && Math.abs(yawVel) > 0.002) {
             targetYaw += yawVel * dt;
-            yawVel *= Math.exp(-3.8 * dt);
+            yawVel *= Math.exp(-8.5 * dt);
+            if (pivotMode === 'spin') lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
         }
 
         const damp = Math.min(1, dt * 10);
         yaw = THREE.MathUtils.lerp(yaw, targetYaw, damp);
         pitch = THREE.MathUtils.lerp(pitch, targetPitch, damp);
         zoom = THREE.MathUtils.lerp(zoom, targetZoom, damp);
-        panOffset.lerp(targetPan, damp);
+        if (pivotMode !== 'none') {
+            // 按当前渲染姿态实时反解 panOffset，彻底消除旋转/缩放平滑过渡过程中的弦线漂移
+            const hitRender = pickGroundAt(pivotNdcX, pivotNdcY, baseDist * zoom, yaw, pitch, 0, 0, tmpHitZero);
+            if (hitRender) {
+                panOffset.x = THREE.MathUtils.clamp((pivotWorld.x - hitRender.x) - baseLookTarget.x, -28, 28);
+                panOffset.y = THREE.MathUtils.clamp((pivotWorld.z - hitRender.z) - baseLookTarget.z, -28, 28);
+            } else {
+                panOffset.lerp(targetPan, damp);
+            }
+        } else {
+            panOffset.lerp(targetPan, damp);
+        }
         updateCameraImmediate(baseDist * zoom, yaw, pitch);
 
         // 累计受限帧时间，确保即使首帧编译着色器或低帧率也不会跳过离场/滑行/摇摆动画
@@ -1025,6 +1144,18 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             if (SEASONS.includes(s) && WEATHERS.includes(w)) applySeasonWeather(s, w, false);
         },
         getCameraState: () => ({ yaw: targetYaw, pitch: targetPitch, zoom: targetZoom, panX: targetPan.x, panZ: targetPan.y }),
+        getGroundAtScreen(clientX, clientY) {
+            const pt = pickGround(clientX, clientY);
+            return pt ? { x: pt.x, z: pt.z } : null;
+        },
+        projectWorld(wx, wy, wz) {
+            tmpVec.set(wx, wy, wz).project(camera);
+            const rect = domEl.getBoundingClientRect();
+            return {
+                x: rect.left + (tmpVec.x * 0.5 + 0.5) * rect.width,
+                y: rect.top + (-tmpVec.y * 0.5 + 0.5) * rect.height
+            };
+        },
         getGrassCount: () => grass.getCount(),
         getBoardScreenBounds() {
             const margins = holoUI.getSafeMargins();
@@ -1069,7 +1200,6 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             window.removeEventListener('pointerup', onPointerUp);
             window.removeEventListener('pointercancel', onPointerUp);
             domEl.removeEventListener('wheel', onWheel);
-            domEl.removeEventListener('dblclick', onDblClick);
             window.removeEventListener('resize', onResize);
             window.removeEventListener('focus', onFocusResetFps);
             window.removeEventListener('blur', onFocusResetFps);

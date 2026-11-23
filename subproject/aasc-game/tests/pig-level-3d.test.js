@@ -221,6 +221,39 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         assert.ok(Math.abs(camAfterRot.yaw - camAfterPan.yaw) > 0.05 || Math.abs(camAfterRot.pitch - camAfterPan.pitch) > 0.05, '右键拖拽应旋转视角');
         assert.equal(await page.evaluate(() => document.querySelector('#progressText').textContent), '2 / 176', '拖拽不应误点小猪');
         await page.evaluate(() => window.__pig3d.resetCamera());
+        await new Promise(r => setTimeout(r, 1000));
+
+        // 验证偏心鼠标滚轮缩放与右键旋转围绕鼠标下的地面射线点进行
+        const gWheel = await page.evaluate(() => window.__pig3d.getGroundAtScreen(300, 220));
+        assert.ok(gWheel, '偏心鼠标处应命中地面');
+        await page.mouse.move(300, 220);
+        await page.mouse.wheel({ deltaY: -220 });
+        await new Promise(r => setTimeout(r, 120));
+        const pWheelMid = await page.evaluate(g => window.__pig3d.projectWorld(g.x, 0, g.z), gWheel);
+        assert.ok(Math.hypot(pWheelMid.x - 300, pWheelMid.y - 220) < 4,
+            `滚轮缩放过渡中途也应实时锁定鼠标下地面点 (${pWheelMid.x.toFixed(1)}, ${pWheelMid.y.toFixed(1)} vs 300, 220)`);
+        await new Promise(r => setTimeout(r, 900));
+        const pWheel = await page.evaluate(g => window.__pig3d.projectWorld(g.x, 0, g.z), gWheel);
+        assert.ok(Math.hypot(pWheel.x - 300, pWheel.y - 220) < 6,
+            `鼠标滚轮缩放应以鼠标下地面点为中心 (${pWheel.x.toFixed(1)}, ${pWheel.y.toFixed(1)} vs 300, 220)`);
+
+        const gRight = await page.evaluate(() => window.__pig3d.getGroundAtScreen(300, 220));
+        await page.mouse.move(300, 220);
+        await page.mouse.down({ button: 'right' });
+        await page.mouse.move(400, 250, { steps: 6 });
+        await new Promise(r => setTimeout(r, 120)); // 停稳后松手避免大幅惯性
+        await page.mouse.up({ button: 'right' });
+        await new Promise(r => setTimeout(r, 1000));
+        const pRight = await page.evaluate(g => window.__pig3d.projectWorld(g.x, 0, g.z), gRight);
+        assert.ok(Math.hypot(pRight.x - 300, pRight.y - 220) < 8,
+            `右键旋转应围绕右键按下时地面射线点保持锁定 (${pRight.x.toFixed(1)}, ${pRight.y.toFixed(1)} vs 300, 220)`);
+        const camBeforeDbl = await page.evaluate(() => window.__pig3d.getCameraState());
+        await page.mouse.click(120, 620, { clickCount: 2 });
+        const camAfterDbl = await page.evaluate(() => window.__pig3d.getCameraState());
+        assert.ok(Math.abs(camAfterDbl.yaw - camBeforeDbl.yaw) < 1e-4 && Math.abs(camAfterDbl.zoom - camBeforeDbl.zoom) < 1e-4,
+            '双击地面不应再触发视角复位');
+        await page.evaluate(() => window.__pig3d.resetCamera());
+        await new Promise(r => setTimeout(r, 1000));
 
         // 1c. 验证居中平滑滑动关卡选择器打开、遮罩半行滚动与有边界翻页
         const pickerBtn = await page.evaluate(() => window.__pig3d.holoButton('level-picker'));
@@ -299,6 +332,10 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
 
             // 验证移动端单指平移、双指无极 Z 轴旋转（不手动改俯仰 + 惯性滑行）及高度自动计算俯仰
             const mobGesture = await mobPage.evaluate(async () => {
+                const waitFrames = async n => {
+                    for (let i = 0; i < n; i++) await new Promise(r => requestAnimationFrame(r));
+                };
+                await waitFrames(3); // 等待首帧着色器/纹理上传就绪后再测手势惯性
                 const cv = document.querySelector('#scene3d canvas');
                 const fire = (type, id, x, y) => cv.dispatchEvent(new PointerEvent(type, {
                     pointerId: id, clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true
@@ -323,6 +360,7 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
                 fire('pointerup', 202, 190, 470);
                 const cRelease = window.__pig3d.getCameraState();
                 await new Promise(r => setTimeout(r, 150));
+                await waitFrames(3);
                 const cInertia = window.__pig3d.getCameraState();
                 return { c0, c1, cVert, cRelease, cInertia };
             });
@@ -331,8 +369,32 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
             assert.ok(mobGesture.cRelease.yaw > 0.75, `双指应支持突破 ±0.62 弧度的无极旋转 (yaw=${mobGesture.cRelease.yaw})`);
             assert.ok(mobGesture.cRelease.zoom < mobGesture.c1.zoom && mobGesture.cRelease.pitch < mobGesture.c1.pitch,
                 `双指张开拉近降低高度时俯仰角应自动放平 (zoom ${mobGesture.c1.zoom}->${mobGesture.cRelease.zoom}, pitch ${mobGesture.c1.pitch}->${mobGesture.cRelease.pitch})`);
-            assert.ok(mobGesture.cInertia.yaw > mobGesture.cRelease.yaw + 0.02,
-                `双指快滑松手后应继续惯性无极旋转 (${mobGesture.cRelease.yaw} -> ${mobGesture.cInertia.yaw})`);
+            const dYawInertia = mobGesture.cInertia.yaw - mobGesture.cRelease.yaw;
+            assert.ok(dYawInertia > 0.02 && dYawInertia < 0.45,
+                `双指快滑松手后应适度轻量惯性旋转且不失控飞转 (${mobGesture.cRelease.yaw} -> ${mobGesture.cInertia.yaw}, Δ=${dYawInertia.toFixed(3)})`);
+
+            // 验证偏心双指中心（例如左上偏心 120,280）缩放/旋转围绕双指比例中心锁定地面点
+            await mobPage.evaluate(() => window.__pig3d.resetCamera());
+            await new Promise(r => setTimeout(r, 1000));
+            const mobAnchorCheck = await mobPage.evaluate(async () => {
+                const cv = document.querySelector('#scene3d canvas');
+                const fire = (type, id, x, y) => cv.dispatchEvent(new PointerEvent(type, {
+                    pointerId: id, clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true
+                }));
+                const g0 = window.__pig3d.getGroundAtScreen(120, 280);
+                fire('pointerdown', 301, 70, 280);
+                fire('pointerdown', 302, 170, 280);
+                fire('pointermove', 301, 120, 190);
+                fire('pointermove', 302, 120, 370); // 围绕 (120, 280) 中心旋转 90° 并张开至 180px
+                await new Promise(r => setTimeout(r, 120)); // 停稳后松手不触发惯性偏移测试
+                fire('pointerup', 301, 120, 190);
+                fire('pointerup', 302, 120, 370);
+                await new Promise(r => setTimeout(r, 1000));
+                const pAfter = window.__pig3d.projectWorld(g0.x, 0, g0.z);
+                return { g0, pAfter };
+            });
+            assert.ok(mobAnchorCheck.g0 && Math.hypot(mobAnchorCheck.pAfter.x - 120, mobAnchorCheck.pAfter.y - 280) < 8,
+                `移动端双指操作应以两指比例中心地面点为锚点 (${mobAnchorCheck.pAfter.x.toFixed(1)}, ${mobAnchorCheck.pAfter.y.toFixed(1)} vs 120, 280)`);
         } finally {
             await mobPage.close().catch(() => {});
         }

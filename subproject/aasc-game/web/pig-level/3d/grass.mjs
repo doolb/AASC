@@ -1,8 +1,8 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261123d';
-import { groundHeight } from './geometry.mjs?v=20261123d';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261123d';
+import { seededRandom } from './presets.mjs?v=20261123f';
+import { groundHeight } from './geometry.mjs?v=20261123f';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261123f';
 
 const INTERACT_SIZE = 256;
 const WORLD_SPAN = 48; // 交互贴图覆盖 [-24, 24] 世界区间
