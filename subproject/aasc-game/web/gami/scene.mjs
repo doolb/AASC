@@ -100,10 +100,15 @@ for(const s of [-1,1]){
   facet(chest,neck,chin,0xf8e7c8);facet(chest,chin,hip,0xc6d2c4);facet(neck,chin,[-1.51,1.15,0],0xf8ecd4);
   facet(tail,hip,[1.86,1.22,0],0xddd9c0);facet(ridge,tail,[1.86,1.22,0],0xa7b6b4);
 }
+const scenery=scene.children.filter(object=>!object.isLight);
+const homeBackground=scene.background,studioBackground=new T.Color(0xabbab6),focus=vec(0,0,0);
+let focusedId=null;
 const works=new T.Group();scene.add(works);const aim=vec(0,0,0);let home=true,distance=5.8,yaw=.03,pitch=.96;
-export function orbit(dx,dy){yaw-=dx*.007;pitch=T.MathUtils.clamp(pitch+dy*.006,.35,1.48);draw()}
+export function orbit(dx,dy){yaw-=dx*.007;pitch=T.MathUtils.clamp(pitch+dy*.006,-1.53,1.53);draw()}
 export function zoom(n){distance=T.MathUtils.clamp(distance*n,2,13);draw()}
-export function mode(isHome){home=isHome;hero.visible=home;works.visible=!home;draw()}
+export function mode(isHome){home=isHome;for(const object of scenery)object.visible=home;
+  scene.background=home?homeBackground:studioBackground;
+  works.visible=!home;focusedId=null;draw()}
 export function draw(){
   const w=innerWidth,h=innerHeight,mobile=w/h<.92;
   const ratio=Math.min(devicePixelRatio,1.65);
@@ -114,15 +119,24 @@ export function draw(){
     aim.set(mobile?1.18:0,mobile?.0:.54,0);camera.position.set(mobile?2.25:1.5,mobile?4.9:3.05,mobile?7.8:6.3);
     camera.setViewOffset(w,h,0,mobile?h*.12:0,w,h);
   }else{
-    camera.clearViewOffset();aim.set(0,.05,0);camera.position.set(distance*Math.cos(pitch)*Math.sin(yaw),distance*Math.sin(pitch),distance*Math.cos(pitch)*Math.cos(yaw));
+    camera.clearViewOffset();aim.copy(focus);camera.position.set(distance*Math.cos(pitch)*Math.sin(yaw),distance*Math.sin(pitch),distance*Math.cos(pitch)*Math.cos(yaw)).add(aim);
   }
   camera.lookAt(aim);camera.updateProjectionMatrix();renderer.render(scene,camera);
 }
 const ray=new T.Raycaster(),plane=new T.Plane(vec(0,1,0),0);
 export function pointer(e){
   ray.setFromCamera(new T.Vector2(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2),camera);
-  const q=ray.ray.intersectPlane(plane,vec(0,0,0));const hit=ray.intersectObjects(works.children,true).find(v=>v.object.userData.id);
-  return {world:q?[q.x,q.z]:[0,0],id:hit?.object.userData.id};
+  const q=Math.abs(ray.ray.direction.y)<.006?null:ray.ray.intersectPlane(plane,vec(0,0,0));const hit=ray.intersectObjects(works.children,true).find(v=>v.object.userData.id);
+  return {world:q?[q.x,q.z]:null,id:hit?.object.userData.id};
+}
+// 以屏幕像素计算容差，旋转视角、缩放或切换触控设备时都能准确对齐。
+export function projectedCorner(item,p){
+  const group=works.children.find(o=>o.userData.id===item.id);
+  const pos=group.localToWorld(vec(p[0],0,p[1])).project(camera);
+  const ndc=new T.Vector2(pos.x,pos.y);
+  ray.setFromCamera(ndc,camera);
+  const first=ray.intersectObjects(works.children,true).find(hit=>hit.object.userData.id);
+  return {x:(1+pos.x)*innerWidth/2,y:(1-pos.y)*innerHeight/2,visible:Math.abs(pos.z)<1&&(!first||first.object.userData.id===item.id)};
 }
 function clear(){
   works.traverse(o=>{o.geometry?.dispose();if(o.material)o.material.dispose()});works.clear();
@@ -130,12 +144,12 @@ function clear(){
 function line(group,a,b,color){
   const geo=new T.BufferGeometry().setFromPoints([a,b]);group.add(new T.Line(geo,new T.LineBasicMaterial({color})));
 }
-export function show(desk,id,preview,selection,grid,tool){
+export function show(desk,id,preview,selection,grid,tool,snapped){
   clear();
   for(const item of desk.items){
     const group=new T.Group(),faces=item.id===id&&preview?preview:item.faces;
-    const min=Math.min(0,...faces.flat().map(p=>p[2]));
-    group.position.set(item.x,-min+.018,item.y);group.rotation.y=item.rot;works.add(group);
+    group.userData.id=item.id;
+    group.position.set(item.x,0,item.y);group.rotation.y=item.rot;works.add(group);
     const tex=paperTexture(item.front,item.seed),back=paperTexture(item.back,item.seed+1);
     for(const side of [0,1]){
       const pos=[],uv=[];
@@ -148,7 +162,16 @@ export function show(desk,id,preview,selection,grid,tool){
       const mesh=new T.Mesh(geo,mat(0xffffff,{map:side?back:tex,bumpMap:tex,bumpScale:.003,side:side?T.BackSide:T.FrontSide,shadowSide:T.DoubleSide}));
       mesh.castShadow=mesh.receiveShadow=true;mesh.userData.id=item.id;group.add(mesh);
     }
-    if(item.id!==id||item.placed||preview)continue;
+    if(item.id!==id)continue;
+    if(focusedId!==id){
+      const center=new T.Box3().setFromObject(group).getCenter(vec(0,0,0));
+      focus.copy(center);focusedId=id;
+    }
+    if(snapped){
+      const indicator=new T.Mesh(new T.SphereGeometry(.048,16,12),new T.MeshBasicMaterial({color:0xff952f,depthTest:false}));
+      indicator.position.set(snapped[0],0,snapped[1]);indicator.renderOrder=3;group.add(indicator);
+    }
+    if(item.placed||preview)continue;
     const points=corners(item.faces), level=.037+faces.length*.001;
     if(tool==='cut'&&grid){
       const [a,b,c,d]=bounds(faces),[rows,cols]=grid;
@@ -156,7 +179,7 @@ export function show(desk,id,preview,selection,grid,tool){
       for(let k=1;k<cols;k++){const x=a+(c-a)*k/cols;line(group,vec(x,level,b),vec(x,level,d),0x4c5d4e)}
     }
     if(tool==='fold')points.forEach((p,i)=>{
-      const active=selection.includes(i),marker=new T.Mesh(new T.SphereGeometry(active?.046:.032,12,8),mat(active?0xd76b3a:0xffedb2));marker.position.set(p[0],level,p[1]);group.add(marker);
+      const active=selection.includes(i),marker=new T.Mesh(new T.SphereGeometry(active?.046:.032,12,8),mat(active?0xd76b3a:0xffedb2));marker.material.depthTest=false;marker.renderOrder=2;marker.userData.id=item.id;marker.position.set(p[0],0,p[1]);group.add(marker);
     });
   }
   draw();

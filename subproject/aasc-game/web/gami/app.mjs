@@ -1,5 +1,5 @@
 import * as scene from './scene.mjs';
-import {sheet,bounds,corners,fold,cut} from './fold.mjs';
+import {sheet,bounds,corners,fold,cut,snapIndex} from './fold.mjs';
 import {sound,unlock,paperSound} from './sound.mjs';
 const $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
 const storageKey='gami.desks.v1';
@@ -19,7 +19,8 @@ function save(){
 }
 function remember(){history.push(structuredClone(desk));if(history.length>25)history.shift()}
 function savedAction(){save();reset();render()}
-function reset(){selected=[];target=null;preview=null;err=''}
+let snappedIndex=-1;
+function reset(){snappedIndex=-1;selected=[];target=null;preview=null;err=''}
 function grid(){const r=$('rows').valueAsNumber,c=$('cols').valueAsNumber;return Number.isInteger(r)&&Number.isInteger(c)&&r>0&&c>0&&r*c>=2&&r*c<=64?[r,c]:null}
 function render(){
   const item=current(),g=grid();
@@ -31,9 +32,10 @@ function render(){
   $('rotate').disabled=!item?.placed;
   const hints={fold:{corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
     cut:item?.folded?'请选择尚未折叠的纸片。':g?'预览 '+g[0]+' × '+g[1]+'，共 '+g[0]*g[1]+' 片。':'请输入正整数，共 2 至 64 片。',
-    place:'选中纸片后放到桌上；拖动成品可调整位置。拖空白处环视。'};
+    place:'选中纸片后加入陈列；拖动成品可调整位置。拖空白处环视。'};
   $('hint').textContent=err||(item?.placed&&tool!=='place'?'已摆放的作品，可切换摆放工具移动或旋转。':hints[tool]);
-  scene.show(desk,id,preview,selected,g,tool);
+  if(snappedIndex>=0&&!err)$('hint').textContent='已吸附角点 · 拖远可解除';
+  scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?target:null);
 }
 function enter(d){
   desk=structuredClone(d);id=desk.active||desk.items[0].id;history=[];reset();tool='fold';
@@ -92,7 +94,7 @@ function makePreview(){
   }
   try{preview=fold(item.faces,starts,dest,+$('angle').value)}catch(e){err=e.message}
 }
-$('center').onclick=()=>{const [a,b,c,d]=bounds(current().faces);target=[(a+c)/2,(b+d)/2];makePreview();render()};
+$('center').onclick=()=>{snappedIndex=-1;const [a,b,c,d]=bounds(current().faces);target=[(a+c)/2,(b+d)/2];makePreview();render()};
 $('angle').oninput=()=>{$('degrees').textContent=$('angle').value+'°';makePreview();render();paperSound('drag')};
 $('foldType').onchange=()=>{reset();render()};
 $('commit').onclick=()=>{if(!preview)return;remember();current().faces=preview;current().folded=true;paperSound('fold');savedAction()};
@@ -129,13 +131,14 @@ $('view').onpointerdown=e=>{
   }
   const hit=scene.pointer(e);$('view').setPointerCapture(e.pointerId);
   gesture={pid:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,start:hit.world,action:'orbit'};
-  if(!hit.id)return;
+  if(!hit.id||!hit.world)return;
   if(id!==hit.id){id=hit.id;reset()}const item=current();
   gesture.action='select';
   if(tool==='place'&&item.placed){gesture.action='move';gesture.origin=[item.x,item.y]}
   if(tool==='fold'&&!item.placed){
     const pts=corners(item.faces),q=local(item,hit.world),type=$('foldType').value;
     const [i,d]=nearestIndex(pts,q,type==='edge');
+    snappedIndex=-1;
     if(type==='multi'&&selected.length&&d>.15){target=q;makePreview()}
     else{selected=type==='multi'?(selected.includes(i)?selected.filter(j=>j!==i):[...selected,i]):[i];target=null;preview=null;err='';gesture.action='fold'}
   }
@@ -151,11 +154,24 @@ $('view').onpointermove=e=>{
   if(e.pointerId!==g.pid)return;
   if(g.action==='orbit'){scene.orbit(e.clientX-g.lastX,e.clientY-g.lastY);g.lastX=e.clientX;g.lastY=e.clientY;return}
   if(Math.hypot(e.clientX-g.x,e.clientY-g.y)<4)return;
-  const w=scene.pointer(e).world,item=current();
+  const w=scene.pointer(e).world,item=current();if(!w)return;
   if(g.action==='move'){
     if(!g.changed)remember();item.x=Math.max(-5,Math.min(5,g.origin[0]+w[0]-g.start[0]));item.y=Math.max(-3,Math.min(3,g.origin[1]+w[1]-g.start[1]));g.changed=true;
   }
-  if(g.action==='fold'){target=local(item,w);makePreview();paperSound('drag')}
+  if(g.action==='fold'){
+    target=local(item,w);
+    if($('foldType').value!=='edge'){
+      const pts=corners(item.faces),radius=e.pointerType==='touch'?24:14;
+      const distances=pts.map((p,i)=>{
+        if(selected.includes(i))return Infinity;
+        const screen=scene.projectedCorner(item,p);
+        return screen.visible?Math.hypot(screen.x-e.clientX,screen.y-e.clientY):Infinity;
+      });
+      snappedIndex=snapIndex(distances,radius,snappedIndex);
+      if(snappedIndex>=0)target=pts[snappedIndex];
+    }
+    makePreview();paperSound('drag');
+  }
   render();
 };
 $('view').onpointerup=$('view').onpointercancel=e=>{if(e.pointerId===gesture?.pid||e.pointerId===gesture?.second){if(gesture.changed)save();gesture=null}};

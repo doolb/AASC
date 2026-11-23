@@ -11,3 +11,10 @@ test('自定义裁切保留母纸 UV 与预算',async()=>{
   const {cut,sheet}=await import('../web/gami/fold.mjs');const pieces=cut(sheet(),2,3);
   assert.equal(pieces.length,6);assert.equal(pieces[5][0][2][3],1);assert.throws(()=>cut(sheet(),9,9));
 });
+test('角点吸附选最近点，并在越过释放半径时退出',async()=>{
+  const {snapIndex}=await import('../web/gami/fold.mjs');
+  assert.equal(snapIndex([Infinity,12,9],14,-1),2);
+  assert.equal(snapIndex([Infinity,10,19],14,2),2);
+  assert.equal(snapIndex([Infinity,25,22],14,2),-1);
+  assert.equal(snapIndex([Infinity,22],24,-1),1);
+});

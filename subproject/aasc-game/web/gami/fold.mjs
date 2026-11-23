@@ -65,3 +65,10 @@ export function cut(faces,rows,cols){
     return sheet(x+k*w,y+r*h,w,h,a[3]+k*(c[3]-a[3])/cols,a[4]+r*(c[4]-a[4])/rows,(c[3]-a[3])/cols,(c[4]-a[4])/rows);
   });
 }
+
+// 已锁定的角使用较宽释放范围，防止手指轻微抖动导致目标跳变。
+export function snapIndex(distances,radius,previous){
+  if(previous>=0&&distances[previous]<=radius*1.5)return previous;
+  const nearest=Math.min(...distances);
+  return nearest<=radius?distances.indexOf(nearest):-1;
+}
