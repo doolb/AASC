@@ -1,5 +1,39 @@
 # 变更日志
 
+### 云幻塔每日目标
+
+- ✅ [2026-11-23] 按用户路线实机完成云幻塔简短主流程并记录可复用操作。
+  - 特别行动供给与签到已领，通行证功勋0无解锁档位；在线奖励、米娅品尝3次与任务、次元历练代理1次及周常任务、邮件附件均已领取。代理消耗30活力，周活跃60。
+  - 更新 `goal/cloud-huanta-daily.md`、design/spec、task 与 todo；实测息屏唤醒，未遇排队或断线。无自动化代码或 Offline 产物变更。
+  - ADB 首次强停后进程重现，复停后核验无目标进程、stopped=true 且前台桌面。
+
+- ✅ [2026-11-23] 参考云异环新增`goal/cloud-huanta-daily.md`，保存ADB进入与恢复、简短每日主流程、免费奖励/邮件检查和完成后强制停止云幻塔进程的目标。
+  - ADB只读核对包名`com.pwrd.cloud.huanta.laohu`、启动组件`com.pwrd.cloudgame.client_core.LaunchActivity`及客户端5.0.0（25）；旧2026.09幻塔导航包全部目标为weekly，明确仅作参考。
+  - 新增`docs/design/cloud-huanta-daily.md`、`docs/spec/cloud-huanta-daily.md`及`docs/task/2026-11-23_云幻塔每日目标整理.md`，同步索引与todo。具体每日路线待用户补充或实机核实，本次未启动游戏、未领奖、未修改程序或Offline产物状态。
+  - 验证：7个文档的17处相对链接、关键流程条目及包名隔离检查通过，`git diff --check`通过。
+
+### 云异环 ADB 入口
+
+- ✅ [2026-11-23] 实机跑通云异环每日主流程，落实用户指定24小时补货和结束后ADB强制关闭进程。
+  - 一咖舍送货补货成功（1,104方斯）、提取12,874方斯；每日活跃70，20/40/60档已领，80/100未达成；邮件领取全部并核验，环期赠礼补领第5～7天共5个红色骰子，集市分福登录奖励领取200硬币。
+  - 更新 `goal/cloud-yihuan-daily.md`、入口design/spec、todo及入口task，新增 `docs/task/2026-11-23_云异环每日实机流程与关闭进程.md`；一般走主流程，不逐页深入活动。完成项移出todo，只保留可选排队/息屏恢复验证与待确认的脚本实现。
+  - 实机截图核验奖励状态；`am force-stop --user 0` 后核对无目标进程、`stopped=true`、前台桌面。首次关闭后进程曾再次出现，复停检查通过；本次未触发排队或息屏，不声明恢复分支已实测。未修改程序或Offline产物状态。
+  - 文档检查：6个文件、9处相对链接及流程约束检查通过，`git diff --check`通过；最终再次强制停止，间隔3秒与5秒复查均无目标进程且`stopped=true`。
+
+- ✅ [2026-11-23] 新增可复用每日目标 `goal/cloud-yihuan-daily.md`，保存用户指定的一咖舍补货/收益、探索指南下方领取与上方礼物、邮件及活动免费每日赠礼路线。
+  - 补充云排队保留队列、手机息屏唤醒后重新观察、认证交接、状态核验和中断恢复；同步 `docs/design/cloud-yihuan-entry.md`、`docs/spec/cloud-yihuan-entry.md`、对应 task 与 todo。
+  - 本次仅整理文档，未点击每日任务、未领取奖励、未修改程序或 Offline 产物状态；每日路线标为待实机验证。
+  - 验证：5 个相关文档的 5 处相对链接和行尾格式检查通过，每日步骤、排队及息屏条目完整，`git diff --check` 通过。
+
+- ✅ [2026-11-23] 用户完成登录后，通过 ADB 实机进入云异环角色场景并停止，未执行每日任务。
+  - 流程：云客户端“开始游戏” → 资源校验 → 标题页“进入游戏” → 场景加载 → 角色与 HUD 验收。首图确认角色、小地图、队伍头像、生命值和操作按钮，后续只读复查显示游戏内手机菜单。
+  - 更新 `docs/design/cloud-yihuan-entry.md`、`docs/spec/cloud-yihuan-entry.md`、对应 task、design 索引和 todo；完成的实机入口任务不再留在 todo，仅保留待确认的脚本实现。
+  - 验证使用真实 ADB 截图和单步点击；临时图片保留在 `/tmp` 并记录摘要。未修改程序，未运行无关测试，未更改 Offline 产物状态。
+
+- ✅ [2026-11-23] 完成设备与登录入口调查，新增 `docs/design/cloud-yihuan-entry.md`、`docs/spec/cloud-yihuan-entry.md` 和 `docs/task/2026-11-23_云异环ADB进入游戏.md`，同步 design/spec 索引与 todo。
+  - 实机验证 SM_N9500 在线，云异环包名为 `com.pwrd.cloud.yh.laohu`，已逐步点击登录入口、已有账号及登录按钮；账号自动登录失效，当前等待人工认证，尚未进入角色场景。
+  - 本次仅有 ADB 实机操作和文档记录，未新增自动化代码，未执行每日任务，未变更 Offline 产物状态。
+
 ### 关卡任务与子工程
 
 - ✅ [2026-11-13] 迁移 HIE、retop 与 remote-gamepad 至 AASC 子工程目录，保留 HIE 与 retop 仓库和修改，HIE 历史保留 remote-gamepad 原提交；旧 HIE 与 retop 路径提供兼容入口。
