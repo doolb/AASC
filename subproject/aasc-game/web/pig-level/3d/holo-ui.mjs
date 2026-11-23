@@ -1,11 +1,14 @@
 // 3D 卡通浮动 UI：高饱和圆角描边卡片、3D 浮漂与视差、居中无限滑动关卡选择、精确包围盒拾取。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261122o';
+import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261123c';
 
 const CARTOON_VERT = /* glsl */`
+    uniform vec4 uSelfRect;
     varying vec2 vUv;
+    varying vec2 vUiPos;
     void main() {
         vUv = uv;
+        vUiPos = uSelfRect.xy + position.xy * uSelfRect.zw;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
 `;
@@ -16,17 +19,28 @@ const CARTOON_FRAG = /* glsl */`
     uniform float uActive;
     uniform float uDisabled;
     uniform float uReveal;
+    uniform vec4 uClipRect;
+    uniform float uClipFeather;
     uniform sampler2D uTextMap;
     varying vec2 vUv;
+    varying vec2 vUiPos;
     void main() {
+        if (vUiPos.x < uClipRect.x || vUiPos.x > uClipRect.z || vUiPos.y < uClipRect.y || vUiPos.y > uClipRect.w) discard;
         float halfReveal = 0.5 * clamp(uReveal, 0.0, 1.0);
         if (abs(vUv.y - 0.5) > halfReveal) discard;
         vec4 tex = texture2D(uTextMap, vUv);
         if (tex.a < 0.02) discard;
+        float clipAlpha = 1.0;
+        if (uClipFeather > 0.01) {
+            float fadeBot = smoothstep(uClipRect.y, uClipRect.y + uClipFeather, vUiPos.y);
+            float fadeTop = smoothstep(uClipRect.w, uClipRect.w - uClipFeather, vUiPos.y);
+            clipAlpha = min(fadeBot, fadeTop);
+        }
         vec3 col = tex.rgb;
         col += vec3(0.08, 0.07, 0.04) * uHover;
         col += vec3(0.06, 0.08, 0.02) * uActive * (0.6 + 0.4 * sin(uTime * 5.0));
-        float alpha = tex.a * (uDisabled > 0.5 ? 0.5 : 1.0);
+        float alpha = tex.a * (uDisabled > 0.5 ? 0.5 : 1.0) * clipAlpha;
+        if (alpha < 0.01) discard;
         gl_FragColor = vec4(col, alpha);
     }
 `;
@@ -55,9 +69,10 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
     let levelPickerOpen = false;
     let revealTime = 0;
 
-    // 居中平滑滑动关卡选择状态（单位：行索引，不循环首尾，限制在列表范围内）
+    // 居中平滑滑动关卡选择状态（单位：行索引，不循环首尾，限制在列表范围内；渲染 5 行缓冲配合遮罩裁剪平滑进出）
     const PICK_COLS = 5;
     const PICK_ROWS_VISIBLE = 4;
+    const PICK_ROWS_BUFFER = PICK_ROWS_VISIBLE + 1;
     const totalRows = Math.max(1, Math.ceil(levels.length / PICK_COLS));
     const maxScroll = Math.max(0, totalRows - PICK_ROWS_VISIBLE);
     const currentIdx = Math.max(0, levels.indexOf(String(levelId)));
@@ -66,6 +81,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
     let pickerDragging = false;
     let pickerDragMoved = false;
     let pickerLastY = 0;
+    const pickerMaskBounds = { left: 0, right: 0, bottom: 0, top: 0 };
 
     let lastUi = {
         levelId: String(levelId), remaining: 0, ropeText: '', stepText: '准备开始', progressText: '0 / 0',
@@ -127,6 +143,9 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
             uActive: { value: 0 },
             uDisabled: { value: 0 },
             uReveal: { value: 1 },
+            uSelfRect: { value: new THREE.Vector4(0, 0, w, h) },
+            uClipRect: { value: new THREE.Vector4(-1e5, -1e5, 1e5, 1e5) },
+            uClipFeather: { value: 0 },
             uTextMap: { value: textObj.tex }
         };
         const mat = new THREE.ShaderMaterial({
@@ -154,11 +173,15 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
                 this.w = nw; this.h = nh;
                 this.baseW = nw; this.baseH = nh;
                 mesh.scale.set(nw, nh, 1);
+                uniforms.uSelfRect.value.z = nw;
+                uniforms.uSelfRect.value.w = nh;
                 mesh.userData.w = nw; mesh.userData.h = nh;
                 this.lastKey = '';
             },
             setPos(cx, cy, nz = mesh.userData.z) {
                 mesh.position.set(cx, cy, nz);
+                uniforms.uSelfRect.value.x = cx;
+                uniforms.uSelfRect.value.y = cy;
                 mesh.renderOrder = 100 + nz;
             },
             setVisible(v) {
@@ -190,13 +213,19 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
                     const tx = this.align === 'left' ? 14 : this.align === 'right' ? this.w - 14 : this.w / 2;
                     const maxW = this.w - 18;
                     if (nextSub) {
+                        const isCompactBox = this.h <= 34;
+                        const mainSize = isCompactBox ? Math.max(11, this.fontSize - 2) : this.fontSize;
+                        const subSize = isCompactBox ? Math.max(9, this.fontSize - 5) : Math.max(11, this.fontSize - 3);
+                        const mainY = isCompactBox ? this.h * 0.33 : this.h * 0.36;
+                        const subY = isCompactBox ? this.h * 0.74 : this.h * 0.72;
+                        ctx.font = `800 ${mainSize}px system-ui, "Noto Sans SC", sans-serif`;
                         ctx.lineWidth = 3.2; ctx.strokeStyle = t.textStroke;
-                        ctx.strokeText(nextText, tx, this.h * 0.36, maxW);
+                        ctx.strokeText(nextText, tx, mainY, maxW);
                         ctx.fillStyle = t.fg;
-                        ctx.fillText(nextText, tx, this.h * 0.36, maxW);
-                        ctx.font = `700 ${Math.max(11, this.fontSize - 3)}px system-ui, "Noto Sans SC", sans-serif`;
+                        ctx.fillText(nextText, tx, mainY, maxW);
+                        ctx.font = `700 ${subSize}px system-ui, "Noto Sans SC", sans-serif`;
                         ctx.fillStyle = useTheme === 'card' ? '#8c5634' : '#fff7e0';
-                        ctx.fillText(nextSub, tx, this.h * 0.72, maxW);
+                        ctx.fillText(nextSub, tx, subY, maxW);
                     } else {
                         if (t.fg === '#ffffff') {
                             ctx.lineWidth = 3.2; ctx.strokeStyle = t.textStroke;
@@ -252,13 +281,13 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
     const pickerClose = createPanel({ name: 'picker-close', w: 36, h: 28, z: 9, theme: 'danger', action: 'togglePicker', text: '✕', fontSize: 14 });
     const pickerPrev = createPanel({ name: 'picker-prev', w: 96, h: 28, z: 9, theme: 'sky', action: 'pickerStep', payload: -2, text: '▲ 上滑', fontSize: 12 });
     const pickerNext = createPanel({ name: 'picker-next', w: 96, h: 28, z: 9, theme: 'sky', action: 'pickerStep', payload: 2, text: '▼ 下滑', fontSize: 12 });
-    const pickerCells = Array.from({ length: PICK_COLS * PICK_ROWS_VISIBLE }, (_, idx) =>
+    const pickerCells = Array.from({ length: PICK_COLS * PICK_ROWS_BUFFER }, (_, idx) =>
         createPanel({ name: `pick-${idx}`, w: 48, h: 34, z: 9, theme: 'cream', action: 'pickLevel', payload: '', text: '', fontSize: 13 })
     );
 
-    const modalBg = createPanel({ name: 'modalBg', w: 280, h: 150, z: 12, theme: 'card', text: '✦ 挑战成功！', subtext: '所有小猪都安全离开了', fontSize: 20 });
-    const modalBtn1 = createPanel({ name: 'modal-btn1', w: 108, h: 34, z: 13, theme: 'cream', action: 'reset', text: '再玩一次', fontSize: 14 });
-    const modalBtn2 = createPanel({ name: 'modal-btn2', w: 108, h: 34, z: 13, theme: 'coral', action: 'nextLevel', text: '下一关 ›', fontSize: 14 });
+    const modalBg = createPanel({ name: 'modalBg', w: 308, h: 188, z: 12, theme: 'card', text: '', fontSize: 20 });
+    const modalBtn1 = createPanel({ name: 'modal-btn1', w: 112, h: 36, z: 13, theme: 'cream', action: 'reset', text: '再玩一次', fontSize: 14 });
+    const modalBtn2 = createPanel({ name: 'modal-btn2', w: 112, h: 36, z: 13, theme: 'coral', action: 'nextLevel', text: '下一关 ›', fontSize: 14 });
 
     const allSettingsWidgets = [settingsBg, ...seasonBtns, ...weatherBtns, ...qualityBtns, btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d];
     const allPickerWidgets = [pickerBg, pickerTitle, pickerClose, pickerPrev, pickerNext, ...pickerCells];
@@ -324,7 +353,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
 
         const setW = 224, setH = 266;
         const setCx = Math.min(w - setW / 2 - 10, topCx + topW / 2 - setW / 2);
-        const setCy = Math.max(setH / 2 + 10, topY - topH / 2 - 8 - setH / 2);
+        const setCy = Math.max(setH / 2 + 10, Math.min(h - setH / 2 - 10, topY - topH / 2 - 8 - setH / 2));
         settingsBg.setSize(setW, setH);
         settingsBg.setPos(setCx, setCy);
         settingsBg.drawText('', '');
@@ -339,35 +368,67 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
         btnView2d.setPos(setCx + 51, setCy - 90);
         allSettingsWidgets.forEach(wg => wg.setVisible(settingsOpen));
 
-        // 居中无限滑动关卡选择器
+        // 居中滑动关卡选择器 + 带像素裁剪遮罩的内凹列表视口
         const pW = Math.min(316, w - 24);
         const pH = Math.min(266, h - 40);
         const pCx = w / 2, pCy = h / 2;
         pickerBg.setSize(pW, pH);
         pickerBg.setPos(pCx, pCy);
-        pickerBg.drawText('', '');
+        pickerMaskBounds.left = pCx - pW / 2 + 10;
+        pickerMaskBounds.right = pCx + pW / 2 - 10;
+        pickerMaskBounds.top = pCy + pH / 2 - 42;
+        pickerMaskBounds.bottom = pCy - pH / 2 + 40;
+        drawPickerCard(pW, pH);
         pickerTitle.setSize(pW - 76, 28);
         pickerTitle.setPos(pCx - 20, pCy + pH / 2 - 22);
         pickerClose.setPos(pCx + pW / 2 - 28, pCy + pH / 2 - 22);
-        pickerPrev.setPos(pCx - 56, pCy - pH / 2 + 22);
-        pickerNext.setPos(pCx + 56, pCy - pH / 2 + 22);
+        pickerPrev.setPos(pCx - 56, pCy - pH / 2 + 21);
+        pickerNext.setPos(pCx + 56, pCy - pH / 2 + 21);
         allPickerWidgets.forEach(wg => wg.setVisible(levelPickerOpen));
         layoutPickerCells();
 
-        modalBg.setPos(w / 2, h / 2 + 12);
-        modalBtn1.setPos(w / 2 - 60, h / 2 - 34);
-        modalBtn2.setPos(w / 2 + 60, h / 2 - 34);
+        // 结算弹窗自适应布局：上半区专放主副标题，下半区放双按钮，留足安全间距避免重叠
+        const mW = Math.min(316, w - 28);
+        const mH = Math.min(188, h - 24);
+        const mBtnW = Math.min(116, Math.floor((mW - 36) / 2));
+        const mBtnH = 36;
+        const mBtnGap = 12;
+        const mBtnY = h / 2 - Math.round(mH * 0.25);
+        modalBg.setSize(mW, mH);
+        modalBg.setPos(w / 2, h / 2);
+        modalBtn1.setSize(mBtnW, mBtnH);
+        modalBtn2.setSize(mBtnW, mBtnH);
+        modalBtn1.setPos(w / 2 - (mBtnW + mBtnGap) / 2, mBtnY);
+        modalBtn2.setPos(w / 2 + (mBtnW + mBtnGap) / 2, mBtnY);
+        lastModalKey = '';
+        if (lastUi.failed || lastUi.won) drawModalCard();
+    }
+
+    let lastPickerBgKey = '';
+    function drawPickerCard(pW, pH) {
+        const key = `${pW}x${pH}`;
+        if (key === lastPickerBgKey) return;
+        lastPickerBgKey = key;
+        pickerBg.drawText('', '', (ctx, cw, ch) => {
+            // 在列表可滚动可视区间绘制浅暖色内凹圆角底槽，配合 uClipRect 遮罩边界对齐
+            ctx.fillStyle = 'rgba(138, 92, 54, 0.11)';
+            ctx.strokeStyle = 'rgba(138, 92, 54, 0.25)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.roundRect(10, 42, cw - 20, ch - 82, 12);
+            ctx.fill();
+            ctx.stroke();
+        });
     }
 
     function layoutPickerCells() {
         pickerScroll = THREE.MathUtils.clamp(pickerScroll, 0, maxScroll);
-        const pW = pickerBg.w, pH = pickerBg.h;
-        const pCx = pickerBg.mesh.position.x, pCy = pickerBg.mesh.position.y;
+        const pW = pickerBg.w, pCx = pickerBg.mesh.position.x;
+        const { left: clipL, right: clipR, top: clipTop, bottom: clipBottom } = pickerMaskBounds;
         const cellW = (pW - 28) / PICK_COLS;
-        const cellH = (pH - 86) / PICK_ROWS_VISIBLE;
+        const cellH = Math.max(24, (clipTop - clipBottom) / PICK_ROWS_VISIBLE);
         const baseRow = Math.floor(pickerScroll);
         const frac = pickerScroll - baseRow;
-        const topRowY = pCy + pH / 2 - 44;
 
         pickerCells.forEach((cell, i) => {
             const col = i % PICK_COLS;
@@ -375,12 +436,15 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
             const row = baseRow + visRow;
             const lvIdx = row * PICK_COLS + col;
             const lv = levels[lvIdx];
-            const y = topRowY - (visRow + 0.5 - frac) * cellH;
-            const inClip = y < topRowY + 4 && y > pCy - pH / 2 + 36;
-            cell.setVisible(levelPickerOpen && Boolean(lv) && inClip);
+            const y = clipTop - (visRow + 0.5 - frac) * cellH;
+            const cellHVisual = Math.max(24, cellH - 6);
+            const overlapsMask = (y + cellHVisual * 0.5) > clipBottom && (y - cellHVisual * 0.5) < clipTop;
+            cell.setVisible(levelPickerOpen && Boolean(lv) && overlapsMask);
             if (!lv) return;
-            cell.setSize(cellW - 6, Math.max(26, cellH - 6));
+            cell.setSize(cellW - 6, cellHVisual);
             cell.setPos(pCx - pW / 2 + 14 + (col + 0.5) * cellW, y);
+            cell.uniforms.uClipRect.value.set(clipL, clipBottom, clipR, clipTop);
+            cell.uniforms.uClipFeather.value = 6.0;
             cell.mesh.userData.payload = lv;
             const isCur = lv === String(lastUi.levelId);
             cell.uniforms.uActive.value = isCur ? 1 : 0;
@@ -390,6 +454,42 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
         if (pickerScroll >= maxScroll - 0.001 && pickerVel > 0) pickerVel = 0;
         pickerPrev.uniforms.uDisabled.value = pickerScroll <= 0.01 ? 1 : 0;
         pickerNext.uniforms.uDisabled.value = pickerScroll >= maxScroll - 0.01 ? 1 : 0;
+    }
+
+    let lastModalKey = '';
+    function drawModalCard() {
+        const isFail = Boolean(lastUi.failed);
+        const title = isFail ? '💥 炸弹爆炸了' : '✦ 挑战成功！';
+        const sub = isFail ? '撤回一步或重新开始' : '所有小猪都安全离开了';
+        const themeKey = isFail ? 'danger' : 'card';
+        const key = `${title}|${sub}|${modalBg.w}x${modalBg.h}|${themeKey}`;
+        if (key === lastModalKey) return;
+        lastModalKey = key;
+        modalBg.drawText('', '', (ctx, mw, mh, t) => {
+            const titleSize = mw < 290 ? 18 : 20;
+            const subSize = mw < 290 ? 12 : 13;
+            const maxW = mw - 28;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `800 ${titleSize}px system-ui, "Noto Sans SC", sans-serif`;
+            if (t.fg === '#ffffff') {
+                ctx.lineWidth = 3.2; ctx.strokeStyle = t.textStroke;
+                ctx.strokeText(title, mw / 2, mh * 0.24, maxW);
+            }
+            ctx.fillStyle = t.fg;
+            ctx.fillText(title, mw / 2, mh * 0.24, maxW);
+
+            ctx.font = `700 ${subSize}px system-ui, "Noto Sans SC", sans-serif`;
+            ctx.fillStyle = isFail ? '#fff3f3' : '#8c5634';
+            ctx.fillText(sub, mw / 2, mh * 0.44, maxW);
+
+            ctx.strokeStyle = isFail ? 'rgba(255,255,255,0.28)' : 'rgba(138, 92, 54, 0.22)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(18, mh * 0.57);
+            ctx.lineTo(mw - 18, mh * 0.57);
+            ctx.stroke();
+        }, themeKey);
     }
 
     let lastSliderKey = '';
@@ -463,13 +563,13 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
         const showModal = lastUi.won || lastUi.failed;
         allModalWidgets.forEach(wg => wg.setVisible(showModal));
         if (lastUi.failed) {
-            modalBg.drawText('💥 炸弹爆炸了', '撤回一步或重新开始', null, 'danger');
+            drawModalCard();
             modalBtn1.mesh.userData.action = 'undo';
             modalBtn1.drawText('撤回一步', '', null, 'cream');
             modalBtn2.mesh.userData.action = 'reset';
             modalBtn2.drawText('重新开始', '', null, 'coral');
         } else if (lastUi.won) {
-            modalBg.drawText('✦ 挑战成功！', '所有小猪都安全离开了', null, 'card');
+            drawModalCard();
             modalBtn1.mesh.userData.action = 'reset';
             modalBtn1.drawText('再玩一次', '', null, 'cream');
             modalBtn2.mesh.userData.action = 'nextLevel';
@@ -485,6 +585,11 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
         const uy = viewH - clientY;
         for (const m of hitTargets) {
             if (!m.visible) continue;
+            if (m.userData.action === 'pickLevel') {
+                if (ux < pickerMaskBounds.left || ux > pickerMaskBounds.right || uy < pickerMaskBounds.bottom || uy > pickerMaskBounds.top) {
+                    continue;
+                }
+            }
             if (Math.abs(ux - m.position.x) <= m.userData.w * 0.5 && Math.abs(uy - m.position.y) <= m.userData.h * 0.5) {
                 return m;
             }
@@ -621,7 +726,10 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
             w.uniforms.uReveal.value = revealTime;
             if (!reduce && w.mesh.userData.action && w.name !== 'pickerBg' && w.theme !== 'card') {
                 const s = 1 + w.uniforms.uHover.value * 0.055;
-                w.mesh.scale.set(w.baseW * s, w.baseH * s, 1);
+                const sw = w.baseW * s, sh = w.baseH * s;
+                w.mesh.scale.set(sw, sh, 1);
+                w.uniforms.uSelfRect.value.z = sw;
+                w.uniforms.uSelfRect.value.w = sh;
             }
         }
     }

@@ -118,8 +118,12 @@ createScenery(scene, textures, level, tier):
 
 ## 6. 可交互草地（3d/grass.mjs）
 ```
+grassCountForTier(tier, isMobile, isSoftware):
+    软光栅返回 1500
+    桌面端: high 140000 / medium 36000 / low 22000
+    手机端(isMobile): 每档降一档 -> high 36000 / medium 22000 / low 12000
 createGrass(scene, textures, level, tier):
-    实例数: high 140000 / medium 36000 / low 22000（棋盘内占 28%，其余集中分布于外围可见草坪）
+    实例数: 由 grassCountForTier(tier, isMobile, isSoftware) 决定（棋盘内占 28%，其余集中分布于外围可见草坪）；动态降档 setTierCount 共用同一映射，getCount 返回当前可见数量
     草叶几何: 5 段渐细弯折三角带（uv.y 0→1，基底宽 0.072）
     实例属性: aOffset(x,z), aBaseY(groundHeight 贴合丘陵), aHeight, aAngle, aTint
     交互贴图 DataTexture 256×256 RGBA: R 踩踏衰减 + G 在场动物占格压扁
@@ -161,13 +165,14 @@ createEnvironment(scene, textures, tier):
 ```
 createHoloUI({ renderer, levels, levelId, onAction }):
     独立正交/低透视 UI 场景（或 HUD 叠加渲染层），保持清晰中文文本与独立拾取
-    全息材质着色器: 半透明青蓝底(#5ff2ff)、亮边发光、滚动扫描线、微噪点、边角 L 形支架、出现时从中心投影展开(uReveal 0→1)
+    卡通着色器(uSelfRect + uClipRect): 支持 UI 像素坐标区域裁剪遮罩与上下边缘柔滑渐隐（默认全屏不裁切）
     浮动与视差: 面板随镜头偏航做 ±3° 轻视差倾斜与柔和呼吸漂浮（reduced-motion 时关闭）
     竖屏 / 横屏自适应布局（根据 viewport aspect 动态重排面板锚点，绝不遮挡中心棋盘安全区）:
-        - 顶部全息条: 标题、第 N 关、上/下一关、展开式关卡网格/环形选择、自由试玩徽章、剩余与机制计数胶囊
+        - 顶部全息条: 标题、第 N 关、上/下一关、展开式关卡网格/滑动选择、自由试玩徽章（矮按钮自适应双行字距，防止压字）、剩余与机制计数胶囊
         - 底部全息条: 步骤标题、提示开关、状态提示、上一步/下一步、可拖动全息进度条、撤回、重开
         - 侧边可折叠全息面板: 四季 4 键、天气 4 键、画质(自动/高/中/低)、时间流动开关、音乐/音效开关、视角复位(V)、简洁 2D 控件开关(C)、切回 2D 版
-        - 结算全息浮窗: 胜利（烟花 + 再玩一次 / 下一关）与炸弹爆炸（红色故障扫描线 + 撤回一步 / 重新开始）
+        - 关卡滑动选择面板: 内置圆角列表凹槽底板 + `PICK_ROWS_VISIBLE + 1` 行缓冲平滑滑动，配合 `uClipRect` 与 6px 渐隐遮罩严格裁剪上下出界格子，命中拾取同步限制在列表可视遮罩内
+        - 结算全息浮窗: 自适应宽度与 188px 高度居中弹窗，主副标题排布于上半区（0.25/0.46），两个按钮排布于下半区（y=h/2-48）留出 > 28px 安全间距绝不与文字重叠
     输入: pointerdown/move/up 射线拾取全息按钮、进度条滑块与居中平滑关卡列表（强惯性平滑拖动 `pow(0.24, dt)`，禁用 `pickerBg`/`card` 底板 hover 变色与缩放）；暴露 getButtonScreen(name) 供自动化测试点击
 ```
 
@@ -191,7 +196,7 @@ createAudio():
 
 ## 11. 后期与性能分档（3d/post.mjs）
 ```
-detectInitialTier(renderer): 软光栅 / mem<=2 / (移动端且 cores<=2) 返回 low；其余移动端与 4 核设备返回 medium；高配返回 high（保留 HiDPI 清晰度，high/medium/low 分辨率上限分别达 2.5x / 2.0x / 1.75x，避免手机端退回 1x 变糊）
+detectInitialTier(renderer): 软光栅 / mem<=2 / (移动端且 cores<=2) 返回 low；其余移动端与 4 核设备返回 medium；非移动端且 cores>4 且 navigator.deviceMemory 缺省（如局域网 HTTP 非安全上下文）按 8GB 回退避免误降 medium，高配返回 high（保留 HiDPI 清晰度，high/medium/low 分辨率上限分别达 2.5x / 2.0x / 1.75x，避免手机端退回 1x 变糊）
 createPost(renderer, initialTier):
     外网简洁全屏后期平面（无需 EffectComposer）:
         - high 档启用柔光(0.16) + 轻微暗角(vignette * 0.45) + 温和对比度微调 + #include <tonemapping_fragment> + #include <colorspace_fragment>
@@ -204,10 +209,13 @@ createPost(renderer, initialTier):
 createView3D({ container, level, levels, onPick, onAction }):
     初始化 renderer(WebGLRenderer, antialias, sRGB, ACESFilmicToneMapping)、scene、camera(PerspectiveCamera fov=40)
     创建 textures -> post -> environment -> scenery -> grass -> models -> particles -> holoUI -> audio
-    默认俯角 0.91（约 52°）；自动镜头适配 fitCamera(): 二分搜索镜头距离，使棋盘 8 个包围盒角点投影完整落入扣除 UI 安全边距后的视口区域
-    轨道阻尼控制: 左键/单指旋转（yaw ±35°、pitch 35°~78°）、PC 右键拖拽平移（全局捕获拦截 contextmenu 弹窗）、移动端双指平移与缩放（0.65~1.45x）、双击或 V 复位
+    默认俯角 0.91（约 52°）；自动镜头适配 fitCamera():
+        - 按内圈棋盘实际区域（hw = cols/2 + 0.15, hh = rows/2 + 0.15, 高度 0..0.92）投影计算安全区居中 lookTarget
+        - 横屏（viewW >= viewH）以安全区高度 96% 为主填满高度（兼顾宽度不溢出右侧 HUD）；竖屏（viewH > viewW）以安全区宽度 96% 为主贴紧透视前边最长边填满宽度（兼顾高度不溢出上下 HUD）
+        - 二分搜索最优距离 [6..64] 并反推精确居中偏移
+    轨道阻尼控制: 左键/单指拖拽平移、PC 右键拖拽旋转（yaw ±35°、pitch 35°~78°，全局捕获拦截 contextmenu 弹窗）、移动端双指中心拖动旋转与捏合缩放（0.65~1.45x）、双击或 V 复位
     输入分发:
-        - pointerdown/move/up: 优先交由 holoUI 精确包围盒拾取、居中平滑关卡列表拖动与进度条拖动；未命中 UI 时若移动距离 < 8px 且非右键平移视为点击：
+        - pointerdown/move/up: 优先交由 holoUI 精确包围盒拾取、居中平滑关卡列表拖动与进度条拖动；未命中 UI 时若移动距离 <= 8px 且非右键旋转视为点击：
           优先对在场非离场动物真实 3D 躯体网格做射线检测（失败再查包围盒）-> onPick(id) + 哼哼音效
           否则命中地面 -> grass.stamp + particles.burstGrass + 草地沙沙声
         - pointermove 悬停地面 -> grass.stamp 拨开草叶
@@ -215,5 +223,5 @@ createView3D({ container, level, levels, onPick, onAction }):
     animateExit(id): 蓄力下蹲后沿朝向冲刺跑出棋盘并淡出，沿途写入 grass 踩踏与白金冲刺尾迹，累计帧间隔确保完整播放
     shake(id, message): 前方受阻时前冲撞击喷火花+挤压回弹再左右摇摆；锁定态原地扭动身体；弹出红色叉号 + blocked/spring 音效
     cancelAnimations(): 立即完成或停止进行中补间，确保状态瞬间落位
-    测试钩子 window.__pig3d = { ready, tier, preset, fps, screenOf(id), holoButton(name), setSeasonWeather(s, w), resetCamera }
+    测试钩子 window.__pig3d = { ready, tier, preset, fps, getGrassCount, getBoardScreenBounds, getCameraState, screenOf(id), holoButton(name), setSeasonWeather(s, w), resetCamera }
 ```

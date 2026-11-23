@@ -1,3 +1,22 @@
+- ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123c`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；核验全量 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-23] 优化默认镜头内圈棋盘填满适配并将手机端草叶每档降一档（`?v=20261123c`）
+  - `web/pig-level/3d/view.mjs`：`fitCamera()` 贴合内圈棋盘实际边界（`hw = cols/2 + 0.15`、`hh = rows/2 + 0.15`、`y = 0..0.92`），横屏以安全区高度 `safeH * 0.96`、竖屏以透视前边宽度 `safeW * 0.96` 为基准填满并迭代精准居中 `baseLookTarget`；暴露 `getBoardScreenBounds()` 与 `getGrassCount()`。
+  - `web/pig-level/3d/grass.mjs`：新增 `grassCountForTier()` 查表映射，桌面端维持 `140000 / 36000 / 22000`，手机端每档往下降一档为 `36000 / 22000 / 12000`（软光栅 `1500`）。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/2026-11-23_镜头填满适配与手机草叶降档.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261123c`、同步伪代码与任务记录，并补充镜头占满率与手机草叶数量校验。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过，横/竖屏实景截图居中填满。
+- ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123b`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；核验全量 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-23] 反转 PC/移动端镜头拖拽交互并修复局域网 HTTP 桌面端高画质默认判定（`?v=20261123b`）
+  - `web/pig-level/3d/view.mjs`：将 PC 左键/手机单指拖拽改为 `applyPan` 平移视角（`<= 8px` 轻点仍正常选中 UI/小猪），PC 右键与手机双指中心拖动改为旋转视角（`targetYaw` / `targetPitch`），同时保留双指捏合缩放与右键弹窗拦截；新增 `window.__pig3d.getCameraState()`。
+  - `web/pig-level/3d/post.mjs`：`detectInitialTier()` 对非移动端多核（`cores > 4`）且浏览器在非 HTTPS 下隐藏 `navigator.deviceMemory` 的情况按 `8GB` 回退，避免 `http://192.168.x.x` 桌面端默认误降至 `medium`。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/2026-11-23_反转镜头拖拽与局域网高画质适配.md`、`tests/pig-level-3d.test.js`：同步升级 `?v=20261123b`、伪代码规格、任务文档与 PC/手机拖拽手势校验。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`4 / 4`）全部通过。
+- ✅ [2026-11-23] 修复 3D 结算弹窗按钮与文字重叠，并为关卡滑动列表增加像素级遮罩（`?v=20261123a`）
+  - `web/pig-level/3d/holo-ui.mjs`：`modalBg` 改为自适应宽高并划分上下文字/按钮分区与分隔线，消除按钮顶部压住副标题的问题；`h <= 34` 双行徽章（如 `第 118 关 / 自由试玩`）拉开上下行距，`settingsBg` 增加矮屏防溢出约束；在 `CARTOON_VERT` / `CARTOON_FRAG` 新增 `uSelfRect`、`uClipRect` 与 `uClipFeather`（`6px` 渐隐），配合 `pickerBg` 圆角凹槽底板、5 行平滑缓冲及 `hitWidget` 遮罩区间命中限制，解决滑动穿帮并支持平滑裁剪进出。
+  - `web/pig-level/style.css`、`web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`：补充窄屏 `.win-card` 弹性间距，静态资源版本号统一升至 `?v=20261123a`。
+  - `docs/spec/pig-game-3d.md`、`docs/task/2026-11-23_修复弹窗按钮重叠与关卡列表遮罩.md`、`tests/pig-level-3d.test.js`：同步伪代码规格、任务记录与第 46 关胜利弹窗间距/关卡列表半行滚动遮罩验收测试。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`4 / 4`）全部通过；PC `1280×720` 与手机 `390×844@2x` 实景截图 `0` 报错，弹窗图文分离、列表遮罩滑动自然。
 - ✅ [2026-11-22] 基于外网原版底座叠加远景雾化、5 瓣星形花、鲜艳红提示贴花与切窗防误降档（`?v=20261122o`）
   - `web/pig-level/3d/{environment,scenery,grass}.mjs`：`environment.mjs` 暴露 `getHorizonColor()`；`scenery.mjs`（`groundMat`/`lawnMat`）与 `grass.mjs` 在 `20.0~36.0` 范围按 `uHorizonColor` 做柔和低饱和空气透视雾化；`scenery.mjs` 保留外网花朵数量上限（`1800 / 900 / 420`）与山丘正弦聚簇分布，并将 `high/medium` 升级为 8 顶点交叉双面 5 瓣星形花面片（`high` 带微风摆动、`low` 保持圆片），同步贴合丘陵高度。
   - `web/pig-level/3d/{textures,models}.mjs`：新增手绘 `flowerSprite()`；`hintDecal()` 改为高饱和鲜艳红（`#ff2432` / `#ff5454`）环形光晕与角标，`models.mjs` `bodyDecalMat` 补全 `#include <tonemapping_fragment>` 与 `#include <colorspace_fragment>`。

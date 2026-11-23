@@ -1,15 +1,15 @@
-// 主控 3D 视图：渲染调度、轨道与右键/双指平移、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
+// 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261122o';
-import { createTextureLibrary } from './textures.mjs?v=20261122o';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261122o';
-import { createScenery } from './scenery.mjs?v=20261122o';
-import { createGrass } from './grass.mjs?v=20261122o';
-import { createParticles } from './particles.mjs?v=20261122o';
-import { createEnvironment } from './environment.mjs?v=20261122o';
-import { createHoloUI } from './holo-ui.mjs?v=20261122o';
-import { createAudioSystem } from './audio.mjs?v=20261122o';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261122o';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123c';
+import { createTextureLibrary } from './textures.mjs?v=20261123c';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123c';
+import { createScenery } from './scenery.mjs?v=20261123c';
+import { createGrass } from './grass.mjs?v=20261123c';
+import { createParticles } from './particles.mjs?v=20261123c';
+import { createEnvironment } from './environment.mjs?v=20261123c';
+import { createHoloUI } from './holo-ui.mjs?v=20261123c';
+import { createAudioSystem } from './audio.mjs?v=20261123c';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123c';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -120,6 +120,27 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     }
 
     const tmpCorners = Array.from({ length: 8 }, () => new THREE.Vector3());
+    function innerBoardCorners() {
+        const hw = level.columns / 2 + 0.15;
+        const hh = level.rows / 2 + 0.15;
+        return [
+            [-hw, 0, -hh], [hw, 0, -hh], [-hw, 0, hh], [hw, 0, hh],
+            [-hw, 0.92, -hh], [hw, 0.92, -hh], [-hw, 0.92, hh], [hw, 0.92, hh]
+        ];
+    }
+
+    function projectBoardNdc(pts) {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let i = 0; i < 8; i++) {
+            tmpCorners[i].set(pts[i][0], pts[i][1], pts[i][2]).project(camera);
+            minX = Math.min(minX, tmpCorners[i].x);
+            maxX = Math.max(maxX, tmpCorners[i].x);
+            minY = Math.min(minY, tmpCorners[i].y);
+            maxY = Math.max(maxY, tmpCorners[i].y);
+        }
+        return { minX, maxX, minY, maxY };
+    }
+
     function fitCamera() {
         viewW = Math.max(1, container.clientWidth || window.innerWidth);
         viewH = Math.max(1, container.clientHeight || window.innerHeight);
@@ -128,45 +149,56 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         holoUI.resize(viewW, viewH);
         post.resize(viewW, viewH);
 
+        const landscape = viewW >= viewH;
         const margins = holoUI.getSafeMargins();
         const minNdcX = (margins.left / viewW) * 2 - 1;
         const maxNdcX = ((viewW - margins.right) / viewW) * 2 - 1;
         const minNdcY = (margins.bottom / viewH) * 2 - 1;
         const maxNdcY = ((viewH - margins.top) / viewH) * 2 - 1;
-
-        const hw = level.columns / 2 + 0.55;
-        const hh = level.rows / 2 + 0.55;
-        const pts = [
-            [-hw, 0, -hh], [hw, 0, -hh], [-hw, 0, hh], [hw, 0, hh],
-            [-hw, 1.2, -hh], [hw, 1.2, -hh], [-hw, 1.2, hh], [hw, 1.2, hh]
-        ];
-
+        const safeW = Math.max(0.25, maxNdcX - minNdcX);
+        const safeH = Math.max(0.25, maxNdcY - minNdcY);
         const centerNdcX = (minNdcX + maxNdcX) / 2;
         const centerNdcY = (minNdcY + maxNdcY) / 2;
-        baseLookTarget.set(0, 0, 0);
-        panOffset.set(0, 0);
+        const pts = innerBoardCorners();
 
-        let lo = 10, hi = 64;
-        for (let iter = 0; iter < 18; iter++) {
-            const mid = (lo + hi) / 2;
-            updateCameraImmediate(mid, 0, 0.91);
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            for (let i = 0; i < 8; i++) {
-                tmpCorners[i].set(pts[i][0], pts[i][1], pts[i][2]).project(camera);
-                minX = Math.min(minX, tmpCorners[i].x);
-                maxX = Math.max(maxX, tmpCorners[i].x);
-                minY = Math.min(minY, tmpCorners[i].y);
-                maxY = Math.max(maxY, tmpCorners[i].y);
+        // 对给定距离反推精准居中的 lookTarget，按横屏填满高度 / 竖屏贴紧透视最长前边填满宽度判定是否超界
+        const evalFit = dist => {
+            let tx = 0, tz = 0;
+            const worldPerNdcX = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+            const worldPerNdcZ = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.sin(0.91);
+            for (let pass = 0; pass < 3; pass++) {
+                baseLookTarget.set(tx, 0, tz);
+                panOffset.set(0, 0);
+                updateCameraImmediate(dist, 0, 0.91);
+                const ndcBox = projectBoardNdc(pts);
+                if (pass < 2) {
+                    tx -= (centerNdcX - (ndcBox.minX + ndcBox.maxX) / 2) * worldPerNdcX;
+                    tz += (centerNdcY - (ndcBox.minY + ndcBox.maxY) / 2) * worldPerNdcZ;
+                    continue;
+                }
+                const spanW = ndcBox.maxX - ndcBox.minX;
+                const spanH = ndcBox.maxY - ndcBox.minY;
+                const ok = landscape
+                    ? (spanH <= safeH * 0.96 && spanW <= safeW * 0.96)
+                    : (spanW <= safeW * 0.96 && spanH <= safeH * 0.96);
+                return { tx, tz, ok };
             }
-            const safeW = Math.max(0.25, maxNdcX - minNdcX);
-            const safeH = Math.max(0.25, maxNdcY - minNdcY);
-            if ((maxX - minX) <= safeW * 0.94 && (maxY - minY) <= safeH * 0.94) hi = mid;
-            else lo = mid;
+        };
+
+        let lo = 6, hi = 64, best = null;
+        for (let iter = 0; iter < 20; iter++) {
+            const mid = (lo + hi) / 2;
+            const res = evalFit(mid);
+            if (res.ok) {
+                hi = mid;
+                best = res;
+            } else {
+                lo = mid;
+            }
         }
+        best = best || evalFit(hi);
         baseDist = hi;
-        const approxWorldW = 2 * baseDist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-        const approxWorldH = 2 * baseDist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.sin(0.91);
-        baseLookTarget.set(-centerNdcX * approxWorldW * 0.42, 0, centerNdcY * approxWorldH * 0.42);
+        baseLookTarget.set(best.tx, 0, best.tz);
         updateCameraImmediate(baseDist * zoom, yaw, pitch);
     }
 
@@ -501,7 +533,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
 
     const activePointers = new Map();
     let pointerConsumedByUi = false;
-    let rightPanning = false;
+    let rightRotating = false;
     let downX = 0, downY = 0, lastX = 0, lastY = 0, dragged = false;
     let prevPinch = null;
 
@@ -567,8 +599,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         downX = lastX = x;
         downY = lastY = y;
         dragged = false;
-        rightPanning = e.button === 2 || (e.buttons & 2) === 2;
-        if (!rightPanning && holoUI.handlePointerDown(x, y)) {
+        rightRotating = e.button === 2 || (e.buttons & 2) === 2;
+        if (!rightRotating && holoUI.handlePointerDown(x, y)) {
             pointerConsumedByUi = true;
             return;
         }
@@ -582,7 +614,10 @@ export async function createView3D({ container, level, levels, onPick, onAction 
 
         if (activePointers.size === 2 && prevPinch) {
             const cur = pinchInfo();
-            applyPan(cur.midX - prevPinch.midX, cur.midY - prevPinch.midY);
+            const dx = cur.midX - prevPinch.midX;
+            const dy = cur.midY - prevPinch.midY;
+            targetYaw = THREE.MathUtils.clamp(targetYaw - dx * 0.0055, -0.62, 0.62);
+            targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.61, 1.36);
             const ratio = prevPinch.dist / cur.dist;
             targetZoom = THREE.MathUtils.clamp(targetZoom * ratio, 0.65, 1.45);
             prevPinch = cur;
@@ -600,11 +635,11 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             lastX = x; lastY = y;
             if (Math.hypot(x - downX, y - downY) > 8) dragged = true;
             if (dragged) {
-                if (rightPanning || (e.buttons & 2) === 2) {
-                    applyPan(dx, dy);
-                } else {
+                if (rightRotating || (e.buttons & 2) === 2) {
                     targetYaw = THREE.MathUtils.clamp(targetYaw - dx * 0.0055, -0.62, 0.62);
                     targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.61, 1.36);
+                } else {
+                    applyPan(dx, dy);
                 }
                 return;
             }
@@ -624,7 +659,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             pointerConsumedByUi = false;
             return;
         }
-        if (!dragged && !rightPanning) {
+        if (!dragged && !rightRotating) {
             if (holoUI.handlePointerUp(x, y)) return;
             const pigId = pickActor(e.clientX, e.clientY);
             if (pigId !== null) {
@@ -639,7 +674,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
                 audio.playSfx('rustle');
             }
         }
-        rightPanning = false;
+        rightRotating = false;
     };
 
     const onWheel = e => {
@@ -948,6 +983,24 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         },
         setSeasonWeather(s, w) {
             if (SEASONS.includes(s) && WEATHERS.includes(w)) applySeasonWeather(s, w, false);
+        },
+        getCameraState: () => ({ yaw: targetYaw, pitch: targetPitch, zoom: targetZoom, panX: targetPan.x, panZ: targetPan.y }),
+        getGrassCount: () => grass.getCount(),
+        getBoardScreenBounds() {
+            const margins = holoUI.getSafeMargins();
+            const safeW = Math.max(1, viewW - margins.left - margins.right);
+            const safeH = Math.max(1, viewH - margins.top - margins.bottom);
+            const ndcBox = projectBoardNdc(innerBoardCorners());
+            const left = (ndcBox.minX * 0.5 + 0.5) * viewW;
+            const right = (ndcBox.maxX * 0.5 + 0.5) * viewW;
+            const top = (-ndcBox.maxY * 0.5 + 0.5) * viewH;
+            const bottom = (-ndcBox.minY * 0.5 + 0.5) * viewH;
+            return {
+                left, right, top, bottom,
+                widthRatio: (right - left) / safeW,
+                heightRatio: (bottom - top) / safeH,
+                margins
+            };
         },
         resetCamera
     };

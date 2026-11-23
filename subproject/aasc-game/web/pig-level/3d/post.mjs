@@ -22,8 +22,9 @@ export function detectInitialTier(renderer = null) {
         if (isSoftwareWebGL(renderer)) return 'low';
     } catch (_) {}
     const cores = navigator.hardwareConcurrency || 4;
-    const mem = navigator.deviceMemory || 4;
     const isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+    // 非 HTTPS 局域网环境浏览器会隐藏 navigator.deviceMemory，对多核桌面端按 8GB 处理以免误降 medium
+    const mem = navigator.deviceMemory || (!isMobile && cores > 4 ? 8 : 4);
     if (mem <= 2 || (isMobile && cores <= 2)) return 'low';
     if (isMobile || cores <= 4 || mem <= 4) return 'medium';
     return 'high';

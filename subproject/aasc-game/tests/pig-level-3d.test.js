@@ -63,6 +63,17 @@ test('FPS 自动降档需连续两个周期低于阈值且切换窗口可重置'
     post.dispose();
 });
 
+test('手机端草叶数量每档较桌面端降一档', async () => {
+    const { grassCountForTier } = await import('../web/pig-level/3d/grass.mjs');
+    assert.equal(grassCountForTier('high', false, false), 140000);
+    assert.equal(grassCountForTier('medium', false, false), 36000);
+    assert.equal(grassCountForTier('low', false, false), 22000);
+    assert.equal(grassCountForTier('high', true, false), 36000);
+    assert.equal(grassCountForTier('medium', true, false), 22000);
+    assert.equal(grassCountForTier('low', true, false), 12000);
+    assert.equal(grassCountForTier('high', true, true), 1500);
+});
+
 test('本地预览服务提供全部 3D 模块与 vendor 资源', async () => {
     const port = 18988 + Math.floor(Math.random() * 500);
     const server = spawn(process.execPath, ['scripts/serve-pig-level.js'], { env: { ...process.env, PIG_LEVEL_PORT: String(port) }, stdio: 'pipe' });
@@ -177,6 +188,8 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         assert.equal(probe.has3d, true, 'WebGL 可用时必须成功进入 3D 模式');
         assert.equal(probe.isSoftware, false, `不应使用软光栅渲染，当前 renderer: ${probe.renderer}`);
         assert.ok(['high', 'medium'].includes(probe.tier), `DISPLAY=:0 硬件 GPU 应运行在 high 或 medium 画质档位，当前: ${probe.tier}`);
+        const pcFit = await page.evaluate(() => window.__pig3d.getBoardScreenBounds());
+        assert.ok(pcFit.heightRatio >= 0.88 && pcFit.widthRatio <= 0.99, `横屏默认镜头应填满安全区高度 (${JSON.stringify(pcFit)})`);
         const eyeY = await page.evaluate(id => window.__pig3d.getEyeOffsetY(id), 1);
         assert.ok(eyeY > 0.3, `小猪眼睛应以眼窝中心为原点偏移 (${eyeY})，避免眨眼掉出`);
 
@@ -190,21 +203,38 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.mouse.click(pt2.x, pt2.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '2 / 176', { timeout: 15000 });
 
-        // 1b. 验证右键平移（抑制浏览器右键弹窗且不触发点击）
+        // 1b. 验证左键拖拽平移、右键拖拽旋转（抑制浏览器右键弹窗且不触发点击）
+        const camBefore = await page.evaluate(() => window.__pig3d.getCameraState());
         await page.mouse.move(600, 360);
-        await page.mouse.down({ button: 'right' });
-        await page.mouse.move(650, 390);
-        await page.mouse.up({ button: 'right' });
+        await page.mouse.down({ button: 'left' });
+        await page.mouse.move(680, 390, { steps: 4 });
+        await page.mouse.up({ button: 'left' });
+        const camAfterPan = await page.evaluate(() => window.__pig3d.getCameraState());
+        assert.ok(Math.hypot(camAfterPan.panX - camBefore.panX, camAfterPan.panZ - camBefore.panZ) > 0.05, '左键拖拽应平移视角');
+        assert.ok(Math.abs(camAfterPan.yaw - camBefore.yaw) < 1e-4, '左键平移不应改变偏航角');
 
-        // 1c. 验证居中平滑滑动关卡选择器打开与有边界翻页
+        await page.mouse.move(650, 390);
+        await page.mouse.down({ button: 'right' });
+        await page.mouse.move(570, 340, { steps: 4 });
+        await page.mouse.up({ button: 'right' });
+        const camAfterRot = await page.evaluate(() => window.__pig3d.getCameraState());
+        assert.ok(Math.abs(camAfterRot.yaw - camAfterPan.yaw) > 0.05 || Math.abs(camAfterRot.pitch - camAfterPan.pitch) > 0.05, '右键拖拽应旋转视角');
+        assert.equal(await page.evaluate(() => document.querySelector('#progressText').textContent), '2 / 176', '拖拽不应误点小猪');
+        await page.evaluate(() => window.__pig3d.resetCamera());
+
+        // 1c. 验证居中平滑滑动关卡选择器打开、遮罩半行滚动与有边界翻页
         const pickerBtn = await page.evaluate(() => window.__pig3d.holoButton('level-picker'));
         await page.mouse.click(pickerBtn.x, pickerBtn.y);
         const pickerTitlePos = await page.evaluate(() => window.__pig3d.holoButton('picker-title'));
         const halfW = await page.evaluate(() => window.innerWidth / 2);
         assert.ok(pickerTitlePos && Math.abs(pickerTitlePos.x - halfW) < 80, '关卡选择器应居中显示');
+        await page.mouse.move(pickerTitlePos.x, pickerTitlePos.y + 85);
+        await page.mouse.wheel({ deltaY: 55 });
+        await new Promise(r => setTimeout(r, 150));
         const loopBtn = await page.evaluate(() => window.__pig3d.holoButton('picker-next'));
         await page.mouse.click(loopBtn.x, loopBtn.y);
         const closeBtn = await page.evaluate(() => window.__pig3d.holoButton('picker-close'));
+        assert.ok(closeBtn && closeBtn.y < pickerTitlePos.y + 8 && loopBtn.y > pickerTitlePos.y + 120, '关卡标题与翻页按钮应位于遮罩区上下两侧不重叠');
         await page.mouse.click(closeBtn.x, closeBtn.y);
 
         // 2. 通过全息 UI 按钮执行下一步、撤回、切换季节天气
@@ -243,16 +273,52 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         }
         const mobPage = await browser.newPage();
         try {
+            await mobPage.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1');
+            await mobPage.evaluateOnNewDocument(() => {
+                Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', { get: () => 8, configurable: true });
+            });
             await mobPage.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
             await mobPage.bringToFront();
             await mobPage.goto(`http://127.0.0.1:${port}/?level=48`, { waitUntil: 'domcontentloaded' });
             await mobPage.waitForFunction(() => Boolean(window.__pig3d && window.__pig3d.ready), { timeout: 45000 });
             const mobMetrics = await mobPage.evaluate(() => {
                 const cv = document.querySelector('#scene3d canvas');
-                return { cw: cv ? cv.width : 0, iw: window.innerWidth, dpr: window.devicePixelRatio || 1, tier: window.__pig3d.tier };
+                return {
+                    cw: cv ? cv.width : 0,
+                    iw: window.innerWidth,
+                    dpr: window.devicePixelRatio || 1,
+                    tier: window.__pig3d.tier,
+                    grass: window.__pig3d.getGrassCount(),
+                    fit: window.__pig3d.getBoardScreenBounds()
+                };
             });
             assert.ok(['high', 'medium'].includes(mobMetrics.tier), `高分手机端不应被像素数降档为 low，当前: ${mobMetrics.tier}`);
             assert.ok(mobMetrics.cw >= mobMetrics.iw * 1.75, `移动端 2x HiDPI 渲染画布应保持高分辨率 (${mobMetrics.cw} vs ${mobMetrics.iw}×${mobMetrics.dpr})`);
+            assert.equal(mobMetrics.grass, mobMetrics.tier === 'high' ? 36000 : 22000, `手机端草叶数应每档降一档 (当前 tier=${mobMetrics.tier}, grass=${mobMetrics.grass})`);
+            assert.ok(mobMetrics.fit.widthRatio >= 0.88 && mobMetrics.fit.heightRatio <= 0.99, `竖屏默认镜头应贴紧宽边填满 (${JSON.stringify(mobMetrics.fit)})`);
+
+            // 验证移动端单指平移与双指旋转/缩放
+            const mobGesture = await mobPage.evaluate(() => {
+                const cv = document.querySelector('#scene3d canvas');
+                const fire = (type, id, x, y) => cv.dispatchEvent(new PointerEvent(type, {
+                    pointerId: id, clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true
+                }));
+                const c0 = window.__pig3d.getCameraState();
+                fire('pointerdown', 101, 180, 400);
+                fire('pointermove', 101, 240, 430);
+                fire('pointerup', 101, 240, 430);
+                const c1 = window.__pig3d.getCameraState();
+                fire('pointerdown', 201, 140, 380);
+                fire('pointerdown', 202, 240, 380);
+                fire('pointermove', 201, 190, 340);
+                fire('pointermove', 202, 330, 340);
+                fire('pointerup', 201, 190, 340);
+                fire('pointerup', 202, 330, 340);
+                const c2 = window.__pig3d.getCameraState();
+                return { c0, c1, c2 };
+            });
+            assert.ok(Math.hypot(mobGesture.c1.panX - mobGesture.c0.panX, mobGesture.c1.panZ - mobGesture.c0.panZ) > 0.05, '移动端单指拖拽应平移视角');
+            assert.ok(Math.abs(mobGesture.c2.yaw - mobGesture.c1.yaw) > 0.05 && mobGesture.c2.zoom < mobGesture.c1.zoom, '移动端双指拖动应旋转视角且张开手指应放大视角');
         } finally {
             await mobPage.close().catch(() => {});
         }
@@ -294,6 +360,25 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.goto(`http://127.0.0.1:${port}/?level=48&tier=low`, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => Boolean(window.__pig3d && window.__pig3d.ready), { timeout: 45000 });
         assert.equal(await page.evaluate(() => window.__pig3d.tier), 'low');
+
+        // 8. 验证第 46 关通关弹窗按钮与标题文字区纵向留白分离、可正常点击重开
+        await page.goto(`http://127.0.0.1:${port}/?level=46`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => Boolean(window.__pig3d && window.__pig3d.ready), { timeout: 45000 });
+        for (let i = 0; i < 5; i++) {
+            const btn = await page.evaluate(() => window.__pig3d.holoButton('next'));
+            await page.mouse.click(btn.x, btn.y);
+        }
+        await page.waitForFunction(() => Boolean(window.__pig3d.holoButton('modal-btn1')), { timeout: 10000 });
+        const modalCheck = await page.evaluate(() => ({
+            bg: window.__pig3d.holoButton('modalBg'),
+            b1: window.__pig3d.holoButton('modal-btn1'),
+            b2: window.__pig3d.holoButton('modal-btn2')
+        }));
+        assert.ok(modalCheck.bg && modalCheck.b1 && modalCheck.b2, '胜利弹窗与双按钮应可见');
+        assert.ok(modalCheck.b1.y - modalCheck.bg.y >= 36 && Math.abs(modalCheck.b2.x - modalCheck.b1.x) >= 100,
+            `弹窗按钮应位于下半区且左右分开 (${JSON.stringify(modalCheck)})`);
+        await page.mouse.click(modalCheck.b1.x, modalCheck.b1.y);
+        await page.waitForFunction(() => document.querySelector('#progressText').textContent === '0 / 5', { timeout: 10000 });
 
         assert.deepEqual(errors, [], `不应有页面或控制台错误: ${errors.join('; ')}`);
     } finally {

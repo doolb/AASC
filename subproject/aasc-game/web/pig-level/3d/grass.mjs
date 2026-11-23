@@ -1,11 +1,20 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261122o';
-import { groundHeight } from './geometry.mjs?v=20261122o';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261122o';
+import { seededRandom } from './presets.mjs?v=20261123c';
+import { groundHeight } from './geometry.mjs?v=20261123c';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261123c';
 
 const INTERACT_SIZE = 256;
 const WORLD_SPAN = 48; // 交互贴图覆盖 [-24, 24] 世界区间
+const DESKTOP_GRASS_COUNTS = { high: 140000, medium: 36000, low: 22000 };
+const MOBILE_GRASS_COUNTS = { high: 36000, medium: 22000, low: 12000 };
+
+// 按设备类型、性能档位与软光栅标记计算草叶数量（手机端每档较桌面端往下降一档）
+export function grassCountForTier(tier = 'high', isMobile = false, isSoftware = false) {
+    if (isSoftware) return 1500;
+    const table = isMobile ? MOBILE_GRASS_COUNTS : DESKTOP_GRASS_COUNTS;
+    return table[tier] || table.high;
+}
 
 // 构建 5 段渐细弯折草叶几何体（参考 Painted Valley 清晰可见的水粉刷痕草叶宽度）。
 function createBladeGeometry() {
@@ -34,7 +43,8 @@ function createBladeGeometry() {
 }
 
 export function createGrass(scene, textures, level, tier = 'high', isSoftware = false) {
-    const maxBlades = isSoftware ? 1500 : tier === 'high' ? 140000 : tier === 'medium' ? 36000 : 22000;
+    const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+    const maxBlades = grassCountForTier(tier, isMobile, isSoftware);
     const cols = level.columns;
     const rows = level.rows;
     const halfW = cols / 2;
@@ -345,9 +355,9 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
         stamp,
         update,
         setTierCount(nextTier) {
-            const count = nextTier === 'high' ? maxBlades : nextTier === 'medium' ? Math.min(maxBlades, 36000) : Math.min(maxBlades, 22000);
-            mesh.count = count;
+            mesh.count = Math.min(maxBlades, grassCountForTier(nextTier, isMobile, isSoftware));
         },
+        getCount: () => mesh.count,
         dispose() {
             scene.remove(mesh);
             bladeGeo.dispose();

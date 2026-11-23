@@ -399,6 +399,8 @@ input[type=range]:disabled { opacity: .4; cursor: not-allowed; }
     .progress-labels { font-size: 12px; margin-top: 3px; }
     .footnote { font-size: 11px; line-height: 1.35; }
     .board { border-radius: 12px; }
+    .win-card { max-width: calc(100% - 24px); padding: 22px 20px; }
+    .win-card button { margin: 4px; }
 }
 
 /* 矮竖屏（如 360x640）继续收敛边距，确保一屏内同时给足棋盘展示空间。 */
