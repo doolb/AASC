@@ -1,12 +1,14 @@
 import * as scene from './scene.mjs';
 import {sheet,bounds,corners,fold,cut,snapIndex} from './fold.mjs';
-import {adjustedCurl,heldFaces,validHeldFold,flattenHeldFold} from './held-fold.mjs';
+import {adjustedCurl,heldFaces,validHeldFold,flattenHeldFold,precreaseFold,cancelHeldFold} from './held-fold.mjs';
 import {recordCreases,validPaperTopology,paperThickness,PAPER_THICKNESS,validThickness,LAYER_SPACING_VERSION,pointOnFace} from './paper-topology.mjs';
 import {safeTurnCrease,resizedPaper,migratedLayerSpacing} from './paper-contact.mjs';
 import {separationPick,sameCreaseAxis,orbitPoint,closestOrbitAngle} from './separate.mjs';
+import {createPairControls} from './pair-controls.mjs';
 import {sound,unlock,paperSound} from './sound.mjs';
 const $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
 const storageKey='gami.desks.v1';
+let pairControls=null;
 let saves=JSON.parse(localStorage.getItem(storageKey)||'[]'),desk,id,tool='fold',selected=[],target=null,preview=null,previewLayers=null,candidate=null,gesture=null,history=[],timer,err='';
 const current=()=>desk?.items.find(p=>p.id===id);
 const safe=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,29 +29,40 @@ let snappedIndex=-1,snapAnchor=null,separateAxis=null;
 function reset(){snappedIndex=-1;snapAnchor=null;selected=[];target=null;preview=null;previewLayers=null;candidate=null;err=''}
 function grid(){const r=$('rows').valueAsNumber,c=$('cols').valueAsNumber;return Number.isInteger(r)&&Number.isInteger(c)&&r>0&&c>0&&r*c>=2&&r*c<=64?[r,c]:null}
 const isHand=()=>$('foldType').value==='hand';
+const isPrecrease=()=>$('foldMode').value==='precrease';
 function render(){
   const item=current(),g=grid();
   const percent=Number(((item?paperThickness(item):PAPER_THICKNESS)*50).toPrecision(12));
-  for(const key of ['thickness','thicknessValue']){$(key).value=percent;$(key).disabled=!item||!!gesture}
-  if(item?.heldFold)$('foldType').value='hand';
+  for(const key of ['thickness','thicknessValue']){$(key).value=percent;$(key).disabled=!item||!!gesture||!!pairControls?.busy}
+  if(item?.heldFold){$('foldType').value='hand';$('foldMode').value=item.heldFold.mode||'fold'}
+  $('foldMode').disabled=!!item?.heldFold||!!gesture||!!pairControls?.busy;
+  $('angleLabel').hidden=isHand()||isPrecrease();
+  $('cancelFold').hidden=!item?.heldFold&&!preview&&!pairControls?.hasPreview;
+  $('flatten').textContent=isPrecrease()?'生成折痕并还原':'压平';
+  $('commit').textContent=isPrecrease()?'生成折痕并还原':'确认折叠';
+  $('pairMode').disabled=!!item?.heldFold||!!item?.placed;
+  $('pairMode').setAttribute('aria-pressed',String(!!pairControls?.enabled));
+  $('pairHint').textContent=pairControls?.enabled?'先选固定角，再拖另一层角；触屏双指抓编号角点':'拖动点或边展开 · 点折痕选择展开轴';
   $('foldType').disabled=!!item?.heldFold;
   for(const key of ['fold','separate','cut','place'])$(key+'Tools').hidden=tool!==key;
   document.querySelectorAll('[data-tool]').forEach(b=>{b.classList.toggle('on',b.dataset.tool===tool);b.setAttribute('aria-pressed',String(b.dataset.tool===tool))});
   $('undo').disabled=!history.length;$('commit').disabled=!preview;
   $('center').disabled=!selected.length||item?.placed;
-  $('slice').disabled=!g||item?.placed||item?.folded||!!item?.heldFold;$('place').disabled=!item||item.placed||!!item.heldFold;
+  $('slice').disabled=!g||item?.placed||item?.folded||!!item?.creases?.length||!!item?.heldFold;$('place').disabled=!item||item.placed||!!item.heldFold;
   $('rotate').disabled=!item?.placed;
-  for(const k of ['angleLabel','center','commit'])$(k).hidden=isHand();
+  for(const k of ['center','commit'])$(k).hidden=isHand();
   $('flatten').hidden=!isHand()||!item?.heldFold;$('flatten').disabled=!item?.heldFold;
   const hints={fold:{hand:item?.heldFold?'拖动纸上的点或边继续调整，点「压平」留下折痕。拖空白处环视。':'拖动点或边折纸；拖动已有折痕可展开。松手保持形状，拖空白处环视。',corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
     separate:item?.heldFold?'请先在「折叠」中压平，留下折痕后再分开。':item?.creases?.length?'抓住角点或边拉开纸瓣，回拖可收回，松手保持角度。拖空白处环视。':'这张纸还没有折痕，请先折叠并压平。',
-    cut:item?.folded?'请选择尚未折叠的纸片。':g?'预览 '+g[0]+' × '+g[1]+'，共 '+g[0]*g[1]+' 片。':'请输入正整数，共 2 至 64 片。',
+    cut:item?.folded||item?.creases?.length?'请选择尚未折叠或预折痕的原纸。':g?'预览 '+g[0]+' × '+g[1]+'，共 '+g[0]*g[1]+' 片。':'请输入正整数，共 2 至 64 片。',
     place:'选中纸片后加入陈列；拖动成品可调整位置。拖空白处环视。'};
+  if(tool==='fold'&&isPrecrease())hints.fold=item?.heldFold?'确认生成折痕并还原；取消弯折则不留痕。':'拖动点或边对齐，确认后留痕并还原起折前纸形。';
   $('hint').textContent=err||(item?.placed&&tool!=='place'?'已摆放的作品，可切换摆放工具移动或旋转。':hints[tool]);
   if(snappedIndex>=0&&!err)$('hint').textContent='已吸附角点 · 拖远可解除';
   scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?(snapAnchor||{point:target}):null,previewLayers,separateAxis,gesture?.separating?gesture.side:null);
 }
 function enter(d){
+  pairControls?.setEnabled(false);$('foldMode').value='fold';
   desk=structuredClone(d);id=desk.active||desk.items[0].id;history=[];reset();separateAxis=null;tool='fold';
   let migrated=false,warning='';
   desk.items=desk.items.map(item=>{
@@ -60,6 +73,7 @@ function enter(d){
   if(migrated)save();if(warning)say(warning);
 }
 function home(){
+  pairControls?.setEnabled(false);
   if(gesture)finishGesture({type:'pointercancel',pointerId:gesture.pid});
   $('studio').hidden=true;$('home').hidden=false;scene.mode(true);$('resume').disabled=!saves.length;
   $('last').textContent=saves.length?saves[0].name:'暂无存档';
@@ -69,7 +83,7 @@ $('homeBtn').onclick=home;$('resume').onclick=()=>enter(saves[0]);
 // 滑动仅同步输入，确认时才计算厚度过渡并保存一次，避免拖动期间反复求解接触。
 function changeThickness(value){
   const item=current();if(!item)return;
-  if(gesture){say('请先结束当前拖动，再调整厚度');render();return}
+  if(gesture||pairControls?.busy){say('请先结束当前拖动，再调整厚度');render();return}
   const thickness=Number(value)/50;
   if(thickness===paperThickness(item)){render();return}
   try{
@@ -133,32 +147,51 @@ function makePreview(curl=0){
   preview=null;previewLayers=null;candidate=null;err='';if(!selected.length||!target)return;
   const {starts,dest}=foldEndpoints();
   const item=current();
-  const angle=isHand()?(gesture?.angle||180*scene.facingSign()):+$('angle').value;
+  const angle=isHand()?(gesture?.angle||180*scene.facingSign()):isPrecrease()?180:+$('angle').value;
   try{
     preview=fold(item.faces,starts,dest,angle,curl);
     if(!validPaperTopology({...item,faces:preview,layers:undefined}))throw Error('纸面分区过多，请减少折叠次数');
-    if(isHand())candidate={starts,dest,angle,curl,kind:gesture.kind,index:selected[0],...(gesture.pick?{pick:gesture.pick}:{}),...(gesture.material?{material:gesture.material}:{}),...(gesture.other?{other:gesture.other}:{}),...(snappedIndex>=0?{snapped:true,...(snapAnchor?.uv?{snapTarget:snapAnchor.uv}:{})}:{})};
+    if(isHand())candidate={starts,dest,angle,curl,...(isPrecrease()?{mode:'precrease'}:{}),kind:gesture.kind,index:selected[0],...(gesture.pick?{pick:gesture.pick}:{}),...(gesture.material?{material:gesture.material}:{}),...(gesture.other?{other:gesture.other}:{}),...(snappedIndex>=0?{snapped:true,...(snapAnchor?.uv?{snapTarget:snapAnchor.uv}:{})}:{})};
   }catch(e){preview=null;err=e.message}
 }
 $('center').onclick=()=>{snappedIndex=-1;const [a,b,c,d]=bounds(current().faces);target=[(a+c)/2,(b+d)/2];makePreview();render()};
 $('angle').oninput=()=>{$('degrees').textContent=$('angle').value+'°';makePreview();render();paperSound('drag')};
 $('foldType').onchange=()=>{reset();render()};
+$('foldMode').onchange=()=>{reset();render()};
 function commitFold(){
   if(!preview)return;
   const item=current(),{starts,dest}=foldEndpoints(),next=structuredClone(item);
-  try{if(Math.abs(+$('angle').value)===180)recordCreases(next,starts,dest)}catch(e){say(e.message);return}
-  // 先记录旧状态，再一次性写入面片和折痕；失败时不产生半次折叠。
-  remember();if(next.creases)item.creases=next.creases;
-  item.faces=preview;delete item.layers;delete item.layerSpacingVersion;item.folded=true;paperSound('fold');savedAction();
+  try{
+    if(isPrecrease())precreaseFold(next,starts,dest);
+    else{
+      if(Math.abs(+$('angle').value)===180)recordCreases(next,starts,dest);
+      next.faces=preview;delete next.layers;delete next.layerSpacingVersion;next.folded=true;
+    }
+  }catch(e){say(e.message);return}
+  // 候选全部校验后一次替换；预折痕的原层位移不能被普通压平清理逻辑删除。
+  remember();desk.items[desk.items.indexOf(item)]=next;paperSound('fold');savedAction();
 }
 $('commit').onclick=commitFold;
 $('flatten').onclick=()=>{
   const item=current();if(!item?.heldFold)return;
   const next=structuredClone(item);
-  try{flattenHeldFold(next)}catch(e){say(e.message);return}
-  remember();Object.assign(item,next);delete item.heldFold;delete item.layers;delete item.layerSpacingVersion;paperSound('fold');savedAction();
+  try{if(isPrecrease())precreaseFold(next,next.heldFold.starts,next.heldFold.dest);else flattenHeldFold(next)}catch(e){say(e.message);return}
+  remember();desk.items[desk.items.indexOf(item)]=next;paperSound('fold');savedAction();
+};
+// 先解除手势身份，再释放捕获；迟到的 pointerup/lostpointercapture 不得重新保存预览。
+$('cancelFold').onclick=()=>{
+  const g=gesture;gesture=null;
+  for(const pid of [g?.pid,g?.second])if(pid!==undefined&&$('view').hasPointerCapture(pid))$('view').releasePointerCapture(pid);
+  pairControls?.reset();const item=current();
+  if(item?.heldFold){remember();cancelHeldFold(item);save()}
+  reset();render();
+};
+$('pairMode').onclick=()=>{
+  if(gesture)finishGesture({type:'pointercancel',pointerId:gesture.pid});
+  reset();pairControls.setEnabled(!pairControls.enabled);render();
 };
 document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{
+  pairControls?.setEnabled(false);
   if(gesture)finishGesture({type:'pointercancel',pointerId:gesture.pid});
   tool=b.dataset.tool;separateAxis=null;reset();render();
 });
@@ -166,13 +199,13 @@ for(const k of ['rows','cols'])$(k).oninput=()=>{if($('link').checked)$(k==='row
 $('link').onchange=()=>{if($('link').checked)$('cols').value=$('rows').value;render()};
 document.querySelectorAll('[data-size]').forEach(b=>b.onclick=()=>{$('rows').value=$('cols').value=b.dataset.size;render()});
 $('slice').onclick=()=>{
-  const item=current();if(!grid()||item.folded||item.placed||item.heldFold)return;
+  const item=current();if(!grid()||item.folded||item.creases?.length||item.placed||item.heldFold)return;
   const pieces=cut(item.faces,...grid()).map(f=>({...item,id:uid(),faces:f}));
   remember();desk.items.splice(desk.items.indexOf(item),1,...pieces);id=pieces[0].id;tool='fold';paperSound('cut');savedAction();
 };
 $('place').onclick=()=>{if(current()?.heldFold)return;remember();current().placed=true;paperSound('place');savedAction()};
 $('rotate').onclick=()=>{remember();current().rot+=Math.PI/12;savedAction()};
-$('undo').onclick=()=>{if(history.length){desk=history.pop();id=desk.active||desk.items[0].id;savedAction()}};
+$('undo').onclick=()=>{pairControls?.reset();if(gesture)finishGesture({type:'pointercancel',pointerId:gesture.pid});if(history.length){desk=history.pop();id=desk.active||desk.items[0].id;savedAction()}};
 function local(item,w){const dx=w[0]-item.x,dy=w[1]-item.y,c=Math.cos(item.rot),s=Math.sin(item.rot);return [dx*c-dy*s,dx*s+dy*c]}
 function nearestIndex(pts,q,edge){
   const distances=pts.map((p,i)=>{
@@ -199,6 +232,7 @@ function beginCrease(item,edge,options,extra={}){
   Object.assign(gesture,{action:'crease',edge,edgeOptions:options,faces:structuredClone(item.faces),layers:item.layers?structuredClone(item.layers):undefined,spacingVersion:item.layers?(item.layerSpacingVersion??0):LAYER_SPACING_VERSION,...extra});
 }
 function beginSeparation(item,e){
+  if(pairControls?.enabled){gesture.action='orbit';return}
   reset();
   if(item.heldFold||item.placed){render();return}
   const {controls,point,edge}=hitPaperControl(item,e);
@@ -236,7 +270,7 @@ function separationAngle(item,g,e){
   return closestOrbitAngle(project,{x:start.x+e.clientX-g.x,y:start.y+e.clientY-g.y},g.safeAngle||0,min,max);
 }
 $('view').onpointerdown=e=>{
-  if($('studio').hidden)return;
+  if($('studio').hidden||pairControls?.busy)return;
   if(gesture){
     if(e.pointerType==='touch'&&gesture.action==='orbit'&&!gesture.second){
       gesture.second=e.pointerId;gesture.secondX=e.clientX;gesture.secondY=e.clientY;
@@ -259,7 +293,7 @@ $('view').onpointerdown=e=>{
   gesture={pid:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,start:hit.world,action:'orbit'};
   if(!hit.id&&(tool==='fold'||tool==='separate')){reset();render()}
   if(!hit.id||!hit.world)return;
-  if(id!==hit.id){id=hit.id;separateAxis=null;reset()}const item=current();
+  if(id!==hit.id){pairControls?.reset();id=hit.id;separateAxis=null;reset()}const item=current();
   gesture.action='select';
   if(tool==='separate'){beginSeparation(item,e);return}
   if(tool==='place'&&item.placed){gesture.action='move';gesture.origin=[item.x,item.y]}
@@ -389,4 +423,14 @@ for(const k of ['music','sfx']){
   const refresh=()=>{$(k).textContent=(k==='music'?'♫ 音乐':'♪ 音效')+(sound[k]?' 开':' 关');$(k).setAttribute('aria-pressed',String(sound[k]))};
   $(k).onclick=()=>{sound[k]=!sound[k];localStorage.setItem('gami.'+k,sound[k]?'on':'off');refresh()};refresh();
 }
+pairControls=createPairControls({
+  getItem:()=>current(),
+  onPreview:(result,axis)=>{preview=result.faces;previewLayers=result.layers;separateAxis=axis;render()},
+  onCommit:result=>{
+    const item=current();remember();item.faces=result.faces;item.layers=result.layers;item.layerSpacingVersion=result.layerSpacingVersion;item.folded=true;
+    save();reset();render();
+  },
+  onCancel:()=>{reset();render()},
+  onStatus:message=>{err=message;$('hint').textContent=message;for(const key of ['thickness','thicknessValue'])$(key).disabled=!!gesture||!!pairControls?.busy;$('cancelFold').hidden=!current()?.heldFold&&!preview&&!pairControls?.hasPreview}
+});
 document.addEventListener('pointerdown',unlock,{once:true});document.addEventListener('keydown',unlock,{once:true});home();

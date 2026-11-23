@@ -3,6 +3,8 @@ import {bounds,corners} from './fold.mjs';
 import {heldFaces} from './held-fold.mjs';
 import {buildTopology,clipMaterialSegment,faceNormal,layerDisplacements,pointOnFace,paperThickness} from './paper-topology.mjs';
 import {sameCreaseAxis} from './separate.mjs';
+let overlayUpdate=null;
+export function setOverlayUpdate(update){overlayUpdate=update}
 const scene=new T.Scene(), camera=new T.PerspectiveCamera(38,1,.1,90);
 const renderer=new T.WebGLRenderer({canvas:document.querySelector('#view'),antialias:true});
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
@@ -151,6 +153,7 @@ export function draw(){
     object.position.copy(anchor.center).addScaledVector(anchor.normal,sign*anchor.halfThickness);
   });
   renderer.render(scene,camera);
+  overlayUpdate?.();
 }
 const ray=new T.Raycaster(),plane=new T.Plane(vec(0,1,0),0);
 export function pointer(e,height=0){
@@ -207,7 +210,7 @@ export function projectedCorner(item,p){
   return coordinateProjection(group,item,group.userData.faces,p,group.userData.offsets);
 }
 // 将材料坐标映射到当前纸层，通过射线深度过滤被其它纸层遮挡的点和边。
-export function paperControls(item,faces=item.faces){
+export function paperControls(item,faces=item.faces,includeHidden=false){
   const group=works.children.find(o=>o.userData.id===item.id);
   if(!group)return {points:[],edges:[]};
   const thickness=paperThickness(item),offsets=faces===item.faces&&item.layers?item.layers:layerDisplacements(faces,thickness),topology=buildTopology(item.faces,item.creases),points=[],edges=[];
@@ -218,7 +221,7 @@ export function paperControls(item,faces=item.faces){
     const centerScreen=project(center,k);
     for(const uv of topology.vertices){
       const point=pointOnFace(face,uv);if(!point)continue;
-      const screen=project(point,k);if(screen.visible)points.push({uv,point,screen,face:k});
+      const screen=project(point,k);if(screen.visible||includeHidden)points.push({uv,point,screen,face:k});
     }
     for(const edge of topology.edges){
       const clipped=clipMaterialSegment(face,edge.a,edge.b);if(!clipped)continue;
@@ -312,19 +315,20 @@ export function show(desk,id,preview,selection,grid,tool,snapped,previewLayers,s
       indicator.position.fromArray(anchor.local);indicator.renderOrder=3;group.add(indicator);
       }
     }
-    if(item.placed||preview||item.heldFold)continue;
+    if(item.placed)continue;
     const points=corners(item.faces), level=.037+faces.length*.001;
-    if(tool==='cut'&&grid){
+    if(tool==='cut'&&grid&&!preview&&!item.heldFold){
       const [a,b,c,d]=bounds(faces),[rows,cols]=grid;
       for(let k=1;k<rows;k++){const y=b+(d-b)*k/rows;line(group,vec(a,level,y),vec(c,level,y),0x4c5d4e)}
       for(let k=1;k<cols;k++){const x=a+(c-a)*k/cols;line(group,vec(x,level,b),vec(x,level,d),0x4c5d4e)}
     }
     if(tool==='fold'||tool==='separate'){
-      const topology=buildTopology(faces,item.creases),seen=new Set();
+      // 控制点来自真实材料拓扑，弯曲条带只参与表面定位。
+      const topology=buildTopology(item.faces,item.creases),seen=new Set();
       faces.forEach((face,k)=>topology.vertices.forEach(uv=>{
         const p=pointOnFace(face,uv);if(!p)return;
         const center=paperPosition(p,offsets[k]),id=center.toArray().map(n=>Math.round(n*1e6)).join(',');if(seen.has(id))return;seen.add(id);
-        const marker=new T.Mesh(new T.SphereGeometry(.032,12,8),mat(tool==='separate'?0xa5ece1:0xffedb2));marker.material.depthTest=true;marker.userData.id=item.id;marker.userData.corner={center,normal:paperNormal(face),halfThickness:thickness/2};marker.position.copy(center);group.add(marker);
+        const marker=new T.Mesh(new T.SphereGeometry(.032,12,8),mat(tool==='separate'?0xa5ece1:0xffedb2));marker.material.depthTest=true;marker.userData.id=item.id;marker.userData.uv=uv;marker.userData.corner={center,normal:paperNormal(face),halfThickness:thickness/2};marker.position.copy(center);group.add(marker);
       }));
     }
   }

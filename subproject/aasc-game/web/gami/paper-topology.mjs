@@ -44,7 +44,15 @@ export function recordCreases(item,starts,target){
   const existing=item.creases||[],next=[...existing],seen=new Set(existing.map(([a,b])=>[key(a),key(b)].sort().join('|')));
   for(const crease of foldCreases(item.faces,starts,target)){
     const id=crease.map(key).sort().join('|');
-    if(!seen.has(id)){next.push(crease);seen.add(id)}
+    // 交点细分后的短线可能已被原长折痕覆盖，按共线区间并集去重。
+    const [a,b]=crease,delta=sub(b,a),length2=delta[0]**2+delta[1]**2;
+    const intervals=next.filter(([p,q])=>Math.abs(cross(delta,sub(p,a)))<EPS*Math.sqrt(length2)&&Math.abs(cross(delta,sub(q,a)))<EPS*Math.sqrt(length2)).map(([p,q])=>{
+      const parameter=v=>((v[0]-a[0])*delta[0]+(v[1]-a[1])*delta[1])/length2;
+      return [parameter(p),parameter(q)].sort((x,y)=>x-y);
+    }).sort((p,q)=>p[0]-q[0]);
+    let end=0;
+    for(const [from,to] of intervals){if(from>end+EPS)break;end=Math.max(end,to)}
+    if(!seen.has(id)&&end<1-EPS){next.push(crease);seen.add(id)}
   }
   if(next.length>128)throw Error('折痕过多，请减少此纸的折叠次数');
   item.creases=next;

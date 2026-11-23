@@ -49,3 +49,13 @@ export function closestOrbitAngle(project,target,previous,min=-180,max=180){
   }
   return result;
 }
+
+// 两个控制点必须属于同一贯通折轴的相对两侧，不能仅凭屏幕重叠认定对应关系。
+export function separationPair(item,first,second,preferred){
+  if(first.face===second.face||Math.hypot(...first.uv.map((v,i)=>v-second.uv[i]))<EPS)return null;
+  const topology=buildTopology(item.faces,item.creases),a=item.faces[first.face],b=item.faces[second.face];
+  if(!a||!b)return null;
+  const axes=topology.edges.filter(edge=>edge.crease&&pointOnFace(a,edge.a)&&pointOnFace(a,edge.b)&&pointOnFace(b,edge.a)&&pointOnFace(b,edge.b)&&signedDistance(edge,first.uv)*signedDistance(edge,second.uv)<-EPS);
+  const edge=axes.find(edge=>sameCreaseAxis(edge,preferred))||axes[0];
+  return edge?{edge,side:Math.sign(signedDistance(edge,second.uv))}:null;
+}

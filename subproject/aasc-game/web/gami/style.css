@@ -5,3 +5,6 @@
 
 /* 五个工具在窄屏保持同排，分开提示允许换行，避免横向溢出遮住纸角。 */
 #separateTools{font-size:13px;color:#35665e}.tabs{flex-wrap:wrap}@media(max-width:430px){#panel{padding:10px 12px}.tabs{gap:4px}#panel .tabs button{flex:1;padding:6px 8px;white-space:nowrap}}
+
+/* 成对控制柄明确显示纸层身份，重叠点错位选择；连接线指回真实材料点。 */
+#pairHandles{position:fixed;inset:0;pointer-events:none;z-index:2}#pairHandles button{position:absolute;width:34px;height:34px;transform:translate(-50%,-50%);border:2px solid #35665e;border-radius:50%;background:#f5efe1;color:#294c43;pointer-events:auto;touch-action:none;font-weight:bold;padding:0}#pairHandles button.pinned{background:#294c43;color:white}#pairHandles .pairLine{position:absolute;height:1px;background:#35665e;transform-origin:0 0}#pairHandles button:disabled{pointer-events:none;opacity:.35}#panel{z-index:3}#cancelFold{position:absolute;top:116px;left:18px;z-index:3;border:1px solid #bdb5a4;background:var(--paper);border-radius:4px;padding:6px 12px;box-shadow:0 3px 12px #3c302f20}#foldTools{max-width:680px}#pairMode[aria-pressed=true]{background:var(--ink);color:white}

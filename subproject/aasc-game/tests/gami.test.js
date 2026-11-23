@@ -264,7 +264,7 @@ test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继�
   t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve)}));
   const display=process.env.DISPLAY||':0';
   const xauth=process.env.XAUTHORITY||fs.readdirSync('/tmp').filter(name=>name.startsWith('xauth_')).map(name=>path.join('/tmp',name)).find(file=>fs.existsSync(file))||path.join(process.env.HOME||'/home/as','.Xauthority');
-  const browser=await puppeteer.launch({executablePath:chromium,headless:false,timeout:15000,env:{...process.env,DISPLAY:display,XAUTHORITY:xauth},args:['--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--no-proxy-server']});
+  const browser=await puppeteer.launch({executablePath:chromium,headless:false,timeout:120000,env:{...process.env,DISPLAY:display,XAUTHORITY:xauth},args:['--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--no-proxy-server']});
   t.after(()=>browser.close());
   const page=await browser.newPage();await page.setViewport({width:1000,height:720});
   page.setDefaultNavigationTimeout(120000);
@@ -566,4 +566,135 @@ test('分开抓取轨迹求角支持不同投影、回拖与端点',async()=>{
       assert.ok(Math.abs(previous-angle)<.05,`投影 ${skew} 目标 ${angle} 实际 ${previous}`);
     }
   }
+});
+
+test('预折痕还原原姿态及层次，保留交点并能沿痕再折，取消不留痕',async()=>{
+  const {sheet,fold}=await import('../web/gami/fold.mjs');
+  const {precreaseFold,cancelHeldFold,flattenHeldFold,validHeldFold}=await import('../web/gami/held-fold.mjs');
+  const {buildTopology,turnCrease,layerDisplacements,LAYER_SPACING_VERSION,pointOnFace}=await import('../web/gami/paper-topology.mjs');
+  const original={faces:sheet(),x:2,y:-1,rot:.7,thickness:.008,folded:false,creases:[]};
+  const item=structuredClone(original);
+  precreaseFold(item,[[-1,0]],[1,0]);precreaseFold(item,[[0,-1]],[0,1]);
+  assert.deepEqual([item.x,item.y,item.rot,item.folded],[2,-1,.7,false]);
+  assert.ok(item.faces.flat().every(p=>p[0]===p[3]*2-1&&p[1]===p[4]*2-1&&p[2]===0));
+  assert.ok(buildTopology(item.faces,item.creases).vertices.some(p=>p[0]===.5&&p[1]===.5));
+  const axis=buildTopology(item.faces,item.creases).edges.find(e=>e.crease&&e.a[0]===.5&&e.b[0]===.5);
+  assert.ok(turnCrease(item.faces,axis,1,60).flat().some(p=>Math.abs(p[2])>.5));
+  const creases=structuredClone(item.creases);precreaseFold(item,[[-1,0]],[1,0]);assert.deepEqual(item.creases,creases,'重复预折痕不得叠加记录');
+  const layered={...original,faces:fold(sheet(),[[-1,0]],[1,0],180),folded:true};
+  layered.layers=layerDisplacements(layered.faces,.008);layered.layerSpacingVersion=LAYER_SPACING_VERSION;
+  const before=structuredClone(layered);precreaseFold(layered,[[.5,-1]],[.5,1]);
+  layered.faces.forEach((face,i)=>{
+    const uv=face.reduce((v,p)=>v.map((x,k)=>x+p[k+3]/face.length),[0,0]);
+    const source=before.faces.findIndex(f=>pointOnFace(f,uv));assert.deepEqual(layered.layers[i],before.layers[source]);
+    for(const p of face){const q=pointOnFace(before.faces[source],[p[3],p[4]]);assert.ok(Math.hypot(...p.slice(0,3).map((v,k)=>v-q[k]))<1e-12)}
+  });
+  const h={starts:[[-1,0]],dest:[1,0],angle:180,curl:.2,kind:'edge',index:0,mode:'precrease'};
+  const pending={...structuredClone(item),heldFold:h},baseline=structuredClone(item);
+  assert.equal(validHeldFold(pending),true);assert.equal(cancelHeldFold(pending),true);assert.deepEqual(pending,baseline);assert.equal(cancelHeldFold(pending),false);
+  const normal={...structuredClone(original),heldFold:{...h,mode:'fold'}};flattenHeldFold(normal);assert.equal(normal.folded,true);assert.notDeepEqual(normal.faces,item.faces);
+  const invalid=structuredClone(item);assert.throws(()=>precreaseFold(invalid,[[0,0]],[0,0]));assert.deepEqual(invalid,item);
+});
+
+test('双角分开两侧共轴且保持刚性、厚度与折痕，非法同侧角拒绝',async()=>{
+  const {sheet,fold}=await import('../web/gami/fold.mjs');
+  const {foldCreases}=await import('../web/gami/paper-topology.mjs');
+  const {separationPair}=await import('../web/gami/separate.mjs');
+  const {safePairTurn,safeTurnCrease}=await import('../web/gami/paper-contact.mjs');
+  const item={faces:fold(sheet(),[[-1,0]],[1,0],180),creases:foldCreases(sheet(),[[-1,0]],[1,0]),thickness:.008};
+  const first={face:0,uv:[1,0]},second={face:1,uv:[0,0]},pair=separationPair(item,first,second);
+  assert.ok(pair);assert.equal(separationPair(item,first,{face:0,uv:[1,1]}),null);
+  assert.equal(separationPair(item,first,{face:1,uv:[.5,0]}),null);
+  const sign=[1,-1].find(sign=>Math.abs(safeTurnCrease(item.faces,pair.edge,pair.side,0,sign*3,.008).angle)>1);
+  let from=0,result;
+  for(let n=1;n<=12;n++){result=safePairTurn(item,pair.edge,pair.side,from,sign*n*10,-sign*n*5);from=result.angle}
+  assert.ok(Math.abs(from)>100);
+  for(const face of result.faces)for(let i=0;i<face.length;i++)for(let j=i+1;j<face.length;j++){
+    const a=face[i],b=face[j],uvLength=Math.hypot(a[3]-b[3],a[4]-b[4])*2;
+    assert.ok(Math.abs(Math.hypot(...a.slice(0,3).map((v,k)=>v-b[k]))-uvLength)<1e-10,'纸面不可拉伸');
+  }
+  assert.ok(result.faces.every(face=>face.some(p=>Math.abs(p[2])>.2)),'两侧都应离开起始平面');
+  assert.ok(result.layers.every(p=>p.every(Number.isFinite)));
+  assert.deepEqual(item.creases,foldCreases(sheet(),[[-1,0]],[1,0]));
+});
+
+test('浏览器预折痕双模式、弯折角球、整轮取消与双角鼠标触控', {timeout:900000},async(t)=>{
+  if(!process.env.DISPLAY){t.skip('需要指定图形会话 DISPLAY');return}
+  const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
+  const root=path.resolve(__dirname,'../web/gami'),server=http.createServer((req,res)=>{
+    const file=path.resolve(root,new URL(req.url,'http://local').pathname.slice(1)||'index.html');
+    if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return}
+    fs.readFile(file,(error,data)=>{if(error){res.writeHead(404).end();return}res.writeHead(200,{'Content-Type':file.endsWith('.mjs')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}).end(data)});
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve)}));
+  const xauth=process.env.XAUTHORITY||fs.readdirSync('/tmp').filter(n=>n.startsWith('xauth_')).map(n=>path.join('/tmp',n)).find(f=>fs.existsSync(f));
+  const browser=await require('puppeteer-core').launch({executablePath:'/usr/bin/chromium',headless:false,env:{...process.env,...(xauth?{XAUTHORITY:xauth}:{})},args:['--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--no-proxy-server']});
+  t.after(()=>browser.close());const page=await browser.newPage(),errors=[];page.setDefaultNavigationTimeout(120000);page.on('pageerror',e=>errors.push(e.message));
+  await page.setViewport({width:1000,height:760});await page.goto(process.env.GAMI_TEST_URL||'http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});
+  const {sheet,fold}=await import('../web/gami/fold.mjs'),{foldCreases}=await import('../web/gami/paper-topology.mjs');
+  const blank={id:'paper',front:'#668f99',back:'#f5ead3',seed:91,thickness:.008,x:0,y:0,rot:0,placed:false,folded:false,faces:sheet()};
+  const fixture={...blank,folded:true,faces:fold(sheet(),[[-1,0]],[1,0],180),creases:foldCreases(sheet(),[[-1,0]],[1,0])};
+  const dir=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'gami-modes-')),file=path.join(dir,'paper.json');t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const saved=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('gami.desks.v1'))[0].items[0]);
+  const load=async(item)=>{
+    if(await page.$eval('#home',e=>e.hidden))await page.click('#homeBtn');
+    fs.writeFileSync(file,JSON.stringify({id:'modes-test',version:1,name:'双模式验证',active:item.id,items:[item]}));
+    await page.$eval('#content',e=>e.replaceChildren());await (await page.$('#file')).uploadFile(file);
+    await page.waitForSelector('#confirmImport',{visible:true});await page.click('#confirmImport');
+  };
+  const point=uv=>page.evaluate(async({item,uv})=>(await import('./scene.mjs')).projectedMaterialPoint(item,uv),{item:blank,uv});
+  const dragFold=async(to=[1,1])=>{
+    const a=await point([0,0]),b=await point(to);await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move(b.x,b.y,{steps:6});
+  };
+  await load(blank);await dragFold([.65,.65]);
+  await page.screenshot({path:'/tmp/aasc-gami-bending-markers.png'});await page.mouse.up();
+  assert.ok((await saved()).heldFold);assert.equal(await page.$eval('#cancelFold',e=>e.hidden),false);
+  assert.equal(await page.$eval('#foldMode',e=>e.disabled),true);
+  const heldPoint=await point([0,0]);await page.mouse.move(heldPoint.x,heldPoint.y);await page.mouse.down();await page.mouse.move(heldPoint.x+20,heldPoint.y-12,{steps:3});
+  await page.$eval('#cancelFold',e=>e.click());await page.mouse.up();assert.deepEqual(await saved(),blank,'取消整轮弯折并防止迟到松手重新提交');
+  await page.click('#undo');assert.ok((await saved()).heldFold,'取消弯折可撤销');await page.click('#cancelFold');
+  await page.select('#foldMode','precrease');await dragFold();await page.mouse.up();
+  assert.equal((await saved()).heldFold.mode,'precrease');await page.reload({waitUntil:'domcontentloaded'});await page.click('#resume');
+  assert.equal(await page.$eval('#foldMode',e=>e.value),'precrease');assert.equal(await page.$eval('#flatten',e=>e.textContent),'生成折痕并还原');
+  await page.click('#flatten');const pre=await saved();assert.equal(pre.heldFold,undefined);assert.equal(pre.folded,false);assert.ok(pre.creases.length);
+  assert.ok(pre.faces.flat().every(p=>Math.abs(p[0]-(p[3]*2-1))<1e-12&&Math.abs(p[1]-(p[4]*2-1))<1e-12&&p[2]===0));
+  assert.equal(await page.$eval('#cancelFold',e=>e.hidden),true);await page.screenshot({path:'/tmp/aasc-gami-precrease.png'});
+  await page.click('#undo');assert.ok((await saved()).heldFold);await page.click('#cancelFold');assert.deepEqual(await saved(),blank);
+  await page.select('#foldMode','fold');await dragFold();await page.mouse.up();await page.click('#flatten');assert.equal((await saved()).folded,true);
+  // 采用现有导入入口换成对折样纸，以独立验证编号选层而不是复用待测求角代码生成断言。
+  await load(fixture);await page.click('[data-tool=separate]');await page.click('#pairMode');
+  const button=async(face,uv)=>page.$eval(`#pairHandles button[data-face="${face}"][data-uv="${uv.join(',')}"]`,e=>{const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}});
+  const a=await button(0,[1,0]),b=await button(1,[0,0]);assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>=36,'重叠角必须能分别选择');
+  const pairPath=async(first,second,angle,baseAngle=0)=>page.evaluate(async({item,first,second,angle,baseAngle})=>{
+    const scene=await import('./scene.mjs'),{separationPair}=await import('./separate.mjs'),{safeTurnCrease,safePairTurn}=await import('./paper-contact.mjs');
+    const pair=separationPair(item,first,second),sign=[1,-1].find(s=>Math.abs(safeTurnCrease(item.faces,pair.edge,pair.side,0,s*3,item.thickness,item.layers).angle)>1);
+    const origin=[first,second].map(p=>scene.projectedFacePoint(item,p.face,item.faces[p.face].find(v=>v[3]===p.uv[0]&&v[4]===p.uv[1])));
+    const frames=[];let from=0;
+    for(let i=1;i<=12;i++){
+      const r=safePairTurn(item,pair.edge,pair.side,from,sign*angle*i/12,-sign*baseAngle*i/12);from=r.angle;
+      frames.push([first,second].map((p,k)=>{const v=scene.projectedMaterialPoint(item,p.uv,r.faces,r.layers);return {x:v.x-origin[k].x,y:v.y-origin[k].y}}));
+    }
+    return frames;
+  },{item:await saved(),first,second,angle,baseAngle});
+  const first={face:0,uv:[1,0]},second={face:1,uv:[0,0]},pathMouse=await pairPath(first,second,90);
+  await page.mouse.click(a.x,a.y);await page.mouse.move(b.x,b.y);await page.mouse.down();
+  for(const frame of pathMouse)await page.mouse.move(b.x+frame[1].x,b.y+frame[1].y);
+  await page.mouse.up();const opened=await saved();assert.ok(opened.faces.flat().some(p=>Math.abs(p[2])>.5));
+  const fixed=opened.faces.flat().find(p=>p[3]===1&&p[4]===0);assert.ok(Math.abs(fixed[2])<1e-10,'鼠标固定角不得跟着移动');assert.deepEqual(opened.creases,fixture.creases);
+  await page.click('#undo');assert.deepEqual(await saved(),JSON.parse(JSON.stringify(fixture)));
+  const ca=await button(0,[1,0]),cb=await button(1,[0,0]);
+  await page.mouse.click(ca.x,ca.y);await page.mouse.move(cb.x,cb.y);await page.mouse.down();
+  for(const frame of pathMouse.slice(0,6))await page.mouse.move(cb.x+frame[1].x,cb.y+frame[1].y);
+  await page.$eval('#cancelFold',e=>e.click());await page.mouse.up();assert.deepEqual(await saved(),JSON.parse(JSON.stringify(fixture)),'双角取消后迟到松手不得提交');
+  await page.setViewport({width:390,height:844});
+  const cdp=await page.createCDPSession();await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
+  const ta=await button(0,[1,0]),tb=await button(1,[0,0]),pathTouch=await pairPath(first,second,100,50);
+  const touch=async(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points.map((p,i)=>({x:p.x,y:p.y,id:i,radiusX:3,radiusY:3}))});
+  await touch('touchStart',[ta]);await touch('touchStart',[ta,tb]);
+  for(const frame of pathTouch)await touch('touchMove',[{x:ta.x+frame[0].x,y:ta.y+frame[0].y},{x:tb.x+frame[1].x,y:tb.y+frame[1].y}]);
+  await touch('touchEnd',[]);const dual=await saved();
+  assert.ok(dual.faces.every(f=>f.some(p=>Math.abs(p[2])>.2)),'双指对向拉开应使两侧均转动');assert.deepEqual(dual.creases,fixture.creases);
+  await page.screenshot({path:'/tmp/aasc-gami-dual-touch.png'});
+  await page.reload({waitUntil:'domcontentloaded'});await page.click('#resume');assert.deepEqual(await saved(),dual);
+  assert.deepEqual(errors,[]);t.diagnostic('预折痕还原、取消、防迟到提交、模式刷新、鼠标选层固定及双指两侧转动通过');
 });

@@ -1,3 +1,4 @@
+import {orbitPoint} from './separate.mjs';
 import {layerDisplacements,layerPitch,LAYER_SPACING_VERSION,PAPER_THICKNESS,paperThickness,validThickness,pointOnFace,turnCrease} from './paper-topology.mjs';
 
 const EPS=1e-8;
@@ -145,4 +146,11 @@ export function safeTurnCrease(faces,edge,side,from,to,thickness=PAPER_THICKNESS
     previous=candidate;previousLayers=candidateLayers;angle=next;
   }
   return {faces:previous,layers:previousLayers,angle,blocked:false,limited:steps<requestedSteps,layerSpacingVersion:Math.abs(Math.abs(angle)-180)<1e-7?LAYER_SPACING_VERSION:spacingVersion};
+}
+
+// 双手相对开合复用接触扫描，再整体转动固定侧。公共刚性旋转不改变纸层间的相对接触。
+export function safePairTurn(item,edge,side,from,relative,base){
+  const safe=safeTurnCrease(item.faces,edge,side,from,relative,paperThickness(item),item.layers,item.layers?(item.layerSpacingVersion??0):LAYER_SPACING_VERSION);
+  const face=item.faces.find(f=>pointOnFace(f,edge.a)&&pointOnFace(f,edge.b)),a=pointOnFace(face,edge.a),b=pointOnFace(face,edge.b),axis=b.slice(0,3).map((v,i)=>v-a[i]);
+  return {...safe,faces:safe.faces.map(f=>f.map(p=>[...orbitPoint(p.slice(0,3),a,b,base),...p.slice(3)])),layers:safe.layers.map(p=>orbitPoint(p,[0,0,0],axis,base))};
 }
