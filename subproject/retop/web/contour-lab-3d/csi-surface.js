@@ -309,7 +309,11 @@ function untangle(mesh,progress){const m=structuredClone(mesh),D=E.bounds(m).dia
       }return null;
     }
     let queue=[lists.map(()=>0)],seen=new Set(),found=null,attempts=0;for(;attempts<1000&&queue.length;attempts++){queue.sort((a,b)=>a.reduce((sum,v,i)=>sum+lists[i][v].score,0)-b.reduce((sum,v,i)=>sum+lists[i][v].score,0));const index=queue.shift(),plans=lists.map((l,i)=>l[index[i]]),solution=solve(plans);if(solution){found={plans,...solution};break;}for(let i=0;i<index.length;i++)if(index[i]+1<lists[i].length){const next=index.slice();next[i]++;const k=next.join(':');if(!seen.has(k)){seen.add(k);queue.push(next);}}}
-    if(!found)throw Error('当前CSI分区不能在三角面预算内协调纵横面带，请提高上限或调整分区。');
+    if(!found){
+      const error=Error('当前CSI分区不能在三角面预算内协调纵横面带，请提高上限或调整分区。');
+      error.code='CSI_STRIP_BUDGET';
+      throw error;
+    }
     const {plans,M,free}=found,seed=found.x,baseFaces=faceCount(plans,seed);let x=seed.slice(),steps=0;
     // Density is allocated to entire strip families, weighting actual patch
     // area, accumulated CSI turning, and cell aspect. It must not oversample long rims at the expense of
@@ -349,6 +353,18 @@ function untangle(mesh,progress){const m=structuredClone(mesh),D=E.bounds(m).dia
           const e={length,id:logical.id+'/'+part,interfaceId:intf.id,logicalEdge:logical.parentLogical||logical.id,ids,sample,normalAt,curves:cs.map(c=>c.id),types:[...new Set(cs.map(c=>c.type))]};edges.push(e);for(let j=0;j<ids.length-1;j++){const k=key(ids[j],ids[j+1]);if(rawEdges.has(k))throw Error('CSI共享边被重复定义。');rawEdges.set(k,e);}
         }
       }
+    }
+    // CSI 链可能没有覆盖开口边或部分分区交界。使用源网格的实际端点补齐缺失边，
+    // 并让两侧分区共用同一条边，避免因为一段缺边而将整个人物回退成单一区域。
+    for(const [edgeKey,entry] of (options.repairMissingCSIBoundaries?E.topology(source).edges:[])){
+      const adjacent=entry.faces;
+      if(rawEdges.has(edgeKey)||adjacent.length===0)continue;
+      if(adjacent.length===2&&groups[adjacent[0]]===groups[adjacent[1]])continue;
+      const a=entry.a,b=entry.b,start=source.vertices[a],end=source.vertices[b],length=dist(start,end);
+      if(!length)continue;
+      const edge={id:'source-boundary-'+edgeKey,interfaceId:null,logicalEdge:null,ids:[a,b],length,
+        curves:[],types:['I'],sample:t=>({point:lerp(start,end,t)})};
+      edges.push(edge);rawEdges.set(edgeKey,edge);
     }
     // A verified corner is a density landmark on its two incident logical
     // edges. Branch junctions alone do not imply a hard turn.

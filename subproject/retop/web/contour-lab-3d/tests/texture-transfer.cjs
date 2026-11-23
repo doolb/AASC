@@ -1,0 +1,91 @@
+const assert=require('node:assert/strict');
+const E=require('../engine.js')(),T=require('../texture-transfer.js')(E);
+const text='mtllib color.mtl\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nusemtl skin\nf 1/1 2/2 3/3\nf -4/-4 -2/-2 -1/-1\n';
+const mesh=E.parseOBJ(text);
+assert.deepEqual(mesh.sourceUV.indices,[[0,1,2],[0,2,3]]);
+assert.deepEqual(mesh.materialLibraries,['color.mtl']);
+assert.deepEqual(mesh.faceMaterials,['skin','skin']);
+const smoothSource=E.parseOBJ(text.replace('usemtl skin','s 4\nusemtl skin').replace('f -4/-4','s off\nf -4/-4'));
+assert.deepEqual(smoothSource.sourceSmoothingGroups,[4,0]);
+assert.throws(()=>E.parseOBJ(text.replace('1/1 2/2','1/100 2/2')),/UV/);
+const image={width:2,height:2,data:new Uint8ClampedArray([255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255])};
+const out=T.bake(mesh,{mesh,uv:mesh.sourceUV},image,{size:32,padding:2});
+assert.deepEqual(out.surfaceNormals.values,mesh.faces.map(f=>f.map(()=>[0,0,1])));
+const rendered={...mesh,surfaceNormals:out.surfaceNormals};
+assert.deepEqual(E.cornerNormals(rendered),out.surfaceNormals.values);
+const normals=E.parseOBJ(T.materialOBJ({mesh:rendered,uv:mesh.sourceUV},'normals')).sourceNormals;
+assert(normals.vectors.every(n=>Math.abs(n[2]-1)<1e-10));
+// 高模即使 s off，逐角法线也可能包含需要保留的光滑过渡和硬边。
+const fold=E.parseOBJ('v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nvn 0 1 0\ns off\nf 1/1/1 2/2/1 3/3/1\nf 2/2/2 1/1/2 4/3/2\n');
+const restored=T.transferNormals(fold,fold,{normalDetail:1});
+assert.equal(restored.hits,6);assert.equal(restored.misses,0);
+assert.notEqual(restored.groups[0],restored.groups[1]);
+assert(restored.sharpEdges.includes('0:1'));
+// 两张很接近的源面可以有不同朝向。只有同一位置的角法线确实分裂时，人物笼才应出现硬缝。
+const characterFold={...fold,csiReport:{characterTemplate:true}};
+const seamSource={...fold,vertices:[...fold.vertices,fold.vertices[1].slice(),fold.vertices[0].slice()],faces:[[0,1,2],[4,5,3]]};
+assert(T.transferNormals(seamSource,characterFold).sharpEdges.includes('0:1'));
+const separateSource={...seamSource,vertices:seamSource.vertices.map((p,i)=>i>=4?[p[0],p[1]+.001,p[2]]:p)};
+assert(!T.transferNormals(separateSource,characterFold).sharpEdges.includes('0:1'));
+assert.deepEqual(restored.values,[[[0,0,1],[0,0,1],[0,0,1]],[[0,1,0],[0,1,0],[0,1,0]]]);
+const restoredMesh={...fold,surfaceNormals:restored};E.applyAutoSmooth(restoredMesh,180);
+assert.equal(restoredMesh.smoothingReport.partitionSource,'source-normals');
+const restoredRound=E.parseOBJ(T.materialOBJ({mesh:restoredMesh,uv:fold.sourceUV},'fold'));
+assert.notEqual(restoredRound.sourceSmoothingGroups[0],restoredRound.sourceSmoothingGroups[1]);
+assert.deepEqual(E.cornerNormals(restoredRound),restored.values);
+const smoothFold={...fold,sourceNormals:{...fold.sourceNormals,vectors:[[0,Math.SQRT1_2,Math.SQRT1_2],[0,Math.SQRT1_2,Math.SQRT1_2]]}};
+const smoothRestored=T.transferNormals(smoothFold,fold,{normalDetail:1});
+assert.equal(smoothRestored.groups[0],smoothRestored.groups[1]);
+assert(!smoothRestored.sharpEdges.includes('0:1'));
+const softBody={...fold,csiSurfaceCharts:true,csiHardSurfaceGroups:[]};
+const softNormals=T.transferNormals(smoothFold,softBody,{normalDetail:0});
+assert(E.dist(softNormals.values[0][2],[0,Math.SQRT1_2,Math.SQRT1_2])<1e-12,'新 CSI 曲面应恢复源软表面法线');
+const rigidBody={...fold,csiSurfaceCharts:true,csiHardSurfaceGroups:[0],csiPatchGroups:[0,0]};
+const rigidNormals=T.transferNormals(smoothFold,rigidBody,{normalDetail:0});
+assert.deepEqual(rigidNormals.values[0][2],[0,0,1],'硬块面应保留低模主平面法线');
+// 几何转角较缓时，两个面的最近源法线可能不同，光滑边两端仍须逐角一致。
+const shallow=E.parseOBJ('v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 -1 0.4\nvn 0 0 1\nvn 0 0.3713906763541037 0.9284766908852592\ns off\nf 1//1 2//1 3//1\nf 2//2 1//2 4//2\n');
+const shared=T.transferNormals(shallow,shallow,{normalDetail:1});
+assert.equal(shared.groups[0],shared.groups[1]);
+assert.deepEqual(shared.values[0][0],shared.values[1][1]);
+assert.deepEqual(shared.values[0][1],shared.values[1][0]);
+const noUV={...fold};delete noUV.sourceUV;
+const levels=[{label:'无 UV 的低模',mesh:{vertices:fold.vertices,faces:fold.faces}}];
+const sourceFingerprint=E.fingerprint(noUV);
+T.restoreLevels(noUV,levels);
+assert.equal(levels[0].mesh.smoothingReport.partitionSource,'source-normals');
+assert.equal(levels[0].mesh.surfaceNormals.hits,6);
+assert.equal(E.fingerprint(noUV),sourceFingerprint);
+const generated=E.process(E.parseOBJ(E.obj({mesh:E.cube()})),{lowTriangleBudget:100,fitIterations:1});
+assert(generated.levels.slice(2).every(l=>l.mesh.surfaceNormals?.hits>0));
+assert(generated.levels.slice(2).every(l=>l.mesh.smoothingReport.partitionSource==='source-normals'));
+assert.equal(out.report.coverage,1);
+assert.equal(out.report.maximumDistance,0);
+assert(out.data[(8*32+8)*4]>140);
+assert(out.data[(8*32+8)*4+2]<120);
+const file=new Uint8Array(18+12);file[2]=2;file[12]=2;file[14]=2;file[16]=24;file[17]=32;
+file.set([0,0,255,0,255,0,255,0,0,255,255,255],18);
+assert.deepEqual([...T.tga(file.buffer).data], [...image.data]);
+const round=E.parseOBJ(T.materialOBJ({mesh,uv:mesh.sourceUV},'candidate'));
+assert.deepEqual(round.sourceUV,mesh.sourceUV);
+assert.deepEqual(round.materialLibraries,['candidate.mtl']);
+const zip=T.zip({'a.txt':'hello','color.bin':new Uint8Array([1,2,3])});
+assert.equal(new DataView(zip.buffer).getUint32(0,true),0x04034b50);
+assert(T.uvSVG({mesh,uv:mesh.sourceUV}).includes('<polygon points="0,1024 1024,1024 1024,0"'));
+const rebuilt=E.rebuildUV({levels:[{mesh,texture:{data:[]},label:'sample'}]});
+assert.equal(rebuilt.levels[0].texture,undefined);
+// 两块对称布片先独立烘焙。颜色相同才可叠放，换成左右异色后应保留独立坐标。
+const cloth={
+  vertices:[[-2,0,0],[-1,0,0],[-1,1,0],[-2,1,0],[1,0,0],[2,0,0],[2,1,0],[1,1,0]],
+  faces:[[0,1,2,3],[4,5,6,7]]
+};
+const layout={uv:[[.04,.2],[.44,.2],[.44,.8],[.04,.8],[.56,.2],[.96,.2],[.96,.8],[.56,.8]],
+  indices:cloth.faces,parts:[{group:'arm-L',faces:[0]},{group:'arm-R',faces:[1]}],report:{}};
+cloth.sourceUV=layout;
+const solid={width:16,height:16,data:new Uint8ClampedArray(16*16*4).fill(255)};
+const sharedAtlas=T.bake(cloth,{mesh:cloth,uv:layout},solid,{size:64}).targetUV;
+assert.equal(sharedAtlas.report.sharedPairs.length,1);
+assert.deepEqual(E.parseOBJ(T.materialOBJ({mesh:cloth,uv:sharedAtlas},'cloth')).sourceUV.uv,sharedAtlas.uv);
+for(let y=0;y<16;y++)for(let x=8;x<16;x++)solid.data[(16*y+x)*4]=0;
+assert.equal(T.bake(cloth,{mesh:cloth,uv:layout},solid,{size:64}).targetUV,layout);
+console.log('PASS source UV, negative indices, color projection, TGA orientation and material export');

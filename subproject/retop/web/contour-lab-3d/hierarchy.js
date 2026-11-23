@@ -5,6 +5,7 @@ function createContourHierarchy(E){
   const mean=points=>mul(points.reduce((s,p)=>add(s,p),[0,0,0]),1/points.length);
   // 统一按三角化面数（四边面计2个三角面、三角面计1个）统计预算
   const triangleCount=m=>m.faces.reduce((s,f)=>s+f.length-2,0);
+  const midTriangleLimit=options=>Math.min(MAX_TRIANGLES,options.lowTriangleBudget*6*4**(options.midSubdivisions-1));
   function requireQuads(m){if(!m.faces.length||m.faces.some(f=>f.length!==4||new Set(f).size!==4))throw Error('此路径要求真实、非退化四边面。');const a=E.audit(m);if(!a.valid)throw Error('四边网格基础检查失败。');return a;}
   function compatible(a,b){return a.components===b.components&&JSON.stringify(a.euler)===JSON.stringify(b.euler)&&a.boundaryLoops===b.boundaryLoops;}
   function propagateMetadata(m,out,parents){for(const name of ['faceSources','faceKinds','primitiveGroups','smoothingGroups'])if(m[name])out[name]=parents.map(i=>m[name][i]);out.faceParents=parents;return out;}
@@ -22,7 +23,7 @@ function createContourHierarchy(E){
     const triangles=tr.faces.map((f,i)=>{const points=f.map(j=>tr.vertices[j]),lo=[0,1,2].map(k=>Math.min(...points.map(p=>p[k]))),hi=[0,1,2].map(k=>Math.max(...points.map(p=>p[k])));return {points,lo,hi,normal:unit(cross(sub(points[1],points[0]),sub(points[2],points[0]))),face:tr.source[i],component:components[tr.source[i]]};});
     function tree(items){const lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];for(const t of items)for(let k=0;k<3;k++){lo[k]=Math.min(lo[k],t.lo[k]);hi[k]=Math.max(hi[k],t.hi[k]);}if(items.length<=8)return {lo,hi,items};const axis=[0,1,2].sort((a,b)=>hi[b]-lo[b]-hi[a]+lo[a])[0];items.sort((a,b)=>a.lo[axis]+a.hi[axis]-b.lo[axis]-b.hi[axis]);const half=items.length>>1;return {lo,hi,left:tree(items.slice(0,half)),right:tree(items.slice(half))};}const root=tree(triangles),box=(p,n)=>p.reduce((s,x,k)=>s+Math.max(n.lo[k]-x,0,x-n.hi[k])**2,0);
     function closestTriangle(p,a,b,c){const ab=sub(b,a),ac=sub(c,a),ap=sub(p,a),d1=dot(ab,ap),d2=dot(ac,ap);if(d1<=0&&d2<=0)return a;const bp=sub(p,b),d3=dot(ab,bp),d4=dot(ac,bp);if(d3>=0&&d4<=d3)return b;const vc=d1*d4-d3*d2;if(vc<=0&&d1>=0&&d3<=0)return add(a,mul(ab,d1/(d1-d3)));const cp=sub(p,c),d5=dot(ab,cp),d6=dot(ac,cp);if(d6>=0&&d5<=d6)return c;const vb=d5*d2-d1*d6;if(vb<=0&&d2>=0&&d6<=0)return add(a,mul(ac,d2/(d2-d6)));const va=d3*d6-d5*d4;if(va<=0&&d4-d3>=0&&d5-d6>=0)return add(b,mul(sub(c,b),(d4-d3)/(d4-d3+d5-d6)));const denominator=1/(va+vb+vc);return add(a,add(mul(ab,vb*denominator),mul(ac,vc*denominator)));}
-    function closest(p,normal=null,component=null){let best=Infinity,hit=null;const stack=[{n:root,d:box(p,root)}];while(stack.length){const {n,d}=stack.pop();if(d>best)continue;if(n.items){for(const t of n.items){if(component!==null&&t.component!==component||normal&&dot(t.normal,normal)<.12)continue;const point=closestTriangle(p,...t.points),delta=sub(point,p),distance=dot(delta,delta);if(distance<best){best=distance;hit={point,face:t.face,component:t.component,distance:Math.sqrt(distance),normal:t.normal};}}}else{const a={n:n.left,d:box(p,n.left)},b={n:n.right,d:box(p,n.right)};a.d<b.d?stack.push(b,a):stack.push(a,b);}}return hit;}
+    function closest(p,normal=null,component=null,allowFace=null){let best=Infinity,hit=null;const stack=[{n:root,d:box(p,root)}];while(stack.length){const {n,d}=stack.pop();if(d>best)continue;if(n.items){for(const t of n.items){if(component!==null&&t.component!==component||normal&&dot(t.normal,normal)<.12||allowFace&&!allowFace(t.face))continue;const point=closestTriangle(p,...t.points),delta=sub(point,p),distance=dot(delta,delta);if(distance<best){best=distance;hit={point,face:t.face,component:t.component,distance:Math.sqrt(distance),normal:t.normal};}}}else{const a={n:n.left,d:box(p,n.left)},b={n:n.right,d:box(p,n.right)};a.d<b.d?stack.push(b,a):stack.push(a,b);}}return hit;}
     return {closest,components,count,topology,source,scale:E.bounds(source).diagonal};
   }
   function featureData(s,keys){const adjacency=new Map(),segments=[];for(const k of [...new Set(keys)]){const e=s.topology.edges.get(k);if(!e)continue;const segment={key:k,a:s.source.vertices[e.a],b:s.source.vertices[e.b],component:s.components[e.faces[0]],normals:e.faces.map(fi=>s.topology.data[fi].normal)};segments.push(segment);for(const vi of [e.a,e.b]){if(!adjacency.has(vi))adjacency.set(vi,[]);adjacency.get(vi).push(segment);}}const nodes=[];for(const [vi,edges]of adjacency)if(edges.length!==2)nodes.push({point:s.source.vertices[vi],segments:edges,id:vi});return {segments,nodes};}
@@ -67,8 +68,361 @@ function createContourHierarchy(E){
     return {...input,vertices};
   }
   function turboSmooth(input,iterations=1,options={}){requireQuads(input);if(!Number.isInteger(iterations)||iterations<1||iterations>3)throw Error('涡轮平滑级数为1～3。');const parent=E.fingerprint(input),limit=options.limitSurface!==false,boundary=options.boundary??'ALL';if(!['ALL','PRESERVE_CORNERS'].includes(boundary))throw Error('未知的细分边界规则。');let mesh=E.copy(input);for(let i=0;i<iterations;i++)mesh=subdivide(mesh,true,{boundary});if(limit)mesh=limitSurface(mesh,{boundary});mesh.method='涡轮平滑 · Catmull–Clark '+iterations+'级'+(limit?' / 极限曲面':' / 有限级细分');mesh.smoothingGroups=mesh.faces.map(()=>1);mesh.turboReport={method:'Catmull-Clark',iterations,limitSurface:limit,boundarySmooth:boundary,parentFingerprint:parent,parentFaces:input.faces.length,childFaces:mesh.faces.length,projectedToHigh:false};if(E.fingerprint(input)!==parent)throw Error('平滑修改了中模父级。');return mesh;}
+  function creaseChains(cage,topology,groups,shape,proposal,options,sourceRegions,detailKeys){
+    const manual=new Set(options.manualEdges||[]),excluded=new Set(options.excludedEdges||[]),geo=shape.topology;
+    const regions=(proposal.patchGroups||[]).map(g=>sourceRegions.get(g)??g),pairKey=(a,b)=>a<b?`${a}:${b}`:`${b}:${a}`;
+    const byPair=new Map(),explicit=[];
+    for(const k of new Set([...(proposal.rawKeys||[]),...detailKeys,...manual])){
+      const edge=geo.edges.get(k);
+      if(!edge||edge.faces.length!==2||excluded.has(k))continue;
+      const [a,b]=edge.faces,angle=dot(geo.data[a].normal,geo.data[b].normal);
+      const segment={a:shape.source.vertices[edge.a],b:shape.source.vertices[edge.b],angle,manual:manual.has(k)};
+      if(segment.manual)explicit.push(segment);
+      const pair=pairKey(regions[a],regions[b]);
+      if(!byPair.has(pair))byPair.set(pair,[]);
+      byPair.get(pair).push(segment);
+    }
+    const choices=new Map(),hard=Math.cos(32*Math.PI/180);
+    for(const [k,e]of topology.edges){
+      if(e.faces.length!==2)continue;
+      const [i,j]=e.faces,a=cage.vertices[e.a],b=cage.vertices[e.b],center=mul(add(a,b),.5),length=dist(a,b);
+      const angle=dot(topology.data[i].normal,topology.data[j].normal),pair=pairKey(groups[i],groups[j]),direction=unit(sub(b,a));
+      const around=(byPair.get(pair)||[]).concat(explicit),radius=Math.min(shape.scale*.025,length*.7);
+      const matching=around.filter(s=>Math.abs(dot(direction,unit(sub(s.b,s.a))))>.68&&dist(center,onSegment(center,s.a,s.b))<=radius);
+      const strong=matching.some(s=>s.manual),sourceAngle=matching.reduce((v,s)=>Math.min(v,s.angle),1);
+      const doubleEvidence=angle<hard&&sourceAngle<Math.cos(23*Math.PI/180);
+      const mappedHard=angle<Math.cos(18*Math.PI/180)&&sourceAngle<Math.cos(46*Math.PI/180);
+      if(!strong&&!doubleEvidence&&!mappedHard)continue;
+      choices.set(k,{key:k,a:e.a,b:e.b,pair,manual:strong,score:length*(1-angle)*(1+.5*(1-sourceAngle))});
+    }
+    const nearby=new Map();
+    for(const e of choices.values())for(const id of [e.a,e.b]){
+      const k=`${e.pair}/${id}`;
+      if(!nearby.has(k))nearby.set(k,[]);
+      nearby.get(k).push(e);
+    }
+    const chains=[],used=new Set();
+    for(const start of choices.values()){
+      if(used.has(start.key))continue;
+      const edges=[start];used.add(start.key);
+      for(let i=0;i<edges.length;i++)for(const id of [edges[i].a,edges[i].b]){
+        const list=nearby.get(`${edges[i].pair}/${id}`);
+        if(list.length!==2)continue;
+        for(const e of list)if(!used.has(e.key)){edges.push(e);used.add(e.key);}
+      }
+      const manual=edges.some(e=>e.manual),[a,b]=topology.edges.get(start.key).faces;
+      // 同一大面上的自动硬折边需要连续证据，单条手动边仍能独立生成卡线。
+      if(edges.length===1&&!manual&&groups[a]===groups[b])continue;
+      chains.push({edges:edges.map(e=>e.key),manual,score:edges.reduce((sum,e)=>sum+e.score,0)});
+    }
+    return chains.sort((a,b)=>Number(b.manual)-Number(a.manual)||b.score-a.score);
+  }
+
+  function midCage(cage,topology,bands,regular,width,grid){
+    const vertices=cage.vertices.map(p=>p.slice()),faces=[],faceParents=[],faceKinds=[],samples=new Map(),cuts=new Map();
+    const lerp=(a,b,t)=>add(mul(a,1-t),mul(b,t));
+    function sample(a,b,t){
+      const k=key(a,b),station=a<b?t:1-t;
+      if(!samples.has(k))samples.set(k,new Map());
+      const list=samples.get(k),tag=Math.round(station*1e9);
+      if(!list.has(tag)){list.set(tag,{station,id:vertices.length});vertices.push(lerp(cage.vertices[a],cage.vertices[b],t));}
+      return list.get(tag).id;
+    }
+    const inset=(a,b)=>clamp(width/dist(cage.vertices[a],cage.vertices[b]),.022,.24);
+    const byCrease=new Map();
+    for(const band of bands)for(const crease of band.edges){
+      const sides=[];byCrease.set(crease,sides);
+      for(const fi of topology.edges.get(crease).faces){
+        const f=cage.faces[fi],n=f.length,j=f.findIndex((a,i)=>key(a,f[(i+1)%n])===crease);
+        const a=f[j],b=f[(j+1)%n],left=f[(j+n-1)%n],right=f[(j+2)%n];
+        const lt=inset(a,left),rt=inset(b,right);
+        const p=sample(a,left,lt),q=sample(b,right,rt),side=[];
+        if(!cuts.has(fi))cuts.set(fi,[]);
+        cuts.get(fi).push({p,q,side,corner:a});sides.push(side);
+      }
+    }
+    for(const k of regular){const e=topology.edges.get(k);sample(e.a,e.b,.5);}
+    const seamPaths=new Map();
+    for(const [k,list]of samples){const [a,b]=k.split(':').map(Number);seamPaths.set(k,[a,...[...list.values()].sort((x,y)=>x.station-y.station).map(s=>s.id),b]);}
+    const square=[[0,0,0],[1,0,0],[1,1,0],[0,1,0]],triangle=[[0,0,0],[1,0,0],[0,1,0]];
+    const signed=(a,b,p)=>(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);
+    const eps=1e-9;
+    cage.faces.forEach((f,fi)=>{
+      const n=f.length,parameters=n===4?square:triangle,uv=new Map(),border=[],lines=(cuts.get(fi)||[]).slice(),midpoints=[];
+      f.forEach((a,j)=>{
+        const b=f[(j+1)%n],k=key(a,b),origin=parameters[j],destination=parameters[(j+1)%n];
+        uv.set(a,origin);border.push(a);
+        const ordered=[...(samples.get(k)?.values()||[])].sort((x,y)=>(x.station-y.station)*(a<b?1:-1));
+        for(const s of ordered){uv.set(s.id,lerp(origin,destination,a<b?s.station:1-s.station));border.push(s.id);}
+        midpoints[j]=samples.get(k)?.get(5e8)?.id;
+      });
+      const vertexAt=p=>{
+        for(const [id,q]of uv)if(Math.abs(p[0]-q[0])<eps&&Math.abs(p[1]-q[1])<eps)return id;
+        const [u,v]=p,points=f.map(id=>cage.vertices[id]),id=vertices.length;
+        // 以低模的原三角面作为拟合起点，避免较扭的四边面在新采样处改变凹凸方向。
+        const first=n===3||u>=v;
+        const alongU=sub(points[first?1:2],points[first?0:3]),alongV=sub(points[n===3||first?2:3],points[n===3||!first?0:1]);
+        vertices.push(add(points[0],add(mul(alongU,u),mul(alongV,v))));
+        uv.set(id,p);return id;
+      };
+      const emit=(face,kind)=>{faces.push(face);faceParents.push(cage.faceParents[fi]);faceKinds.push(cage.faceKinds?.[fi]==='bevel'?'bevel':kind);};
+      if(n===3&&border.length===6&&!lines.length&&midpoints.every(id=>id!==undefined)){
+        const center=vertexAt([1/3,1/3,0]);
+        for(let j=0;j<3;j++)emit([f[j],midpoints[j],center,midpoints[(j+2)%3]],'surface');
+        return;
+      }
+      if(n===4)for(let j=0;j<2;j++)if(midpoints[j]!==undefined&&midpoints[j+2]!==undefined)lines.push({p:midpoints[j],q:midpoints[j+2]});
+      let cells=[border];
+      // 每条卡线切开当前面域，遇到相交线时共用交点。相邻面共用边缘站位，转角和收线不会产生悬挂点。
+      for(const {p,q}of lines){
+        const a=uv.get(p),b=uv.get(q);
+        cells=cells.flatMap(cell=>{
+          const ds=cell.map(id=>signed(a,b,uv.get(id)));
+          if(!ds.some(d=>d>eps)||!ds.some(d=>d< -eps))return [cell];
+          const left=[],right=[];
+          cell.forEach((id,i)=>{
+            const j=(i+1)%cell.length,d=ds[i],next=ds[j];
+            if(d>=-eps)left.push(id);
+            if(d<=eps)right.push(id);
+            if(d>eps&&next< -eps||d< -eps&&next>eps){
+              const meet=vertexAt(lerp(uv.get(id),uv.get(cell[j]),d/(d-next)));
+              left.push(meet);right.push(meet);
+            }
+          });
+          return [left,right];
+        });
+      }
+      for(const cell of cells){
+        let kind='surface';
+        for(const {p,q,side,corner}of lines){
+          if(!side)continue;
+          const a=uv.get(p),b=uv.get(q);
+          cell.forEach((x,j)=>{
+            const y=cell[(j+1)%cell.length],k=key(x,y);
+            if(Math.abs(signed(a,b,uv.get(x)))<eps&&Math.abs(signed(a,b,uv.get(y)))<eps&&!side.includes(k))side.push(k);
+          });
+          const mid=mean(cell.map(id=>uv.get(id))),sgn=signed(a,b,uv.get(corner));
+          if(signed(a,b,mid)*sgn>eps)kind='bevel';
+        }
+        const coords=cell.map(id=>uv.get(id));
+        if(cell.length<=4&&coords.every((a,i)=>signed(a,coords[(i+1)%cell.length],coords[(i+2)%cell.length])>eps)){emit(cell,kind);continue;}
+        const positions=new Map(coords.map((p,i)=>[p,vertices[cell[i]]]));
+        let tiles;
+        try{tiles=grid.tilePolygon(coords,{contact:()=>null,lift:p=>positions.get(p)});}
+        catch(error){
+          if(error.message!=='无法分解裁切多边形。')throw error;
+          tiles=E.triangulate({vertices:coords,faces:[coords.map((_,i)=>i)]}).faces;
+        }
+        for(const tile of tiles)emit(tile.map(i=>cell[i]),kind);
+      }
+    });
+    const outputBands=bands.map(b=>({...b,creases:b.edges.map(k=>({edge:k,sides:byCrease.get(k)}))}));
+    return {vertices,faces,faceParents,faceKinds,seamPaths,outputBands,supportKeys:[...new Set([...byCrease.values()].flat(2))]};
+  }
+  function splitCSIEdges(current,candidates,limit,blocked){
+    const vertices=current.vertices.map(p=>p.slice()),inserted=new Map(),targets=[];
+    let count=current.faces.length;
+    for(const c of candidates){
+      if(count+c.e.faces.length>limit||c.e.faces.some(i=>blocked.has(i)))continue;
+      inserted.set(c.k,vertices.length);
+      targets.push({id:vertices.length,point:c.point,target:c.target});
+      vertices.push(c.point);
+      count+=c.e.faces.length;
+    }
+    if(!inserted.size)return null;
+    const faces=[],faceParents=[],previousFaces=[];
+    current.faces.forEach((face,fi)=>{
+      const ids=face.map((v,j)=>inserted.get(key(v,face[(j+1)%3]))),n=ids.filter(v=>v!==undefined).length;
+      const emit=f=>{faces.push(f);faceParents.push(current.faceParents[fi]);previousFaces.push(fi);};
+      if(n===0){emit(face);return;}
+      const start=ids.findIndex((v,i)=>v!==undefined&&(n!==2||ids[(i+1)%3]!==undefined));
+      const [a,b,c]=[0,1,2].map(i=>face[(start+i)%3]),[ab,bc,ca]=[0,1,2].map(i=>ids[(start+i)%3]);
+      if(n===1){emit([a,ab,c]);emit([ab,b,c]);return;}
+      if(n===2){emit([a,ab,c]);emit([ab,bc,c]);emit([ab,b,bc]);return;}
+      emit([a,ab,ca]);emit([ab,b,bc]);emit([ca,bc,c]);emit([ab,bc,ca]);
+    });
+    return {baseline:{vertices,faces,faceParents},targets,inserted,previousFaces};
+  }
+  function refineTriangularFallback(source,low,guides,options,grid,progress){
+    const limit=midTriangleLimit(options),parentFingerprint=E.fingerprint(low);
+    const triangles=low.csiContactSources?grid.contactMesh(low):E.triangulate(low);
+    const seed={vertices:triangles.vertices,faces:triangles.faces,faceParents:triangles.faceParents||triangles.source};
+    if(seed.faces.length>limit)throw Error(`中模共享接边需要 ${seed.faces.length} 个三角面，超过上限 ${limit}。`);
+    const inheritedCrossings=low.csiReport?.fallback?grid.intersections(seed):0;
+    const shape=surface(source),lowGroups=low.csiPatchGroups||low.faces.map(()=>0);
+    const originalAudit=E.audit(seed),positions=E.topology(seed),parts=seed.faceParents.map(i=>lowGroups[i]),edgeFlags=new Set(low.csiBoundaryKeys||[]);
+    const sourceRegions=new Map(low.csiReport?.structureGrid?.sourceRegions||[]),sourceGroups=guides.scales[2].proposal.patchGroups;
+    const sourcePatch=sourceGroups.map(g=>sourceRegions.get(g)??g);
+    const retainedEdges=new Set([...positions.edges].flatMap(([k,e])=>{
+      const [a,b]=e.faces,hard=b!==undefined&&dot(positions.data[a].normal,positions.data[b].normal)<.5;
+      return e.faces.length===1||parts[a]!==parts[b]||hard||(!triangles.vertexMap&&edgeFlags.has(k))?[k]:[];
+    }));
+    const parentSeams=new Map([...retainedEdges].map(k=>[k,k.split(':').map(Number)]));
+    let current=seed;
+    progress('中模：沿实际低模分区细化');
+    for(let round=0;round<options.midSubdivisions&&current.faces.length<limit;round++){
+      const topology=E.topology(current),minimumArea=E.bounds(current).diagonal**2*5e-14;
+      // 在混合网格中原先合格的窄三角面可能经切分后退化，保留这类三角面的边。
+      const candidates=[...topology.edges].filter(([,e])=>e.faces.every(i=>topology.data[i].area>minimumArea)).map(([k,e])=>{
+        const a=current.vertices[e.a],b=current.vertices[e.b],point=mul(add(a,b),.5),normal=unit(e.faces.reduce((n,fi)=>add(n,topology.data[fi].normal),[0,0,0]));
+        const fixed=retainedEdges.has(k),parent=lowGroups[current.faceParents[e.faces[0]]];
+        const allow=low.csiPatchGroups?fi=>sourcePatch[fi]===parent:null;
+        const hit=fixed||inheritedCrossings?null:shape.closest(point,normal,null,allow);
+        const length=dist(a,b),error=hit?.distance||0;
+        const target=error>Math.min(.04*shape.scale,.22*length)?point:hit?.point||point;
+        return {k,e,point,target,score:error+length*.075};
+      }).sort((a,b)=>b.score-a.score);
+      const blocked=new Set();
+      let next=null,inserted;
+      for(let attempt=0;attempt<3&&!next;attempt++){
+        const trial=splitCSIEdges(current,candidates,limit,blocked);
+        if(!trial)break;
+        const {baseline,targets,previousFaces}=trial;
+        inserted=trial.inserted;
+        // 只沿原边加接缝站位。分区内部尝试回贴；如果失败，复查不移动原曲面的线性细分。
+        if(!inheritedCrossings){
+          const moved=E.copy(baseline),before=E.topology(baseline);
+          for(const {id,point,target}of targets){
+            moved.vertices[id]=target;
+            if(before.incident[id].some(i=>dot(E.faceData(moved,moved.faces[i]).normal,before.data[i].normal)<.7))moved.vertices[id]=point;
+          }
+          if(E.audit(moved).valid&&!grid.intersections(moved)){next=moved;break;}
+        }
+        if(!E.audit(baseline).valid)break;
+        // 相近面片只撤回发生冲突的站位，其他区域仍可细分。
+        const crosses=inheritedCrossings?0:grid.intersections(baseline,null,(a,b)=>{
+          blocked.add(previousFaces[a]);blocked.add(previousFaces[b]);
+        });
+        if(!crosses)next=baseline;
+      }
+      if(!next)break;
+      current=next;
+      for(const [original,path]of parentSeams){
+        const expanded=path.flatMap((id,i)=>{const v=i?inserted.get(key(path[i-1],id)):undefined;return v===undefined?[id]:[v,id];});
+        parentSeams.set(original,expanded);
+      }
+      retainedEdges.clear();
+      for(const path of parentSeams.values())for(let i=1;i<path.length;i++)retainedEdges.add(key(path[i-1],path[i]));
+    }
+    const parentPatches=current.faceParents.map(i=>lowGroups[i]);
+    const src={...current,faceSources:current.faces.map((_,i)=>i)};
+    const paired=E.matchQuads(src,38,5,(a,b)=>current.faceParents[a]===current.faceParents[b]);
+    const mid=E.audit(paired).valid&&(inheritedCrossings||!grid.intersections(paired))?paired:src;
+    const owners=mid.faceSources.slice();
+    mid.faceParents=owners.map(i=>current.faceParents[i]);
+    mid.faceSources=mid.faceParents.map(i=>low.faceSources?.[i]??i);
+    mid.csiPatchGroups=owners.map(i=>parentPatches[i]);
+    mid.csiBoundaryKeys=[...retainedEdges];
+    mid.method='低模分区内细化 / 保留共享结构线';
+    const midAudit=E.audit(mid),midCrossings=grid.intersections(mid);
+    mid.hierarchy={parentLevel:'low',parentFingerprint,parentPatches:mid.faceParents.map(i=>lowGroups[i]),retainedSeams:Object.fromEntries(parentSeams),detailCuts:[],triangleBudget:limit,
+      intersectionAudit:{inheritedPairs:inheritedCrossings,remainingPairs:midCrossings,linearForInheritedCrossings:inheritedCrossings>0}};
+    // 已有穿插的混合低模仅沿原三角面线性细分，保持父曲面并如实记录穿插。
+    if(!midAudit.valid||!compatible(originalAudit,midAudit)||triangleCount(mid)>limit||(!inheritedCrossings&&midCrossings))throw Error('中模派生未通过低模拓扑、预算或穿插检查。');
+    return mid;
+  }
+  function refineCSI(source,low,guides,options,grid,progress){
+    if(!low.csiPatchGroups)return refineTriangularFallback(source,low,guides,options,grid,progress);
+    const limit=midTriangleLimit(options);
+    const parentFingerprint=E.fingerprint(low),proposal=guides.scales[2].proposal;
+    const cage=low.csiContactSources?grid.contactMesh(low,true):{vertices:low.vertices,faces:low.faces,faceParents:low.faces.map((_,i)=>i)};
+    const topology=E.topology(cage),originalAudit=E.audit(cage),shape=surface(source),groups=cage.faceParents.map(i=>low.csiPatchGroups[i]);
+    const sourceRegions=new Map(low.csiReport?.structureGrid?.sourceRegions||[]),sourceGroups=proposal.patchGroups.map(g=>sourceRegions.get(g)??g);
+    const locked=new Set([...topology.edges].filter(([,e])=>e.faces.length===1||groups[e.faces[0]]!==groups[e.faces[1]]).map(([k])=>k));
+    const width=options.bevelWidth*shape.scale;
+    const chains=width>0?creaseChains(cage,topology,groups,shape,proposal,options,sourceRegions,guides.layers?.detail?.edgeKeys||[]):[];
+    const bands=[],creaseKeys=new Set();
+    const compatibleCage=mesh=>{const a=E.audit(mesh);return a.valid&&compatible(a,originalAudit)&&triangleCount(mesh)<=limit&&!grid.intersections(mesh);};
+    const build=(input,inputTopology,accepted,regular=[])=>{
+      let mesh;
+      try{mesh=midCage(input,inputTopology,accepted,regular,width,grid);}catch(error){
+        if(!String(error.message).includes('无法三角化凹面'))throw error;
+        return null;
+      }
+      return mesh.outputBands.every(b=>b.creases.every(c=>c.sides.every(side=>side.length)))&&compatibleCage(mesh)?mesh:null;
+    };
+    progress('中模：沿低模硬折边预留双侧卡线');
+    let best=build(cage,topology,bands);
+    const supportBudget=triangleCount(cage)+Math.floor((limit-triangleCount(cage))*.4);
+    for(const chain of chains){
+      const trial=build(cage,topology,[...bands,chain]);
+      if(!trial||triangleCount(trial)>supportBudget)continue;
+      bands.push(chain);best=trial;
+      for(const k of chain.edges){creaseKeys.add(k);locked.add(k);}
+    }
+    function regularCage(input,inputTopology,keptBands){
+      const candidates=input.faces.map((face,i)=>({area:inputTopology.data[i].area,keys:face.map((a,j)=>key(a,face[(j+1)%face.length]))})).sort((a,b)=>b.area-a.area);
+      let next=null,lo=1,hi=candidates.length;
+      while(lo<=hi){
+        const count=Math.floor((lo+hi)/2),selected=new Set(candidates.slice(0,count).flatMap(f=>f.keys)),trial=build(input,inputTopology,keptBands,selected);
+        if(trial){next=trial;lo=count+1;}else hi=count-1;
+      }
+      return next;
+    }
+    best=regularCage(cage,topology,bands)||best;
+    if(!best)return refineTriangularFallback(source,low,guides,options,grid,progress);
+    const retainedSeams=Object.fromEntries([...locked].map(k=>[k,best.seamPaths.get(k)||k.split(':').map(Number)]));
+    for(let round=0;round<options.midSubdivisions&&triangleCount(best)+2<=limit;round++){
+      const next=regularCage(best,E.topology(best),[]);
+      if(!next||triangleCount(next)<=triangleCount(best))break;
+      const expand=path=>path.flatMap((id,i)=>{
+        if(!i)return [id];
+        const segment=next.seamPaths.get(key(path[i-1],id));
+        return segment?[...segment.slice(1,-1),id]:[id];
+      });
+      for(const [k,path]of Object.entries(retainedSeams))retainedSeams[k]=expand(path);
+      next.outputBands=best.outputBands.map(b=>({...b,creases:b.creases.map(c=>({...c,sides:c.sides.map(side=>side.flatMap(k=>{
+        const path=expand(k.split(':').map(Number));
+        return path.slice(1).map((v,i)=>key(path[i],v));
+      }))}))}));
+      next.supportKeys=[...new Set(next.outputBands.flatMap(b=>b.creases.flatMap(c=>c.sides.flat())))];
+      best=next;
+    }
+    const protectedVertices=new Set([...Object.values(retainedSeams).flat(),...best.supportKeys.flatMap(k=>k.split(':').map(Number))]);
+    progress('中模：同区 CSI 曲面拟合');
+    const network=(typeof createContourCurvatureNetwork==='function'?createContourCurvatureNetwork:require('./curvature-network.js'))(E);
+    const evaluators=new Map((low.csiCurveNetwork?.patches||[]).map(p=>[p.patch,{patch:p,evaluate:network.evaluator(p)}]));
+    const resultTopology=E.topology(best),offsets=new Map();
+    for(let id=cage.vertices.length;id<best.vertices.length;id++){
+      if(protectedVertices.has(id)||!resultTopology.incident[id].length)continue;
+      const point=best.vertices[id],incident=resultTopology.incident[id],group=low.csiPatchGroups[best.faceParents[incident[0]]];
+      const normal=unit(incident.reduce((n,i)=>add(n,resultTopology.data[i].normal),[0,0,0]));
+      const field=evaluators.get(group),uv=field&&network.parameter(field.patch,point);
+      const localStep=Math.sqrt(Math.min(...incident.map(i=>resultTopology.data[i].area))),maximum=Math.min(shape.scale*.008,localStep*.35);
+      let fitted=null;
+      if(uv&&uv.every((u,i)=>u>=0&&u<=field.patch.span[i]))try{fitted=field.evaluate(...uv);}
+      catch(error){if(error.message!=='CSI边界残差延拓退化。')throw error;}
+      const target=fitted&&dist(point,fitted)<=maximum?fitted:shape.closest(point,normal,null,i=>sourceGroups[i]===group)?.point;
+      if(target&&dist(point,target)<=maximum)offsets.set(id,sub(target,point));
+    }
+    let mid=best,fittedVertices=0;
+    const trial=E.copy(best),moved=new Set();
+    for(const [id,delta]of offsets)for(const fraction of [.7,.28]){
+      trial.vertices[id]=add(best.vertices[id],mul(delta,fraction));
+      const safe=resultTopology.incident[id].every(i=>dot(E.faceData(trial,trial.faces[i]).normal,resultTopology.data[i].normal)>.7);
+      if(safe){moved.add(id);break;}
+      trial.vertices[id]=best.vertices[id];
+    }
+    for(let i=0;i<3&&moved.size;i++){
+      const blocked=new Set(),hits=grid.intersections(trial,null,(a,b)=>{
+        for(const id of [...trial.faces[a],...trial.faces[b]])if(moved.has(id))blocked.add(id);
+      });
+      if(!hits&&E.audit(trial).valid){mid=trial;fittedVertices=moved.size;break;}
+      if(!blocked.size)break;
+      for(const id of blocked){trial.vertices[id]=best.vertices[id];moved.delete(id);}
+    }
+    mid.csiPatchGroups=mid.faceParents.map(i=>low.csiPatchGroups[i]);
+    mid.faceSources=mid.faceParents.map(i=>low.faceSources?.[i]??i);
+    mid.csiBoundaryKeys=[...new Set(Object.values(retainedSeams).flatMap(path=>path.slice(1).map((v,i)=>key(path[i],v))))];
+    mid.method='低模 CSI 拟合 / 硬转折双侧支撑带';
+    mid.supportReport={requested:chains.length,beveled:creaseKeys.size,bands:mid.outputBands,widthRelative:options.bevelWidth,deferredForBudget:chains.length-bands.length};
+    mid.hierarchy={parentLevel:'low',parentFingerprint,parentPatches:mid.csiPatchGroups.slice(),retainedSeams,detailCuts:[],triangleBudget:limit,
+      fitReport:{fittedVertices,csiSurfaceRegions:evaluators.size},intersectionAudit:{inheritedPairs:0,remainingPairs:0,linearForInheritedCrossings:false}};
+    delete mid.seamPaths;delete mid.outputBands;
+    return mid;
+  }
   function derive(source,basis,boundary,options={},progress=()=>{}){requireQuads(basis);const s=surface(source),excluded=new Set(options.excludedEdges||[]),manual=options.manualEdges||[],lowKeys=[...new Set([...E.structuralRuns(source,boundary.levels[2].accepted,options.minRun??.035).keys,...manual])].filter(k=>!excluded.has(k)),midKeys=[...new Set([...lowKeys,...E.structuralRuns(source,boundary.levels[3].accepted,options.minRun??.035).keys])].filter(k=>!excluded.has(k)),lowFeatures=featureData(s,lowKeys),midFeatures=featureData(s,midKeys);let low=E.copy(basis);for(let i=0;i<(options.lowSubdivisions??1);i++){progress('低模：继承规则体细分并拟合 '+(i+1));low=fit(subdivide(low,false),s,lowFeatures,options);}low.hierarchy={parentLevel:'far-mid',parentFingerprint:E.fingerprint(basis),refinements:options.lowSubdivisions??1,allQuads:true};let cage=E.copy(low);for(let i=0;i<(options.midSubdivisions??1);i++){progress('中模：继承低模细分并拟合边界 '+(i+1));cage=fit(subdivide(cage,false),s,midFeatures,options);}const mapped=mapFeatures(cage,s,midFeatures),ct=E.topology(cage),manualSet=new Set(manual),supportCandidates=mapped.keys.length,allowed=new Set(mapped.mapping.filter(({cage:k,source})=>{const e=ct.edges.get(k);return manualSet.has(source)||dot(ct.data[e.faces[0]].normal,ct.data[e.faces[1]].normal)<Math.cos(35*Math.PI/180);}).map(p=>p.cage));mapped.keys=mapped.keys.filter(k=>allowed.has(k));mapped.mapping=mapped.mapping.filter(p=>allowed.has(p.cage));progress('中模：生成真实卡线与四边过渡');const supportOrder=mapped.mapping.slice().sort((a,b)=>{const ma=manualSet.has(a.source),mb=manualSet.has(b.source);if(ma!==mb)return mb-ma;const ea=ct.edges.get(a.cage),eb=ct.edges.get(b.cage);return dot(ct.data[ea.faces[0]].normal,ct.data[ea.faces[1]].normal)-dot(ct.data[eb.faces[0]].normal,ct.data[eb.faces[1]].normal);}),mandatory=supportOrder.filter(p=>manualSet.has(p.source)).length,supportBudget=Math.min(Math.floor(MAX_TRIANGLES/4**(options.turboIterations??1)),Math.max(triangleCount(cage)*2,Math.round(E.audit(source).triangles*.9)));let mid=supportBands(cage,supportOrder.map(p=>p.cage),options.bevelWidth??.004,Math.floor(supportBudget),mandatory);mid.supportReport={...mid.supportReport,candidateEdges:supportCandidates,automaticTurnThreshold:35};mid.quadConversion={method:'native conforming quad support bands',beforeFaces:cage.faces.length,afterFaces:mid.faces.length};mid.method='低模派生细分 / 边界拟合 / 四边支撑带卡线';mid.hierarchy={parentLevel:'low',parentFingerprint:E.fingerprint(low),refinements:options.midSubdivisions??1,allQuads:true,featureMapping:mapped.mapping,fitReport:cage.fitReport,quadTransition:mid.quadConversion};progress('超近：从卡线中模进行涡轮平滑');const ultra=turboSmooth(mid,options.turboIterations??1,{limitSurface:options.turboLimitSurface,boundary:options.turboBoundary});ultra.hierarchy={parentLevel:'mid',parentFingerprint:E.fingerprint(mid),allQuads:true,refinements:options.turboIterations??1};return {low,mid,ultra};}
-  return {quadify,subdivide,supportBands,turboSmooth,limitSurface,derive,surface,fit,featureData,mapFeatures,requireQuads,MAX_TRIANGLES};
+  return {quadify,subdivide,supportBands,turboSmooth,limitSurface,derive,refineCSI,surface,fit,featureData,mapFeatures,requireQuads,MAX_TRIANGLES};
 }
 if(typeof module!=='undefined')module.exports=createContourHierarchy;
 if(typeof window!=='undefined')window.createContourHierarchy=createContourHierarchy;

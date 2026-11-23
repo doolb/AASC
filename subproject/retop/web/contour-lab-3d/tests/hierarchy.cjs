@@ -14,5 +14,34 @@ test('zero-width support preserves geometry and reports no card edges',()=>{cons
 test('surface fit leaves exact cube corners on the source',()=>{const s=H.surface(cube),m=H.fit(H.subdivide(cube),s,H.featureData(s,[]));assert.deepEqual(m.vertices,H.subdivide(cube).vertices);assert.equal(JSON.stringify(cube),original);});
 test('nearby disconnected shells keep their own fitting components',()=>{const a=E.cube(),b=E.cube();b.vertices=b.vertices.map(p=>[p[0]+.05,p[1],p[2]]);const source={vertices:[...a.vertices,...b.vertices],faces:[...a.faces,...b.faces.map(f=>f.map(i=>i+8))]},s=H.surface(source),m=H.fit(H.subdivide(source),s,H.featureData(s,[]));quad(m);sameTopology(source,m);assert.deepEqual(m.fitReport.usedSourceComponents,[0,1]);});
 test('subdivision is covariant under rotation translation and scale',()=>{const transform=p=>[4+3*(-p[1]),-2+3*p[0],7+3*p[2]],m={vertices:cube.vertices.map(transform),faces:cube.faces.map(f=>f.slice())},a=H.turboSmooth(cube),b=H.turboSmooth(m);assert.deepEqual(a.faces,b.faces);a.vertices.forEach((p,i)=>transform(p).forEach((v,k)=>assert(Math.abs(v-b.vertices[i][k])<1e-12)));});
-test('five-stage pipeline derives children, all-quads and actual ultra smoothing',()=>{const r=E.process(cube,{farMidType:'box',manualEdges:[...E.topology(cube).edges.keys()]});for(const l of r.levels){quad(l.mesh);assert(l.uv);assert(l.allQuads);}assert.equal(r.levels[2].mesh.hierarchy.parentLevel,'middle-csi');assert.equal(r.levels[3].mesh.hierarchy.parentLevel,'legacy-primitive-low');assert.equal(r.levels[3].mesh.hierarchy.csiLowIntegrated,false);assert.equal(r.levels[4].mesh.hierarchy.parentFingerprint,E.fingerprint(r.levels[3].mesh));assert.deepEqual(r.levels[4].mesh.vertices,H.turboSmooth(r.levels[3].mesh).vertices);assert.equal(r.sourceFingerprint,E.fingerprint(cube));assert.equal(JSON.stringify(cube),original);const updated=E.rebuildHierarchy(r,{...r.settings,primitiveDetail:12});assert.deepEqual(updated.boundary,r.boundary);assert.deepEqual(updated.source,r.source);assert.deepEqual(updated.levels[0].mesh,r.levels[0].mesh);assert.throws(()=>E.rebuildHierarchy(r,{fitStrength:.5}));assert.throws(()=>E.process(cube,{turboIterations:0}));});
+test('five-stage pipeline derives children, all-quads and actual ultra smoothing',()=>{
+  const r=E.process(cube,{farMidType:'box',manualEdges:[...E.topology(cube).edges.keys()]});
+  for(const l of r.levels){quad(l.mesh);assert(l.uv);assert(l.allQuads);}
+  const [, ,low,mid,ultra]=r.levels;
+  assert.equal(low.mesh.hierarchy.parentLevel,'middle-csi');
+  assert.equal(mid.mesh.hierarchy.parentLevel,'low');
+  assert.equal(mid.mesh.hierarchy.parentFingerprint,E.fingerprint(low.mesh));
+  assert.equal(ultra.mesh.hierarchy.parentFingerprint,E.fingerprint(mid.mesh));
+  assert.deepEqual(ultra.mesh.vertices,H.turboSmooth(mid.mesh).vertices);
+  assert.equal(r.sourceFingerprint,E.fingerprint(cube));
+  assert.equal(JSON.stringify(cube),original);
+  const updated=E.rebuildHierarchy(r,{...r.settings,primitiveDetail:12});
+  assert.deepEqual(updated.boundary,r.boundary);
+  assert.deepEqual(updated.source,r.source);
+  assert.deepEqual(updated.levels[0].mesh,r.levels[0].mesh);
+  assert.throws(()=>E.rebuildHierarchy(r,{fitStrength:.5}));
+  assert.throws(()=>E.process(cube,{turboIterations:0}));
+});
+test('mixed fallback with inherited crossings keeps its surface during mid refinement',()=>{
+  const grid=require('../structure-grid.js')(E);
+  const other=cube.vertices.map(p=>E.add(p,[.4,.35,.2]));
+  const low={vertices:[...cube.vertices,...other],faces:[...cube.faces,...cube.faces.map(f=>f.map(i=>i+cube.vertices.length))],csiReport:{fallback:true}};
+  const proposal={patchGroups:low.faces.map(()=>0)};
+  const mid=H.refineCSI(low,low,{scales:[null,null,{proposal}]},E.settingsFor({lowTriangleBudget:100}),grid,()=>{});
+  const record=mid.hierarchy.intersectionAudit;
+  assert(record.inheritedPairs>0&&record.remainingPairs>0&&record.linearForInheritedCrossings);
+  assert.equal(mid.hierarchy.parentFingerprint,E.fingerprint(low));
+  assert(E.measure(low,mid).maxRelative<1e-10);
+  assert.deepEqual(E.audit(mid).euler,E.audit(low).euler);
+});
 console.log(cases+' hierarchy cases passed');

@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),E=require('../engine.js')(),C=require('../csi-surface.js')(E);
+const input=E.cube(),result=E.process(input,{lowTriangleBudget:400,manualEdges:[...E.topology(input).edges.keys()]});
+const source=result.analysisSource||E.orient(result.source),proposal=structuredClone(result.guides.scales[2].proposal);
+const index=proposal.interfaces.findIndex(i=>i.edges.length>0);
+assert(index>=0);const removed=proposal.interfaces[index].edges.pop();assert(removed.curves.length);
+delete proposal.surfaceFitting;delete proposal.surfaceMatching;delete proposal.structureGrid;delete proposal.curvatureNetwork;
+const baseline=C.generate(source,proposal,{lowSubdivisions:1,lowTriangleBudget:2000});
+assert.equal(baseline.supported,false);
+assert.equal(baseline.reason,'CSI结构网络未覆盖整个分区边界');
+const repaired=C.generate(source,proposal,{lowSubdivisions:1,lowTriangleBudget:2000,repairMissingCSIBoundaries:true});
+assert(repaired.supported,'缺失的 CSI 边界应由源几何补全，收到：'+repaired.reason);
+assert.equal(new Set(repaired.mesh.csiPatchGroups).size,new Set(proposal.patchGroups).size);
+assert.equal(E.audit(repaired.mesh).boundaryEdges,0);
+console.log('PASS 缺少一条边的 CSI 分区能保持闭合');

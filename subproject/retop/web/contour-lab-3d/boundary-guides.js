@@ -461,6 +461,21 @@ function createContourBoundaryGuides(E){
     }
     for(const e of ends)if(!pairs.has(e.token)&&!used.has(e.token>>1))walk(e.token);curves.forEach((_,i)=>{if(!used.has(i))walk(i*2);});return paths;
   }
+  function budgetInterfaces(mesh,proposal,budget){
+    const byId=new Map(proposal.curves.map(c=>[c.id,c])),corners=new Map(proposal.sourceCorners.map(c=>[c.interfaceId,new Set(c.nodes)]));
+    const localTolerance=new Map(proposal.fittingReport.localTolerances.map(c=>[c.interfaceId,c.tolerance]));
+    // 低预算允许减少平缓支撑段。沿用已确认的角点、闭环接点和共用端点。
+    const relaxation=1+clamp((400-budget)/600,0,.5);
+    return proposal.chains.map((chain,i)=>{
+      const original=proposal.interfaces[i].curves.map(id=>byId.get(id)),points=chain.vertices.map(id=>mesh.vertices[id]);
+      const tolerance=(localTolerance.get(chain.interfaceId)||E.bounds(mesh).diagonal*proposal.tolerance)*relaxation;
+      const fixed=corners.get(chain.interfaceId)||new Set(),cornerIndices=chain.vertices.flatMap((v,i)=>fixed.has(v)?[i]:[]);
+      const fitted=fitInterfaceChain(points,{tolerance,closed:chain.closed,nodeIds:chain.vertices,cornerIndices});
+      const curves=fitted.length<original.length?fitted:original;
+      return {id:chain.interfaceId,regionPair:chain.regionPair,closed:chain.closed,vertices:chain.vertices,edges:chain.edges,
+        anchors:[...new Set([...fixed,chain.vertices[0],chain.vertices.at(-1)])],curves,originalSpans:original.length,tolerance};
+    });
+  }
   function boundaryLayers(mesh,guides,{excludedEdges=[],fitDetails=true}={}){
     const coarse=guides.scales?.[2]?.proposal,near=guides.scales?.[3]?.proposal;
     if(!coarse||coarse.patchGroups?.length!==mesh.faces.length)throw Error('边界分层需要有效的中档结构分区。');
@@ -495,7 +510,86 @@ function createContourBoundaryGuides(E){
       connection.report.endpointsBefore=originalGraph.nodes.filter(n=>n.kind==='endpoint').length;connection.report.endpointsAfter=graph.nodes.filter(n=>n.kind==='endpoint').length;const addedSet=new Set(connection.bridges.flatMap(b=>b.edges));for(const c of curves)c.inferred=c.sourceEdges.some(k=>addedSet.has(k));projectDisplay(mesh,t,curves,D);const paths=assemblePaths(curves),counts={I:0,C:0,S:0},tangents=new Map();for(const s of curves){counts[s.type]++;for(const k of s.sourceEdges){const e=t.edges.get(k),middle=mul(add(mesh.vertices[e.a],mesh.vertices[e.b]),.5);let best=Infinity,time=0;for(let i=0;i<=48;i++){const d=dist(bez(s,i/48),middle);if(d<best){best=d;time=i/48;}}const q=1-time,d=add(add(mul(sub(s.p1,s.p0),q*q),mul(sub(s.p2,s.p1),2*q*time)),mul(sub(s.p3,s.p2),time*time));if(len(d)>EPS)tangents.set(k,unit(d));}}const orientation=field(mesh,keys,t,{...options,tangents,scale:D}),partitionField=options.guideFieldPartition!==false?orientation:null,reconstructed=reconstructNetwork(mesh,t,keys,{scale:D,division:level.division,manualEdges:manual,excludedEdges:[...excluded],field:partitionField,fieldStrength:options.guideFieldStrength??1,sourceCurvature:boundary.curvature,areaRatio:options.areaRatio,curvatureDifference:options.curvatureDifference,curvatureFloor:options.curvatureFloor}),proposal=fitNetwork(mesh,t,reconstructed,{scale:D,tolerance:D*vectorTolerance*[2.5,1.7,1,.7][index],cornerAngle,regularization:regularization*[2,1.5,1,.7][index],field:partitionField,fieldStrength:options.guideFieldStrength??1,manualEdges:manual,cornerMergeDistance:options.guideCornerMergeDistance??.02,localScaleFitting:options.guideBoundaryLocalScale===true,curveFairing:options.guideCurveFairing===true&&index===2,internalSmoothing:index===2?options.internalCSISmoothing??0:0});return {proposal,division:level.division,tolerance:effective,toleranceWorld:D*effective,rawKeys:keys,rawChainCount:originalGraph.chains.length,originalNodes:originalGraph.nodes,fitReference:'source edge chains including explicitly inferred gap routes',processedKeys:connection.keys,bridges:connection.bridges,connection:connection.report,paths,pathCount:paths.length,openBoundaryEdges:open.filter(k=>keys.includes(k)).length,automaticEvidenceEdges:level.accepted.length,manualEdges:manual.filter(k=>keys.includes(k)).length,unknownEdges:level.unknown.length,chains:graph.chains.map(c=>({vertices:c.vertices,edges:c.edges,closed:c.closed})),nodes:graph.nodes,curves,counts,maximumErrorRelative:maximum/D,field:orientation};
     });if(E.fingerprint(mesh)!==signature)throw Error('拟合导线意外修改源模型。');const result={version:7,schema:'contour-lab-3d/boundary-guides',sourceFingerprint:signature,scale:D,scaleDefinition:'twice maximum distance to area-weighted surface centroid',tolerance,cornerAngle,joinGaps:options.guideJoinGaps!==false,joinDistance,scales,regularization,vectorTolerance,fieldPartition:options.guideFieldPartition!==false,fieldStrength:options.guideFieldStrength??1,sourceRule:boundary.rule,method:'source-evidence chains -> aligned on-surface gap hypotheses -> bounded near-planar cubic I/C/S -> continuous stroke paths; connection-aware 4-RoSy orientation preview',surfaceProjected:false,displayProjected:true,geometryModified:false,limitations:['交汇主线在配对明确且拟合误差允许时顺接；方向歧义或超出预算时保留分段，角点在原始边链上锁定。','结构补全为几何推测，参考图只作研发对照，尚未保证完整包边与鳞片语义拓扑。','补全后的解析拟合偏差、规整位移和到规整前边链的采样偏差分别报告；不是高模表面的严格误差上界。','拟合误差为双向采样到扩展边链（含补接候选）的距离，非严格Hausdorff上界。','结构补全按相邻分区对共享整边，只在确认角点拆成逻辑边；同一整线内可用少量G1连续的CSI支撑段，超差如实记录，不添加分区边。闭环仍是同一整线；长段CSI以三维距离记录拟合偏差，局部主平面判别C/S，不强迫空间曲线严格共面；原始证据CSI仍用近似平面；允许少量离开三角面；短断口补接单列为推测，不改变原始识别证据。','方向场为局部迭代预览，未完成可积性、奇点配置、跨缝积分或四边网格提取。']};result.layers=boundaryLayers(mesh,result,{excludedEdges:[...excluded]});return result;
   }
-  return {build,boundaryLayers,surfaceFrames,refineSurfaceBoundary,splitSurfaceContrast,chains,interfaceChains,interfaceCorners,mergeNearbyCorners,reviewInterfaceCorners,fairInterfaceSpans,fitInterfaceChain,fitChain,fitSpan,fitSmoothChain,freeCubic,bez,kind,wholeKind,inflections,field,joinGaps,assemblePaths,reconstructNetwork,regularizeChain,fitNetwork};
+  function featureNetwork(mesh,features,{triangleBudget=1000,tolerance=null,keepCorners=true,fitCurves=true}={}){
+    const signature=E.fingerprint(mesh),groups=features.patchGroups,t=E.topology(mesh),scale=E.bounds(mesh).diagonal;
+    if(features.sourceFingerprint!==signature||groups?.length!==mesh.faces.length||groups.some(g=>!Number.isInteger(g)||g<0))throw Error('主块面与源网格不一致。');
+    const totalArea=t.data.reduce((sum,f)=>sum+f.area,0),spacing=Math.sqrt(totalArea/triangleBudget);
+    tolerance=tolerance??spacing*.2;if(!(tolerance>0&&Number.isFinite(tolerance)))throw Error('结构 CSI 容差无效。');
+    const rawKeys=[],degree=new Map(),patchBorders=features.patches.map(()=>new Map());
+    const connect=(map,a,b)=>{if(!map.has(a))map.set(a,[]);map.get(a).push(b);};
+    for(const [k,e]of t.edges){
+      if(e.faces.length===2&&groups[e.faces[0]]===groups[e.faces[1]])continue;
+      rawKeys.push(k);degree.set(e.a,(degree.get(e.a)||0)+1);degree.set(e.b,(degree.get(e.b)||0)+1);
+      for(const g of new Set(e.faces.map(i=>groups[i]))){connect(patchBorders[g],e.a,e.b);connect(patchBorders[g],e.b,e.a);}
+    }
+    if(!rawKeys.length)throw Error('封闭块面没有结构边界，需要增加主块面分区。');
+    const anchors=new Set();
+    for(const [v,n]of degree)if(n!==2||new Set(t.incident[v].map(i=>groups[i])).size>=3)anchors.add(v);
+    const routes=interfaceChains(mesh,rawKeys,t,groups);
+    // 每个边界连通圈至少有三个锚点，即使它只连接两个区域或位于开放边界。
+    for(let g=0;g<patchBorders.length;g++){
+      const graph=patchBorders[g],seen=new Set();
+      if(!graph.size)throw Error('结构分区 '+(g+1)+' 没有可构面的边界。');
+      for(const start of graph.keys())if(!seen.has(start)){
+        const component=[start];seen.add(start);
+        for(let i=0;i<component.length;i++)for(const j of graph.get(component[i]))if(!seen.has(j)){seen.add(j);component.push(j);}
+        const selected=component.filter(v=>anchors.has(v));
+        while(selected.length<3){
+          let best=-1,value=-1;
+          for(const v of component){if(anchors.has(v))continue;const d=selected.length?Math.min(...selected.map(w=>dist(mesh.vertices[v],mesh.vertices[w]))):Infinity;
+            if(d>value){best=v;value=d;}}
+          if(best<0)throw Error('结构边界不足三个不同站位。');anchors.add(best);selected.push(best);
+        }
+      }
+    }
+    for(const route of routes){
+      anchors.add(route.vertices[0]);anchors.add(route.vertices.at(-1));
+      // 聚类边界可能沿源三角边呈锯齿；只有原几何确有硬折的路径才锁定额外角点。
+      const isCrease=k=>{const e=t.edges.get(k);return e?.faces.length===1||e?.faces.length===2&&dot(t.data[e.faces[0]].normal,t.data[e.faces[1]].normal)<Math.cos(50*Math.PI/180);};
+      if(keepCorners)for(const i of interfaceCorners(route.points,{closed:route.closed,cornerAngle:60}).indices){
+        const previous=i?i-1:route.edges.length-1,next=i%route.edges.length;
+        if(isCrease(route.edges[previous])&&isCrease(route.edges[next]))anchors.add(route.vertices[i]);
+      }
+    }
+    const baseAnchors=[...anchors].sort((a,b)=>a-b);
+    function splitRoute(route){
+      const selected=[];route.vertices.forEach((v,i)=>{if(anchors.has(v))selected.push(i);});
+      return selected.slice(1).map((b,i)=>[selected[i],b]);
+    }
+    for(const route of routes){
+      const normals=route.regionPair.map(g=>features.patches[g].normal),cosine=normals.length===2?dot(...normals):0;
+      const weight=normals.length===2?Math.max(.2,Math.sqrt(Math.max(0,1-cosine*cosine))):1;
+      const stack=splitRoute(route);
+      while(stack.length){const [a,b]=stack.pop();let error=0,index=-1;
+        for(let i=a+1;i<b;i++){const d=pointSegment(route.points[i],route.points[a],route.points[b]);if(d>error){error=d;index=i;}}
+        if(index>=0&&error*weight>tolerance){anchors.add(route.vertices[index]);stack.push([a,index],[index,b]);}
+      }
+    }
+    const curves=[],interfaces=[],logicalEdges=[],counts={I:0,C:0,S:0};let maximum=0,overTolerance=0;
+    for(const route of routes){
+      const edgeIds=[],curveIds=[];
+      for(const [a,b]of splitRoute(route)){
+        const ids=route.vertices.slice(a,b+1),points=ids.map(v=>mesh.vertices[v]),id='feature-edge-'+logicalEdges.length;
+        let spans=fitCurves?fitInterfaceChain(points,{tolerance:tolerance*.4,cornerAngle:60,fairing:true,fairingTolerance:tolerance*.5}):[];
+        if(!spans.length)spans=[{...line(points[0],points.at(-1)),type:'I',startIndex:0,endIndex:points.length-1,error:Math.max(...points.map(p=>pointSegment(p,points[0],points.at(-1))))}];
+        const packed=[];
+        for(const span of spans){
+          const curve={...span,id:'feature-curve-'+curves.length,chain:interfaces.length,logicalEdge:id,startIndex:a+span.startIndex,endIndex:a+span.endIndex,
+            startNode:ids[span.startIndex],endNode:ids[span.endIndex],sourceEdges:route.edges.slice(a+span.startIndex,a+span.endIndex),role:'major',fitReference:'budget-scale main-region interface'};
+          curve.samples=Array.from({length:25},(_,i)=>bez(curve,i/24));curve.errorRelative=(span.error||0)/scale;
+          curves.push(curve);packed.push(curve.id);curveIds.push(curve.id);counts[curve.type]++;maximum=Math.max(maximum,span.error||0);
+          if((span.error||0)>tolerance)overTolerance++;
+        }
+        logicalEdges.push({id,interfaceId:route.interfaceId,regionPair:route.regionPair.slice(),startNode:ids[0],endNode:ids.at(-1),vertices:ids,curves:packed});edgeIds.push(id);
+      }
+      interfaces.push({id:route.interfaceId,regionPair:route.regionPair.slice(),closed:route.closed,curves:curveIds,edges:edgeIds.map(id=>logicalEdges.find(e=>e.id===id))});
+    }
+    if(E.fingerprint(mesh)!==signature)throw Error('结构 CSI 提取意外改变原模型。');
+    return {version:1,mode:'feature-patches',sourceFingerprint:signature,patchGroups:groups.slice(),patches:features.patches.map(p=>({id:p.id,faces:p.faces.slice(),normal:p.normal.slice(),center:p.center?.slice(),area:p.area,planarity:p.planarity})),
+      rawKeys,processedKeys:rawKeys.slice(),chains:routes,interfaces,logicalEdges,curves,counts,anchors:[...anchors].sort((a,b)=>a-b),baseAnchors,nodes:[...anchors].map(id=>({id,point:mesh.vertices[id].slice(),kind:baseAnchors.includes(id)?'junction':'sample'})),
+      report:{method:'shared main-region CSI; basic junctions and weighted chord subdivision',regions:features.patches.length,boundaryEdges:rawKeys.length,baseAnchors:baseAnchors.length,anchors:anchors.size,tolerance,toleranceRelative:tolerance/scale,overTolerance,curvesFitted:fitCurves,sourceUnmodified:true},maximumErrorRelative:maximum/scale};
+  }
+  return {build,featureNetwork,boundaryLayers,budgetInterfaces,surfaceFrames,refineSurfaceBoundary,splitSurfaceContrast,chains,interfaceChains,interfaceCorners,mergeNearbyCorners,reviewInterfaceCorners,fairInterfaceSpans,fitInterfaceChain,fitChain,fitSpan,fitSmoothChain,freeCubic,bez,kind,wholeKind,inflections,field,joinGaps,assemblePaths,reconstructNetwork,regularizeChain,fitNetwork};
 }
 if(typeof module!=='undefined')module.exports=createContourBoundaryGuides;
 if(typeof window!=='undefined')window.createContourBoundaryGuides=createContourBoundaryGuides;
