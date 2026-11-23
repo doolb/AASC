@@ -41,7 +41,9 @@
     "solve:heuristic-pig": "python3 scripts/pig_locked_candidate.py",
     "test:pig-heuristic": "python3 -m unittest discover -s tests -p 'pig_level_heuristic_test.py'",
     "analyze:pig-hypotheses": "python3 scripts/pig_hypothesis_solver.py",
-    "test:pig-hypotheses": "python3 -m unittest discover -s tests -p 'pig_level_hypothesis_test.py'"
+    "test:pig-hypotheses": "python3 -m unittest discover -s tests -p 'pig_level_hypothesis_test.py'",
+    "test:gami": "node --test tests/gami.test.js",
+    "start:gami": "python3 -m http.server 8174 --bind 127.0.0.1 --directory web/gami"
   },
   "dependencies": {
     "esbuild": "^0.28.2",

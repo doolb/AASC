@@ -58,3 +58,5 @@
 - 2026-11-14：`npm run test:pig-cage` 14 项通过，覆盖第 51–53 关轮廓、重叠计数、单数字 OCR 二次裁剪、方向多帧、目标离场、未生效续接和开笼确认；`test:pig-locked` 8 项、`test:pig-special` 4 项、`test:pig-ocr` 4 项通过。第 53 关实机自动开笼，开笼后的通关仍需验证。
 
 启发式搜索：运行 `npm run test:pig-heuristic` 检查动态笼解锁、非法候选拦截和不支持对象；结合 `test:pig-solve`、`test:pig-locked`、`test:pig-cage` 验证已有搜索和重放规则。第 53、55 关的本地取证布局通过命令入口求解并由现有规则独立重放；运行时间和启发式搜索结果会随机器及预算变化。
+
+2026-11-23：《鸢一折纸》运行 `npm run test:gami`，覆盖单角、整边、四角向心折、面积守恒、连续折叠和裁切 UV。实景检查使用 SDDM 的 DISPLAY=:0 与 Intel HD Graphics 610 硬件 WebGL；覆盖首页、新建、九宫裁切、摆放、继续与浏览。

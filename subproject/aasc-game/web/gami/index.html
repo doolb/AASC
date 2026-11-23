@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>鸢一折纸 · 窗前工作台</title><link rel="stylesheet" href="./style.css"></head>
+<body><canvas id="view" aria-label="窗前的三维折纸课桌"></canvas>
+<section id="home"><main class="cover"><header><span class="seal" aria-hidden="true">折</span><span>折纸工作室</span></header>
+<h1>鸢一折纸</h1><div class="subtitle" lang="en">The Origami Atelier</div>
+<nav><button id="new" class="lead"><span>新建折纸</span><b>↗</b></button><button id="resume"><span>继续</span><small id="last">暂无存档</small></button><button id="import"><span>导入</span><b>↑</b></button><button id="browse"><span>浏览</span><b>⊞</b></button></nav></main></section>
+<section id="studio" hidden><header class="studioHead"><button id="homeBtn">‹ 首页</button><strong>鸢一折纸</strong><button id="undo">撤销</button></header><aside id="panel"><div class="tabs"><button data-tool="fold">折叠</button><button data-tool="cut">裁纸</button><button data-tool="place">摆放</button><button id="add">添纸</button></div>
+<div id="foldTools"><label>折法<select id="foldType"><option value="corner">单角折</option><option value="multi">多角折</option><option value="edge">整边折</option></select></label><label>折角 <output id="degrees">180°</output><input id="angle" type="range" min="-180" max="180" step="5" value="180"></label><button id="center">折向中心</button><button id="commit" class="primary">确认折叠</button></div>
+<div id="cutTools" hidden><label>行<input id="rows" type="number" min="1" max="64" value="3"></label><label>列<input id="cols" type="number" min="1" max="64" value="3"></label><label><input id="link" type="checkbox" checked>联动</label><button data-size="3">3×3</button><button data-size="4">4×4</button><button id="slice" class="primary">裁切</button></div>
+<div id="placeTools" hidden><button id="place" class="primary">放到桌上</button><button id="rotate">旋转 15°</button></div><p id="hint" role="status"></p></aside></section>
+<footer id="audio"><button id="music"></button><button id="sfx"></button></footer>
+<dialog id="dialog"><div class="modalHead"><h2 id="title"></h2><button id="close" aria-label="关闭">×</button></div><div id="content"></div></dialog>
+<input type="file" id="file" accept=".json,application/json" hidden><div id="message" role="status"></div><script type="module" src="./app.mjs"></script></body></html>
