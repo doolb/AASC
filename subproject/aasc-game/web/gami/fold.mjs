@@ -35,7 +35,7 @@ function clip(face,dist){
   return area(out)>1e-9?out:[];
 }
 export function fold(faces,starts,target,degrees,curl=0){
-  if(faces.flat().some(p=>Math.abs(p[2])>.00001))throw Error('立体纸形可直接摆放，或撤销后继续折。');
+  if(faces.flat().some(p=>Math.abs(p[2])>.00001))throw Error('请先沿已有折痕展开到平面，再建立新的折线。');
   const axes=starts.map(a=>{
     const dx=a[0]-target[0],dy=a[1]-target[1],len=Math.hypot(dx,dy);
     if(len<1e-5)throw Error('请把目标移离起点');
