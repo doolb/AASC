@@ -20,4 +20,4 @@ npm run test:hmr2
 
 可选原CPU预处理参考仅继承原prepare_image并覆盖load，`-B`禁写原runtime。29例四输入SHA与当前Python一致；完整CPU模型自有port0四图真实HTTP/loadCount1已通过，不是新DML速度或真值准度。浏览器真实视觉/新增DMLHTTP窗口待用户安排。
 
-详见[完整使用/合同/限制说明](<../../docs/usage/hmr2-node-onnx-service.md>)与[设计](<../../docs/design/hmr2-node-onnx-project-service.md>)。图片接纳比原Python窄：支持4格式，BMP仅40-byte未压缩标准布局，边长<32767，默认blur12M像素/r64；特殊色彩/解码版本不能从29例宣称普遍逐位一致。
+详见[完整使用/合同/限制说明](<3rd/hmr2-node-onnx/docs/usage/hmr2-node-onnx-service.md>)与[设计](<3rd/hmr2-node-onnx/docs/design/hmr2-node-onnx-project-service.md>)。图片接纳比原Python窄：支持4格式，BMP仅40-byte未压缩标准布局，边长<32767，默认blur12M像素/r64；特殊色彩/解码版本不能从29例宣称普遍逐位一致。

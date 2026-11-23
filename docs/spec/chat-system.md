@@ -2078,7 +2078,7 @@ resolveTemporaryRole(roleName):
 
 replaceTemporaryConversation(displayId, roleName):
     role = resolveTemporaryRole(roleName)
-    清空旧 temporary 历史
+    保留旧 temporary 历史
     生成新 conversation id
     保存 role.name 和 role.id
     清空 messages
@@ -2102,9 +2102,8 @@ handleChatMessage(options):
 控制端临时页签:
     收到 temporaryConversation 快照后保存 roleName/templateId/messages
     角色选择变化时发送 { type: startTemporaryConversation, roleName }
-    历史临时会话用 select 下拉呈现每组摘要：开始时间、角色、消息数
-    下拉默认项“当前对话”使用空值；选择历史 sessionId 后只读显示该组消息
-    重新选择“当前对话”后清除历史查看状态并恢复输入发送
+    连续显示所有现存临时消息，不按历史组切换
+    清空前明确提示删除全部临时聊天记录
     普通发送只发送 { mode: temporary, temporaryConversationId: id }
     id 或 roleName 缺失时禁用发送按钮并提示先选择角色
 ```

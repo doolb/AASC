@@ -102,8 +102,6 @@
             if (!panel) return;
             const temporary = this.voiceConversationConfig.temporaryWindowSeconds;
             const conversation = this.voiceConversationConfig.conversationWindowSeconds;
-            const historyGroups = this.voiceConversationConfig.temporaryHistoryGroups;
-            const contextGroups = this.voiceConversationConfig.temporaryContextGroups;
             const addressedGroupMode = this.voiceConversationConfig.addressedGroupMode === 'oneShot'
                 ? 'oneShot'
                 : 'temporary';
@@ -125,16 +123,7 @@
                     <input type="number" min="1" max="3600" step="1" data-voice-conversation-window="conversation" value="${conversation}"
                         style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 秒
                 </label>
-                <label style="display:block;margin-top:8px;font-size:13px;">
-                    临时历史会话
-                    <input type="number" min="1" max="100" step="1" data-voice-conversation-groups="history" value="${historyGroups}"
-                        style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 组
-                </label>
-                <label style="display:block;margin-top:8px;font-size:13px;">
-                    临时上下文会话
-                    <input type="number" min="1" max="20" step="1" data-voice-conversation-groups="context" value="${contextGroups}"
-                        style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 组（含当前）
-                </label>
+                <p style="margin-top:8px;font-size:12px;">临时聊天使用连续记录，上下文受模型预算限制。</p>
             `;
             if (panel.dataset.bound) return;
             panel.dataset.bound = '1';

@@ -84,9 +84,15 @@ PORT=3000 npm start
 
 ## 使用文档同步规则
 
-- 纯使用说明、操作示例或当前行为解释的修改，只更新 `docs/usage/` 对应文档及 `docs/usage.md` 入口，不新增 design、spec 或 task 文件。
+- 纯使用说明、操作示例或当前行为解释的修改，只更新对应 `docs/usage/` 文档及 `docs/usage.md` 入口，不新增 design、spec 或 task 文件。
 - 涉及代码、配置、协议或用户可见行为实现变化时，才按项目规则同步对应 design、spec、task、todo、changelog，并同步更新相关使用文档。
 - 使用文档只描述当前可用行为；后续设计必须明确标注为“尚未实现”。
+
+## 第三方与子工程文档边界
+
+- 仅属于单个 `3rd/<组件名>/` 或 `subproject/<子项目名>/` 自身的 `design/`、`spec/`、`usage/`、`task/`、`superpowers/`、`todo.md`、`changelog.md`、`README.md`，一律保存在对应 `3rd/<组件名>/docs/` 或 `subproject/<子项目名>/docs/` 下，不得放到 AASC 根目录 `docs/`。
+- AASC 根目录 `docs/` 与根目录 `changelog.md` 只维护主工程自身，以及跨主工程 `src/` 的集成联动文档。
+- 根目录 `docs/design.md`、`docs/spec.md`、`docs/usage.md` 中只保留指向子目录 `docs/` 的导航链接，不在根目录复制或存放子项目专属正文。
 
 ## Offline 发布待打包状态
 
@@ -130,11 +136,12 @@ PORT=3000 npm start
 ```
 web-mediacenter/
 ├── package.json                                  # 项目配置
-├── 3rd/                                          # 第三方组件
+├── 3rd/                                          # 第三方组件（各自文档在 3rd/<名>/docs/）
 │   ├── voice-display/                            # Go 子显示端
 │   └── voice-display-cs/                         # C# 子显示端
+├── subproject/                                   # 子工程（各自文档在 subproject/<名>/docs/）
 ├── config/                                       # 配置文件目录
-├── docs/                                         # 文档目录
+├── docs/                                         # 主工程及跨端集成文档目录
 ├── res/                                          # 资源目录（models/uploads/temp/certs）
 ├── src/                                          # 分层代码主目录
 │   ├── apps/server/boot/server-app.js            # 服务器入口

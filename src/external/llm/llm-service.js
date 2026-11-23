@@ -205,6 +205,8 @@ function saveHistory(changedFiles = []) {
 
 function trimHistory() {
     for (const key of Object.keys(chatHistories)) {
+        // 临时聊天现为连续记录；旧会话 ID 仍在同一历史桶中，不能按条数静默删除。
+        if (chatHistories[key][0]?.mode === 'temporary') continue;
         if (chatHistories[key].length > MAX_HISTORY_PER_SESSION) {
             chatHistories[key] = chatHistories[key].slice(-MAX_HISTORY_PER_SESSION);
         }
@@ -1039,7 +1041,7 @@ function clearHistory(options = {}) {
     historyStore.ensurePreviousDayBackup();
     for (const key of Object.keys(chatHistories)) {
         chatHistories[key] = chatHistories[key].filter(message => {
-            if (scope.mode === 'group') return message.mode === 'private';
+            if (scope.mode === 'group') return (message.mode || 'group') !== 'group';
             if (scope.mode === 'temporary') return message.mode !== 'temporary';
             return !(
                 message.mode === 'private'

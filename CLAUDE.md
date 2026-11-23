@@ -4,17 +4,19 @@
 
 | 文件 | 说明 |
 |------|------|
-| docs/design.md | 项目设计文档索引 |
-| docs/design/*.md | 每个功能模块的设计文档 |
-| docs/spec.md | 项目实现文档索引 |
-| docs/spec/*.md | 每个功能模块的实现文档，使用伪代码描述，和实际代码同步更新 |
-| docs/todo.md | 项目未完成任务列表 |
-| docs/usage.md | 项目使用说明 |
+| docs/design.md | 主工程及跨端集成设计文档索引 |
+| docs/design/*.md | 主工程及跨端集成模块的设计文档 |
+| docs/spec.md | 主工程及跨端集成实现文档索引 |
+| docs/spec/*.md | 主工程及跨端集成模块的实现文档，使用伪代码描述，和实际代码同步更新 |
+| docs/todo.md | 主工程未完成任务列表 |
+| docs/usage.md | 主工程使用说明 |
 | docs/rules.md | 代码规范、文件结构、命名约定 |
 | docs/ref.md | 外部资源参考（API文档、库文档等） |
-| changelog.md | 项目变更日志 （新需求、修复问题、优化性能等） |
+| changelog.md | 主工程变更日志 （新需求、修复问题、优化性能等） |
 | readme.md | 项目介绍、安装说明、使用说明 |
-| docs/task/*.md | 任务执行文档, 名字为“时间_简要需求描述.md”  |
+| docs/task/*.md | 主工程及跨端集成任务执行文档, 名字为“时间_简要需求描述.md” |
+| 3rd/<组件名>/docs/ | 第三方/独立子项目专属文档目录（含各自的 `design/`、`spec/`、`usage/`、`task/`、`todo.md`、`changelog.md`），不放在根目录 `docs/` |
+| subproject/<子项目名>/docs/ | 子工程专属文档目录（含各自的 `design/`、`spec/`、`usage/`、`task/`、`todo.md`、`changelog.md`），不放在根目录 `docs/` |
 
 ## 代码规范
 

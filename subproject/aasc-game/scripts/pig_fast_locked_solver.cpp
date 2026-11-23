@@ -11,7 +11,7 @@
 #include <vector>
 using namespace std;
 struct Pig {
-  int dx, dy, len, width, id, unlock, scissors, rope;
+  int dx, dy, len, width, id, unlock, scissors, rope, bomb, spring;
 };
 struct Move {
   int index, dest, dist;
@@ -71,6 +71,7 @@ bool dfs(int depth, uint64_t mask) {
     return false;
   }
   bool pigcells[300] = {};
+  bool bombcells[300] = {};
   for (int at : fixedpos)
     pigcells[at] = true;
   int remain = 0;
@@ -82,8 +83,11 @@ bool dfs(int depth, uint64_t mask) {
       int x = pos[i] % w, y = pos[i] / w;
       for (int k = 0; k < pigs[i].len; k++)
         for (int j = 0; j < pigs[i].width; j++)
-          pigcells[(y + (pigs[i].dy != 0 ? k : j)) * w + x +
-                   (pigs[i].dx != 0 ? k : j)] = true;
+        {
+          int at = (y + (pigs[i].dy != 0 ? k : j)) * w + x + (pigs[i].dx != 0 ? k : j);
+          pigcells[at] = true;
+          if (pigs[i].bomb) bombcells[at] = true;
+        }
     }
   // 笼体的格子与笼内猪可以重合；离场计数达到阈值后才移除笼体。
   bool cagecells[300] = {};
@@ -135,15 +139,16 @@ bool dfs(int depth, uint64_t mask) {
           moves.push_back({i, -1, d, true, 0});
           break;
         }
-        bool blocked = false;
+        bool blocked = false, hits_bomb = false;
         for (int j = 0; j < p.width; j++) {
           int test_x = x + (p.dy != 0 ? j : 0);
           int test_y = y + (p.dx != 0 ? j : 0);
           if (occupied[test_y * w + test_x])
             blocked = true;
+          if (bombcells[test_y * w + test_x]) hits_bomb = true;
         }
         if (blocked) {
-          if (d)
+          if (d && !p.bomb && !p.spring && !hits_bomb)
             moves.push_back({i, pos[i] + d * (p.dx + p.dy * w), d, false, 0});
           break;
         }
@@ -192,20 +197,24 @@ int main(int argc, char **argv) {
     forbidden_first_id = atoi(argv[3]);
   if (argc > 4)
     target_exits = max(0, atoi(argv[4]));
-  int count, fixed_count, cage_count = 0;
+  int count, fixed_count, cage_count = 0, bomb_mode = 0, spring_mode = 0;
   string header;
   getline(cin, header);
   istringstream fields(header);
   fields >> n >> w >> h >> count >> fixed_count;
   fields >> cage_count;
+  fields >> bomb_mode;
+  fields >> spring_mode;
   if (w * h > 300 || count > 63)
     return 2;
   string dir;
   for (int i = 0; i < n; i++) {
-    int x, y, len, width, id, unlock, scissors, rope;
+    int x, y, len, width, id, unlock, scissors, rope, bomb = 0, spring = 0;
     cin >> x >> y >> dir >> len >> width >> id >> unlock >> scissors >> rope;
+    if (bomb_mode) cin >> bomb;
+    if (spring_mode) cin >> spring;
     pigs.push_back({(dir == "east") - (dir == "west"),
-                    (dir == "south") - (dir == "north"), len, width, id, unlock, scissors, rope});
+                    (dir == "south") - (dir == "north"), len, width, id, unlock, scissors, rope, bomb, spring});
     pos.push_back(y * w + x);
   }
   for (int i = 0; i < count; i++) {

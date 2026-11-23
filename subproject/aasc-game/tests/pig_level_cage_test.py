@@ -23,6 +23,26 @@ REF = ROOT / 'docs/references/pig-game/play-runs'
 
 
 class CageTest(unittest.TestCase):
+    def test_cage_protected_spring_fragments_require_stable_blue_marker(self):
+        executor = pig_locked_candidate.locked_module()
+        image = np.full((100, 100, 3), 255, np.uint8)
+        image[20:25, 20:25] = [255, 0, 0]
+        grid = [10, 10, 10, 8, 8]
+        unknown = [{'center': [22, 18], 'direction': 'unknown'}, {'center': [22, 30], 'direction': 'unknown'}]
+        detected = [{'center': [22, 18], 'bbox': [20, 15, 4, 4]}, {'center': [65, 65], 'bbox': [60, 60, 10, 10]}]
+        pig = {'id': 1, 'center': [65, 65], 'direction': 'east'}
+        blocked = [(col, row) for col in range(5) for row in range(5)]
+        with patch.object(executor.app.auto, 'ui_state', return_value='unknown'), \
+             patch.object(executor.pig_cage, 'detect', return_value=[]), \
+             patch.object(executor.app.player.extract, 'identify', return_value=(detected, None, [])), \
+             patch.object(executor.app.player, 'match_expected', side_effect=lambda found, *_: {} if len(found) == 1 else None):
+            self.assertIsNone(executor.match_cage_frame(image, [0, 0, 100, 100], [pig], [(5, 5)], ['east'], grid, [], unknown))
+            self.assertEqual(executor.match_cage_frame(image, [0, 0, 100, 100], [pig], [(5, 5)], ['east'], grid, [], unknown,
+                             protected_cells=blocked, blue_boxes=[[20, 20, 5, 5]]), {})
+            image[20:25, 20:25] = 255
+            self.assertIsNone(executor.match_cage_frame(image, [0, 0, 100, 100], [pig], [(5, 5)], ['east'], grid, [], unknown,
+                              protected_cells=blocked, blue_boxes=[[20, 20, 5, 5]]))
+
     def test_cage_frame_checks_locked_pig_and_keeps_it_hidden(self):
         executor = pig_locked_candidate.locked_module()
         image = np.zeros((100, 100, 3), dtype=np.uint8)

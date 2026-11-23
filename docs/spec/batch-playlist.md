@@ -6,6 +6,18 @@
 
 ## 1. PlaylistManager 模块
 
+### URL 列表请求
+
+```text
+playlistUrlRequest 到达时:
+    拒绝 temp=true；验证 urls 是 1 至 10000 项数组
+    对每项验证 url 为无凭据的绝对 HTTP(S) 地址，长度不超过 16384
+    验证 mediaType 为 image、gif、video、audio、html 或 text
+    保留输入顺序，生成 {url, fileName, mediaType}；text 可带 plain/markdown format
+    不下载媒体，复用普通 playlistStart、循环、进度、控制与非临时状态恢复
+    无效项整体返回 playlistError；不可因过滤而静默漏项
+```
+
 ### playlist-app-service.js
 
 ```
@@ -265,10 +277,58 @@ mhtmlToHtml(text):
         mediaVideo.loop = false      // 批量不循环当前项；单媒体入口 showMedia 会恢复 true
         添加一次性 ended 监听: 移除监听 -> timer = setTimeout(next, interval)
         设置 onerror: 加载失败 -> 等间隔后 next
-    否则:
-        mediaImage.onerror: 加载失败 -> 等间隔后 next
+    否则如果 mediaType === 'audio':
+        mediaAudio.loop = false
+        添加一次性 ended 监听: 移除监听 -> timer = setTimeout(next, interval)
+        设置 onerror: 加载失败 -> 等间隔后 next
+    否则如果 mediaType === 'html':
+        设置 onerror -> 等间隔后 next
         timer = setTimeout(next, interval)
-    发送 progress(playing)
+    否则（image / gif）:
+        标记 ps.imageLoadingIndex = itemIndex
+        注入 onImageReady / onImageError 回调到 mediaData
+        showMedia(mediaData, true, ps.paused, resumeTime)
+        onImageReady:
+            校验 playlistState === ps 且 active 且 index === itemIndex
+            清除 imageLoadingIndex
+            补报带真实宽高的 playlistProgress
+            若未暂停且非睡眠: 唯一调度 timer = setTimeout(next, interval) 并预加载下一张图片
+        onImageError:
+            校验 playlistState === ps 且 active 且 index === itemIndex
+            清除 imageLoadingIndex
+            若未暂停且非睡眠: 唯一调度 timer = setTimeout(next, interval) 并预加载下一张图片
+    发送 progress(playing/paused)（图片仍在后台加载时不携带旧图宽高）
+
+showMedia 图片无闪烁切换与预加载 (display-image-preloader.js + display.html):
+    canHoldCurrentImage = 前一项为 image/gif 且 mediaImage 当前可见且已完整加载
+    如果 canHoldCurrentImage:
+        保持原 mediaImage 不变，不立即修改 mediaImage.src
+        调用 DisplayImagePreloader.consumeOrLoad(listId, index, data, loadSequence):
+            优先命中同 listId/index/url/fallbackUrl 的预加载缓存
+            否则后台 Image 按 directUrl -> fallbackUrl 回退加载并等待 decode()
+            若 loadSequence != mediaLoadSequence: 丢弃结果直接返回
+            就绪后:
+                将当前 mediaImage 像素同步绘制到同位绝对定位画布 mediaImageHold 垫底
+                mediaImage.style.visibility = 'hidden' 并写入已验证的 resolvedUrl
+                mediaImage onload + decode() 后:
+                    校验 loadSequence == mediaLoadSequence
+                    调用 restartDynamicFitAfterMediaLoad() 应用适配/裁剪/旋转
+                    恢复 mediaImage.style.visibility = '' 并隐藏 mediaImageHold
+                    触发延迟的 tempMediaInfo 与 onImageReady
+            若直连和 fallbackUrl 均失败:
+                校验 loadSequence == mediaLoadSequence
+                隐藏 mediaImageHold 并恢复 visibility
+                触发 onImageError
+    否则（无旧图可留，例如首张图或从视频/HTML/文本切来）:
+        直接挂载到 mediaImage（setMediaSourceWithFallback 或 base64 src）
+        onload/onerror 后校验 loadSequence 并触发适配与 onImageReady / onImageError
+
+prefetchNextPlaylistImage(ps):
+    若 ps 非 active 或 paused 或 isSleepPaused(): 返回
+    计算 nextIndex（含 loop 回绕，单项目且仅一张不自预加载）
+    若 nextItem 为 url 类型且为 image/gif:
+        调用 DisplayImagePreloader.prefetchNext({ listId, index: nextIndex, item: nextItem })
+        按 directUrl -> fallbackUrl 后台加载并 decode()，供切项直接命中
 
 playlistNext():
     如果非 active: 返回
@@ -286,13 +346,23 @@ playlistJump(index):
     index 赋值, playCurrentItem()
 
 playlistPause():
+    ps.paused = true
     清除 timer
+    取消后台预加载 prefetch
     如果 videoEndedHandler 存在: 移除监听 + mediaVideo.pause()
+    如果 audioEndedHandler 存在: 移除监听 + mediaAudio.pause()
+    清除图片/音视频临时失败切项回调
     发送 progress(paused)
 
 playlistResume():
+    ps.paused = false
     如果视频正在播放状态 (timer/handler 均空): mediaVideo.play + 重建 ended 监听
-    否则: timer = setTimeout(next, interval)   // 图片或间隔等待
+    否则如果音频正在播放状态: mediaAudio.play + 重建 ended 监听
+    否则如果为图片项且 ps.imageLoadingIndex === ps.index（仍在加载中）:
+        等待当前图片加载完成后由 onImageReady/onImageError 启动唯一 timer 与下一张预加载
+    否则:
+        清除残留 timer，重新设置 timer = setTimeout(next, interval)
+        若是图片项则触发下一张预加载，若是 html 项则继续滚动
     发送 progress(playing)
 
 finishPlaylist():
@@ -529,4 +599,13 @@ handlePlaylistControl({action: 'next'}):
 控制端只接受当前打开列表的最新请求结果:
   显示视频封面和分集，可单独播放、复制链接或批量播放整个列表
   返回分类或切换分类后忽略过期响应；失败时可重试
+```
+# 播放列表媒体地址回退
+
+```text
+播放列表项加载失败时：
+  先调用媒体元素已有的错误处理，尝试跨域重试或备用地址
+  如果已经开始重试，则等待重试结果，保留当前播放项
+  否则按原来的间隔调度下一项（暂停状态不自动切换）
+图片原有的定时切换保持有效；不要为一次失败重复安排定时器
 ```

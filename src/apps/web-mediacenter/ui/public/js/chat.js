@@ -8,8 +8,6 @@ const Chat = {
         templateId: null,
         messages: []
     },
-    temporaryHistoryGroups: [],
-    temporaryHistoryViewSessionId: null,
     temporaryRoleSelection: '',
     temporaryRolePending: false,
     templates: [],
@@ -701,7 +699,6 @@ const Chat = {
     },
 
     setMode(mode, target = null, source = 'controlManual') {
-        if (mode !== 'temporary') this.temporaryHistoryViewSessionId = null;
         this.session.mode = mode;
         this.session.privateTarget = target;
         // 切回群聊/私聊时清空角色状态，避免残留影响角色历史渲染
@@ -723,10 +720,6 @@ const Chat = {
         if (!data || !data.conversation) return;
         if (this.session.mode === 'temporary' && ['clear', 'reset'].includes(data.action)) this.abandonStreamingReply();
         const conversation = data.conversation;
-        const nextHistoryGroups = Array.isArray(conversation.historyGroups)
-            ? conversation.historyGroups
-            : [];
-        if (data.action === 'reset') this.temporaryHistoryViewSessionId = null;
         this.temporaryConversation = {
             id: conversation.id || null,
             startedAt: conversation.startedAt || null,
@@ -735,12 +728,6 @@ const Chat = {
             templateId: conversation.templateId || null,
             messages: Array.isArray(conversation.messages) ? conversation.messages : []
         };
-        this.temporaryHistoryGroups = nextHistoryGroups;
-        if (!this.temporaryHistoryGroups.some(group => (
-            group.sessionId === this.temporaryHistoryViewSessionId
-        ))) {
-            this.temporaryHistoryViewSessionId = null;
-        }
         this.temporaryRoleSelection = this.temporaryConversation.roleName || '';
         this.temporaryRolePending = false;
         this.renderModeIndicator();
@@ -1162,15 +1149,8 @@ const Chat = {
             }
             html += '</select>';
             const canRestart = Boolean(selectedRole) && !this.temporaryRolePending;
-            html += `<button class="session-btn session-add" onclick="Chat.startTemporaryConversation()" title="重新开始当前角色临时对话"${canRestart ? '' : ' disabled'}>↻</button>`;
-            html += this.renderTemporaryHistorySelector();
+            html += `<button class="session-btn session-add" onclick="Chat.startTemporaryConversation()" title="重新选择当前临时角色"${canRestart ? '' : ' disabled'}>↻</button>`;
             container.innerHTML = html;
-            const historySelect = container.querySelector('[data-temporary-history-select]');
-            if (historySelect) {
-                historySelect.addEventListener('change', () => {
-                    this.onTemporaryHistoryChange(historySelect.value);
-                });
-            }
             return;
         }
 
@@ -1198,66 +1178,6 @@ const Chat = {
         html += '<button class="session-btn session-del" onclick="Chat.deleteSession(\'' + this.escapeHtml(this.session.privateSessionId) + '\')" title="删除当前会话">×</button>';
 
         container.innerHTML = html;
-    },
-
-    formatTemporaryHistoryTime(timestamp) {
-        const date = new Date(Number(timestamp));
-        if (!Number.isFinite(date.getTime())) return '时间未知';
-        return date.toLocaleString('zh-CN', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    },
-
-    renderTemporaryHistorySelector() {
-        const groups = Array.isArray(this.temporaryHistoryGroups)
-            ? this.temporaryHistoryGroups
-            : [];
-        const selectedSessionId = this.temporaryHistoryViewSessionId || '';
-        let html = '<div class="temporary-history-viewer">';
-        html += '<label class="session-label" for="temporaryHistorySelect">历史临时会话:</label>';
-        html += '<select class="session-select temporary-history-select" id="temporaryHistorySelect" data-temporary-history-select aria-label="切换历史临时会话">';
-        html += `<option value=""${selectedSessionId ? '' : ' selected'}>当前对话</option>`;
-        if (groups.length === 0) {
-            html += '<option disabled>暂无历史会话</option>';
-        } else {
-            groups.forEach((group) => {
-                const sessionId = this.escapeHtml(String(group.sessionId || ''));
-                const roleName = String(group.roleName || '临时对话');
-                const time = this.formatTemporaryHistoryTime(group.startedAt);
-                const count = Number(group.messageCount) || 0;
-                const selected = group.sessionId === this.temporaryHistoryViewSessionId ? ' selected' : '';
-                const label = this.escapeHtml(`${time} · ${roleName} · ${count}条`);
-                html += `<option value="${sessionId}"${selected}>${label}</option>`;
-            });
-        }
-        return `${html}</select></div>`;
-    },
-
-    onTemporaryHistoryChange(sessionId) {
-        if (!sessionId) {
-            this.showCurrentTemporaryConversation();
-            return;
-        }
-        this.viewTemporaryHistory(sessionId);
-    },
-
-    viewTemporaryHistory(sessionId) {
-        const exists = this.temporaryHistoryGroups.some(group => group.sessionId === sessionId);
-        if (!exists) return;
-        this.temporaryHistoryViewSessionId = sessionId;
-        this.renderSessionSelector();
-        this.renderHistory();
-        this.updateSendButton();
-    },
-
-    showCurrentTemporaryConversation() {
-        this.temporaryHistoryViewSessionId = null;
-        this.renderSessionSelector();
-        this.renderHistory();
-        this.updateSendButton();
     },
 
     onTemporaryRoleChange(roleName) {
@@ -1310,13 +1230,7 @@ const Chat = {
         
         let indexedHistory = [];
         if (this.session.mode === 'temporary') {
-            const viewedGroup = this.temporaryHistoryGroups.find(group => (
-                group.sessionId === this.temporaryHistoryViewSessionId
-            ));
-            const temporaryMessages = viewedGroup
-                ? viewedGroup.messages || []
-                : this.temporaryConversation.messages;
-            indexedHistory = temporaryMessages
+            indexedHistory = this.temporaryConversation.messages
                 .map((item, index) => ({ item, originalIndex: index }));
         } else if (this.session.mode === 'role' && this.session.roleTarget) {
             // 角色模式：渲染该角色独立历史，与群聊/私聊隔离
@@ -1638,11 +1552,6 @@ const Chat = {
         if (attachments.length + this.pendingImages.length > 4) { window.showToast('每条消息最多4个附件', 'warning'); return; }
         if (this.pendingImages.length && this.profiles.find(profile => profile.name === this.activeProfile)?.supportsImageUpload === false) {
             window.showToast('当前 LLM 配置不支持上传图片，请移除图片或切换配置', 'warning');
-            return;
-        }
-
-        if (this.session.mode === 'temporary' && this.temporaryHistoryViewSessionId) {
-            window.showToast('历史临时会话只读查看，不能发送消息', 'warning');
             return;
         }
 
@@ -2227,11 +2136,8 @@ const Chat = {
             let history;
             let roleName = null;
             if (this.session.mode === 'temporary') {
-                const viewedGroup = this.temporaryHistoryGroups.find(group => (
-                    group.sessionId === this.temporaryHistoryViewSessionId
-                ));
-                history = viewedGroup ? viewedGroup.messages || [] : this.temporaryConversation.messages || [];
-                roleName = viewedGroup ? viewedGroup.roleName : this.temporaryConversation.roleName;
+                history = this.temporaryConversation.messages || [];
+                roleName = this.temporaryConversation.roleName;
             } else if (this.session.mode === 'role' && this.session.roleTarget) {
                 history = this.roleHistories[this.session.roleTarget] || [];
                 roleName = this.session.roleTarget;
@@ -2340,15 +2246,11 @@ const Chat = {
                 && (this.temporaryRolePending
                     || !this.temporaryConversation.id
                     || !this.temporaryConversation.roleName);
-            const viewingTemporaryHistory = this.session.mode === 'temporary'
-                && Boolean(this.temporaryHistoryViewSessionId);
-            btn.disabled = this.isLoading || temporaryUnavailable || viewingTemporaryHistory;
+            btn.disabled = this.isLoading || temporaryUnavailable;
             const input = document.getElementById('chatInput');
             if (input) {
-                input.disabled = viewingTemporaryHistory;
-                input.placeholder = viewingTemporaryHistory
-                    ? '历史临时会话只读查看'
-                    : (this.session.mode === 'temporary' ? '输入临时对话消息...' : '输入消息... (说"聊天xxx"触发语音对话)');
+                input.disabled = false;
+                input.placeholder = this.session.mode === 'temporary' ? '输入临时对话消息...' : '输入消息... (说"聊天xxx"触发语音对话)';
             }
         }
     },
@@ -2372,11 +2274,7 @@ const Chat = {
             ? window.DisplayList?.getSelectedDisplayIds?.() || []
             : [window.currentDisplayId].filter(Boolean);
         if (mode === 'temporary') {
-            if (this.temporaryHistoryViewSessionId) {
-                window.showToast('请先返回当前临时对话，再执行清空', 'warning');
-                return;
-            }
-            if (!confirm('确定要清空当前临时对话吗？')) return;
+            if (!confirm('确定要清空全部临时聊天记录吗？')) return;
             if (window.WebSocketManager?.ws?.readyState !== WebSocket.OPEN) {
                 window.showToast('临时对话清空失败：控制端未连接', 'error');
                 return;

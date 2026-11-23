@@ -1,0 +1,268 @@
+/* 控制台视觉层只读取现有主题变量；不改动各面板的行为和状态。 */
+body {
+    background: linear-gradient(145deg, var(--bg-primary), var(--bg-secondary));
+    color: var(--text-primary);
+}
+
+.sidebar {
+    background: var(--bg-primary);
+    border-color: var(--border-color);
+}
+
+.sidebar-header { border-color: var(--border-color); }
+.logo { background: linear-gradient(90deg, var(--accent-color), var(--accent-secondary)); background-clip: text; -webkit-background-clip: text; }
+.nav-item { color: var(--text-muted); border-left-color: transparent; }
+.nav-item:hover, .nav-item.active { color: var(--text-primary); background: var(--bg-surface-strong); }
+.nav-item.active { border-left-color: var(--accent-color); }
+
+.content { padding: clamp(12px, 1.5vw, 20px); }
+.panel { max-width: 1240px; min-width: 0; }
+.panel > .page-title {
+    margin: 0 0 14px;
+    text-align: left;
+    font-size: clamp(22px, 2vw, 28px);
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--text-primary);
+    background: none;
+    -webkit-text-fill-color: currentColor;
+}
+.section {
+    padding: clamp(12px, 1.4vw, 18px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: var(--bg-surface);
+    box-shadow: 0 4px 18px var(--shadow-color);
+    margin-bottom: 12px;
+}
+.section > h2 { color: var(--text-primary); font-size: 15px; font-weight: 650; letter-spacing: .01em; }
+
+/* 横屏空间允许时固定设备列表在左，窄屏和竖屏沿文档顺序上下排列。 */
+.device-column-layout, .device-column-content { min-width: 0; }
+
+/* 其他面板按功能分栏；保留原 DOM 顺序，旋转到竖屏时自然恢复单列。 */
+.responsive-panel-grid > *, #panel-reminder > .section > * { min-width: 0; }
+@media (orientation: landscape) and (min-width: 720px) {
+    .responsive-panel-grid, #panel-reminder > .section {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        align-items: start;
+    }
+    .responsive-panel-grid > .section,
+    .responsive-panel-grid > .voiceprint-card { margin: 0; }
+    /* 设置卡片原有行内上边距只用于单列，双列时需要顶端对齐。 */
+    #panel-settings .responsive-panel-grid > .section { margin-top: 0 !important; }
+    #panel-search .responsive-panel-grid > .section:first-child,
+    #panel-logs .responsive-panel-grid > .log-section,
+    #panel-reminder > .section > h2 { grid-column: 1 / -1; }
+    #panel-reminder .reminder-form { margin-bottom: 0 !important; }
+}
+@media (orientation: landscape) and (min-width: 720px) {
+    .device-column-layout { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); gap: 12px; align-items: start; }
+    .device-column { position: sticky; top: 12px; }
+    #panel-media .device-column .device-list, #panel-display .device-column .device-list { max-height: calc(100vh - 160px); overflow: auto; }
+}
+
+/* 显示控制：可操作内容按关联分组，主播放与背景播放给予足够宽度。 */
+#panel-display .control-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; align-items: start; }
+#panel-display .control-item {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--card-background);
+}
+#panel-display .control-item > label:first-child { color: var(--text-primary); font-size: 14px; font-weight: 650; }
+#panel-display .control-buttons { align-items: center; gap: 8px; }
+#panel-display .control-btn {
+    min-height: 36px;
+    padding: 8px 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    background: var(--input-background);
+    color: var(--text-primary);
+    font-weight: 550;
+}
+#panel-display .control-btn:hover { background: var(--bg-surface-strong); }
+#panel-display .control-btn.active, #panel-display .control-btn.playing {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+    border-color: var(--accent-color);
+    box-shadow: none;
+}
+#panel-display .control-btn.paused { background: var(--bg-surface-strong); color: var(--text-primary); }
+#panel-display .control-btn:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+#panel-display .control-btn:disabled { opacity: .5; }
+#panel-display #backgroundMediaUrl,
+#panel-display #backgroundMediaType {
+    min-width: 0;
+    padding: 9px 11px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    background: var(--input-background);
+    color: var(--text-primary);
+}
+#panel-display #backgroundMediaUrl { display: block; width: 100%; margin-bottom: 10px; }
+#panel-display .control-item:has(#backgroundMediaUrl) > label:not(:first-child) { margin: 12px 0 6px; color: var(--text-secondary); }
+#panel-display #backgroundMediaStatus, #panel-display .text-playback-status { margin-top: 10px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+#panel-display .device-list { max-height: 150px; overflow: auto; }
+#panel-display .display-advanced { margin-top: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-background); }
+#panel-display .display-advanced > summary { padding: 11px 13px; cursor: pointer; color: var(--text-primary); font-size: 14px; font-weight: 650; }
+#panel-display .display-advanced[open] > summary { border-bottom: 1px solid var(--border-color); margin-bottom: 10px; }
+#panel-display details.display-advanced > .control-item,
+#panel-display details.display-advanced > .crop-control { margin: 10px; }
+#panel-display details.section.display-advanced { padding: 0; }
+#panel-display details.section.display-advanced > p,
+#panel-display details.section.display-advanced > div { margin: 10px 14px; }
+
+/* 浅色主题已有通用按钮规则；此处保留控制面板的语义状态与可读性。 */
+:root[data-theme-mode="light"] #panel-display .control-btn:not(.active):not(.playing) {
+    background: var(--input-background) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* 聊天保持消息与输入区域独立滚动，并让主题色贯穿消息和会话栏。 */
+#panel-chat .chat-container { border: 1px solid var(--border-color); border-radius: 14px; background: var(--card-background); }
+#panel-chat .chat-tabs { background: var(--content-background); border-right: 1px solid var(--border-color); }
+#panel-chat .chat-tab { color: var(--text-secondary); border-color: var(--border-color); }
+#panel-chat .chat-tab.active { color: var(--text-primary); background: var(--bg-surface-strong); border-left-color: var(--accent-color); }
+#panel-chat .chat-main { min-width: 0; padding: 18px; }
+#panel-chat .chat-header { gap: 12px; flex-wrap: wrap; border-color: var(--border-color); }
+#panel-chat .chat-header h3 { color: var(--text-primary); }
+#panel-chat .chat-messages { background: var(--content-background); border: 1px solid var(--border-color); border-radius: 12px; }
+#panel-chat #chatInput { min-width: 0; background: var(--input-background); color: var(--text-primary); border: 1px solid var(--border-color); }
+#panel-chat #chatInput::placeholder { color: var(--text-muted); }
+
+/* 媒体库和任务面板使用一致的内容边界，避免状态和操作挤在一起。 */
+#panel-media .media-library-container { min-width: 0; }
+#panel-media .media-library-toolbar { gap: 10px; }
+#panel-media .media-library-breadcrumb { min-width: min(100%, 200px); background: var(--bg-secondary); border: 1px solid var(--border-color); }
+/* 路径与分隔符共享主题文字色，避免浅色主题文字融入背景。 */
+#panel-media .media-library-breadcrumb .breadcrumb-item,
+#panel-media .media-library-breadcrumb .breadcrumb-sep { color: var(--text-primary); }
+#panel-media .media-library-breadcrumb .breadcrumb-item:hover { color: var(--text-primary); text-decoration: underline; }
+#panel-media .media-library-item { border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-background); }
+#panel-media .media-library-item:hover { border-color: var(--accent-color); }
+
+/* 来源导航只占一行，可用触摸、滚轮或键盘水平浏览。 */
+#panel-media .media-library-tabs { flex-direction: row; align-items: center; overflow-x: auto; gap: 8px; padding: 3px 2px 8px; scrollbar-width: thin; }
+#panel-media .media-tab-section, #panel-media .media-region-group { flex: 0 0 auto; flex-wrap: nowrap; }
+#panel-media .media-library-tab { white-space: nowrap; border-radius: 9px; }
+#panel-media .media-library-content, #panel-media .bilibili-video-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 10px; }
+
+/* 图片和视频完整覆盖卡片，文字和操作使用渐变底保证明暗主题可读。 */
+#panel-media .media-library-item:not(.folder):not(.unavailable) {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    aspect-ratio: 4 / 3;
+    min-width: 0;
+    overflow: hidden;
+    isolation: isolate;
+}
+#panel-media .media-library-item:not(.folder):not(.unavailable) .media-thumb-wrapper { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; aspect-ratio: auto; }
+#panel-media .media-library-item:not(.folder):not(.unavailable)::after { content: ''; position: absolute; inset: 25% 0 0; z-index: -1; background: linear-gradient(transparent, rgba(0,0,0,.9)); pointer-events: none; }
+#panel-media .media-library-item:not(.folder):not(.unavailable) .item-name { padding: 8px 10px 2px; color: #fff !important; font-weight: 650; text-shadow: 0 1px 3px #000; }
+#panel-media .media-library-item:not(.folder):not(.unavailable) .item-meta { padding: 0 10px 5px; color: #eee !important; }
+#panel-media .media-library-item:not(.folder):not(.unavailable) .item-actions { flex-wrap: wrap; opacity: 0; padding: 0 8px 8px; }
+#panel-media .media-library-item:not(.folder):not(.unavailable):hover .item-actions,
+#panel-media .media-library-item:not(.folder):not(.unavailable):focus-within .item-actions { opacity: 1; }
+#panel-media .media-library-item .item-actions button, #panel-media .media-library-item .item-actions .btn-download { flex: 1 1 auto; min-width: 0; padding: 6px; }
+#panel-media .media-library-item .playing-badge { top: 8px; bottom: auto; }
+#panel-media .media-library-item.folder { background: var(--bg-secondary); color: var(--text-primary); }
+/* 文件夹的内容可高于默认比例；名称和按钮不能被 flex 挤成零高度。 */
+#panel-media .media-masonry-ready > .media-library-item.folder { aspect-ratio: auto; min-height: 140px; padding: 14px 12px; }
+#panel-media .media-library-item.folder .folder-icon,
+#panel-media .media-library-item.folder .item-name,
+#panel-media .media-library-item.folder .item-actions { flex-shrink: 0; }
+#panel-media .media-library-item.folder .item-name { width: 100%; white-space: normal; overflow-wrap: anywhere; color: var(--text-primary); }
+#panel-media .media-library-item.folder .item-actions { max-width: 100%; justify-content: center; flex-wrap: wrap; }
+/* 目录附加信息及操作均与当前主题配对，避免浅色卡片上出现浅色文字。 */
+#panel-media .media-library-item.folder .item-meta { color: var(--text-primary) !important; }
+#panel-media .media-library-item.folder .share-link-actions { max-width: 100%; flex-wrap: wrap; }
+#panel-media .media-library-item.folder :is(.item-actions, .share-link-actions) button {
+    background: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* 只有带封面的远程条目使用全图卡片；无封面条目保留正常文本流。 */
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) { position: relative; display: flex; flex-direction: column; justify-content: flex-end; aspect-ratio: 4 / 3; padding: 10px; overflow: hidden; isolation: isolate; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover)::after { content: ''; position: absolute; inset: 25% 0 0; z-index: -1; background: linear-gradient(transparent, rgba(0,0,0,.9)); pointer-events: none; }
+#panel-media .bilibili-video-card .bilibili-video-cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) .bilibili-video-title { color: #fff !important; font-weight: 650; text-shadow: 0 1px 3px #000; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) > div:not(.bilibili-video-actions) { color: #fff; }
+#panel-media .bilibili-video-actions { flex-wrap: wrap; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover) .bilibili-video-actions { opacity: 0; }
+#panel-media .bilibili-video-card:has(.bilibili-video-cover):hover .bilibili-video-actions,
+#panel-media .bilibili-video-card:has(.bilibili-video-cover):focus-within .bilibili-video-actions { opacity: 1; }
+
+@media (hover: none) {
+    #panel-media .media-library-item.folder .item-actions { opacity: 1; }
+    #panel-media .media-library-item:not(.folder):not(.unavailable) .item-actions { opacity: 1; }
+    #panel-media .bilibili-video-card:has(.bilibili-video-cover) .bilibili-video-actions { opacity: 1; }
+    #panel-media .item-actions button, #panel-media .item-actions .btn-download,
+    #panel-media .bilibili-video-actions button { min-height: 36px; }
+}
+#panel-task .task-tabs { background: var(--content-background); border: 1px solid var(--border-color); }
+#panel-task .task-tab { color: var(--text-secondary); }
+#panel-task .task-tab.active { color: var(--text-primary); background: var(--bg-surface-strong); }
+#panel-task .task-card { background: var(--card-background); border-color: var(--border-color); }
+#panel-task .task-card.selected { border-color: var(--accent-color); background: var(--bg-surface-strong); }
+#panel-task .task-card-title { color: var(--text-primary); }
+#panel-task .task-card-meta, #panel-task .task-picker-label { color: var(--text-secondary); }
+
+/* 主题原有全局按钮渐变会掩盖标签选中态；仅对导航标签恢复中性色。 */
+:root[data-theme-mode="light"] #panel-task .task-tab,
+:root[data-theme-mode="light"] #panel-media .media-library-tab {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border-color: transparent !important;
+}
+:root[data-theme-mode="light"] #panel-task .task-tab.active,
+:root[data-theme-mode="light"] #panel-media .media-library-tab.active {
+    background: var(--bg-surface-strong) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--accent-color) !important;
+}
+
+@media (max-width: 700px) {
+    .content { padding: 14px 12px; }
+    .panel > .page-title { margin-bottom: 16px; }
+    #panel-display .control-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }
+    #panel-chat .chat-main { padding: 12px; }
+    #panel-chat .chat-actions { flex-wrap: wrap; }
+    #panel-media .media-library-toolbar { align-items: stretch; }
+    #panel-task .task-three-col { flex-direction: column; height: auto; }
+    #panel-task .task-list-col, #panel-task .task-instances-col, #panel-task .task-result-col { width: 100%; min-width: 0; }
+}
+
+/* 媒体卡片按实测宽高和网格跨度排列，加载前及无尺寸时使用默认比例。 */
+#panel-media .media-masonry-ready {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 145px), 1fr));
+    grid-auto-rows: 4px;
+    grid-auto-flow: row dense;
+    gap: 8px;
+    align-content: start;
+    align-items: start;
+}
+#panel-media .media-masonry-ready > * {
+    min-width: 0;
+    align-self: start;
+    grid-row-end: span var(--masonry-rows, 36);
+}
+#panel-media .media-masonry-ready > .masonry-full { grid-column: 1 / -1; }
+#panel-media .media-masonry-ready > .masonry-wide { grid-column: span 2; }
+#panel-media .media-masonry-ready > .media-library-item,
+#panel-media .media-masonry-ready > .bilibili-video-card {
+    width: 100%;
+    aspect-ratio: var(--media-aspect, 4 / 3);
+    break-inside: avoid;
+}
+#panel-media .media-masonry-ready > .media-library-item:not(.folder):not(.unavailable),
+#panel-media .media-masonry-ready > .bilibili-video-card:has(.bilibili-video-cover) { aspect-ratio: var(--media-aspect, 4 / 3); }
+/* 信息区使用轻渐变和文字阴影，不影响整张封面的显示。 */
+#panel-media .media-library-item:not(.folder):not(.unavailable)::after,
+#panel-media .bilibili-video-card:has(.bilibili-video-cover)::after { inset: 35% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.68)); }

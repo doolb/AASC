@@ -24,7 +24,7 @@ test('首次展开、会话恢复和迟到历史使用真实聊天与舞台模�
     async function reset() {
         const $ = cheerio.load(read('display.html'));
         $('script, link[rel="stylesheet"]').remove();
-        $('head').append(`<style>${read('css/theme.css')}${read('css/display.css')}${read('css/display-mmd.css')}${read('css/display-chat.css')}</style>`);
+        $('head').append(`<style>${read('css/theme.css')}${read('css/display.css')}${read('css/display-mmd.css')}${read('css/display-chat.css')}${read('css/display-ui.css')}</style>`);
         await page.setViewport({ width: 390, height: 740 });
         // 每次换新文档，确保检验首次展开而非上一次关闭留下的选择。
         await page.goto('about:blank');

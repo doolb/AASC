@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="css/chat2api.css">
     <link rel="stylesheet" href="css/chat2api-remote-login.css">
     <link rel="stylesheet" href="css/android-color-picker.css">
+    <link rel="stylesheet" href="css/control-workspace.css">
     <script type="importmap">
     {
         "imports": {
@@ -82,8 +83,9 @@
     <main class="content">
         <section class="panel" id="panel-media">
             <h1 class="page-title">媒体管理</h1>
-            
-            <div class="section">
+
+            <div class="device-column-layout">
+            <div class="section device-column">
                 <h2>设备列表</h2>
                 <div id="quarkCacheStatus" class="quark-cache-status" role="status" aria-live="polite" style="display:none;">
                     <span id="quarkCacheStatusText"></span>
@@ -93,7 +95,7 @@
                     <div class="empty-list">暂无显示端连接</div>
                 </div>
             </div>
-            
+            <div class="device-column-content">
             <div class="section">
                 <h2>上传文件</h2>
                 <div class="file-input-wrapper">
@@ -227,46 +229,25 @@
                     </div>
                 </div>
             </div>
+            </div>
+            </div>
         </section>
         
         <section class="panel" id="panel-display" style="display:none;">
             <h1 class="page-title">显示控制</h1>
-            
-            <div class="section">
+
+            <div class="device-column-layout">
+            <div class="section device-column">
                 <h2>设备列表</h2>
                 <div class="device-list" id="deviceList">
                     <div class="empty-list">暂无显示端连接</div>
                 </div>
             </div>
 
-            <div class="section llm-model-section">
-                <h2>LLM 模型</h2>
-                <p class="llm-model-description">只显示当前选中的显示端；模型切换会等待当前推理完成。</p>
-                <div id="llmModelPanel">
-                    <div class="empty-list">请先在上方设备列表中选择显示端</div>
-                </div>
-            </div>
-
-            <div class="section voice-vad-section">
-                <h2>监听 VAD / 底噪检测</h2>
-                <p class="voice-vad-description">为每个显示端单独设置监听灵敏度，检测时请保持环境安静。</p>
-                <div id="voiceVadPanel">
-                    <div class="empty-list">暂无显示端连接</div>
-                </div>
-            </div>
-
+            <div class="device-column-content">
             <div class="section">
                 <h2>显示控制</h2>
             <div class="control-grid">
-                <div class="control-item">
-                    <label>MMD / VRM 角色层</label>
-                    <div class="control-buttons">
-                        <button id="mmdVisibilityToggle" class="control-btn" type="button" disabled
-                                aria-pressed="false" onclick="Controls.toggleMmdVisibility()">MMD 状态同步中</button>
-                    </div>
-                    <div id="mmdVisibilityStatus" style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.65);">当前状态：未同步</div>
-                </div>
-
                 <div class="control-item">
                     <label>画面填充</label>
                     <div class="control-buttons">
@@ -285,13 +266,6 @@
                         <span>秒，停留</span>
                         <input id="dynamicFitHoldSeconds" type="number" min="0.1" max="300" step="0.1" value="2" oninput="Controls.sendDynamicFitConfig()" style="width:58px;padding:4px 6px;border:0;border-radius:4px;background:rgba(255,255,255,0.1);color:#fff;text-align:center;">
                         <span>秒</span>
-                    </div>
-                </div>
-
-                <div class="control-item">
-                    <label>睡眠模式</label>
-                    <div class="control-buttons">
-                        <button class="control-btn" id="sleepSettingsBtn" onclick="Controls.showSleepModePanel()" title="按时段隐藏媒体/UI，降低夜间干扰">设置</button>
                     </div>
                 </div>
 
@@ -320,9 +294,9 @@
 
                 <div class="control-item">
                     <label>背景媒体</label>
-                    <input id="backgroundMediaUrl" type="text" placeholder="音频或视频地址（也可从媒体库选择）" aria-label="背景媒体地址">
+                    <input id="backgroundMediaUrl" type="text" placeholder="图片、音频或视频地址（也可从媒体库选择）" aria-label="背景媒体地址">
                     <div class="control-buttons">
-                        <select id="backgroundMediaType" aria-label="背景媒体类型"><option value="audio">音频</option><option value="video">视频</option></select>
+                        <select id="backgroundMediaType" aria-label="背景媒体类型"><option value="audio">音频</option><option value="video">视频</option><option value="image">图片</option><option value="gif">GIF</option></select>
                         <button class="control-btn" onclick="BackgroundMediaControl.start()">播放</button>
                         <button class="control-btn" onclick="BackgroundMediaControl.change({playing:false})">暂停</button>
                         <button class="control-btn" onclick="BackgroundMediaControl.change({url:'',playing:false})">停止</button>
@@ -355,6 +329,17 @@
                 </span>
             </div>
 
+            <details class="display-advanced">
+              <summary>角色、睡眠、性能与语音播报</summary>
+            <div class="control-item">
+                <label>MMD / VRM 角色层</label>
+                <div class="control-buttons"><button id="mmdVisibilityToggle" class="control-btn" type="button" disabled aria-pressed="false" onclick="Controls.toggleMmdVisibility()">MMD 状态同步中</button></div>
+                <div id="mmdVisibilityStatus" style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.65);">当前状态：未同步</div>
+            </div>
+            <div class="control-item">
+                <label>睡眠模式</label>
+                <div class="control-buttons"><button class="control-btn" id="sleepSettingsBtn" onclick="Controls.showSleepModePanel()" title="按时段隐藏媒体/UI，降低夜间干扰">设置</button></div>
+            </div>
             <div class="control-item">
                 <label>APK 大小核并发</label>
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
@@ -403,6 +388,10 @@
                 </form>
             </div>
 
+            </details>
+
+            <details class="display-advanced" ontoggle="if(this.open) requestAnimationFrame(() => window.Crop?.recalculateSize(false))">
+            <summary>画面预览与裁剪</summary>
             <div class="crop-control">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                     <label style="font-size:14px;color:#fff;font-weight:500;">画面裁剪区域</label>
@@ -501,16 +490,30 @@
                     </div>
                 </div>
             </div>
+            </details>
         </div>
         
+        <details class="section llm-model-section display-advanced">
+            <summary>LLM 模型</summary>
+            <p class="llm-model-description">只显示当前选中的显示端；模型切换会等待当前推理完成。</p>
+            <div id="llmModelPanel"><div class="empty-list">请先在设备列表中选择显示端</div></div>
+        </details>
+        <details class="section voice-vad-section display-advanced">
+            <summary>监听 VAD / 底噪检测</summary>
+            <p class="voice-vad-description">为每个显示端单独设置监听灵敏度，检测时请保持环境安静。</p>
+            <div id="voiceVadPanel"><div class="empty-list">暂无显示端连接</div></div>
+        </details>
         <div class="section info-section">
             <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
             <button class="control-btn restart-btn" onclick="restartServer()" style="margin-top: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">重启服务器</button>
         </div>
+            </div>
+            </div>
         </section>
 
         <section class="panel" id="panel-servers" style="display:none;">
             <h1 class="page-title">服务器</h1>
+            <div class="responsive-panel-grid">
 
             <div class="section server-list-section">
                 <div class="server-list-toolbar">
@@ -544,6 +547,7 @@
                 <div class="shared-media-index-content" id="serverMediaIndexContent">
                     <div class="empty-list">正在加载共享媒体库...</div>
                 </div>
+            </div>
             </div>
         </section>
         
@@ -625,6 +629,7 @@
 
         <section class="panel" id="panel-search" style="display:none;">
             <h1 class="page-title">搜索频道</h1>
+            <div class="responsive-panel-grid">
 
             <div class="section">
                 <h2>搜索</h2>
@@ -649,6 +654,7 @@
                 <div class="search-history-list" id="searchHistoryList">
                     <div class="empty-list">暂无搜索记录</div>
                 </div>
+            </div>
             </div>
         </section>
         
@@ -678,6 +684,7 @@
 
         <section class="panel" id="panel-logs" style="display:none;">
             <h1 class="page-title">日志查看</h1>
+            <div class="responsive-panel-grid">
 
             <div class="section">
                 <h2>系统状态</h2>
@@ -779,10 +786,12 @@
                     <div class="log-empty">暂无日志</div>
                 </div>
             </div>
+            </div>
         </section>
 
         <section class="panel" id="panel-settings" style="display:none;">
             <h1 class="page-title">系统设置</h1>
+            <div class="responsive-panel-grid">
 
             <div class="section" data-ui-type="section">
                 <h2 data-ui-type="title">界面主题</h2>
@@ -945,11 +954,13 @@
                     <div class="routing-hint">任务媒体源在对应任务实例中选择代理，B站在来源工具栏选择；删除代理后引用它的来源会回到“不使用代理”。代理仅由服务端使用。</div>
                 </div>
             </div>
+            </div>
         </section>
         <section class="panel" id="panel-task" style="display:none;">
         </section>
         <section class="panel" id="panel-voiceprint" style="display:none;">
             <h1 class="page-title">声纹管理</h1>
+            <div class="responsive-panel-grid">
             <div class="control-item voiceprint-card">
                 <label>注册声纹</label>
                 <input type="text" id="vpNameInput" placeholder="输入名字（如：妲己）"
@@ -1106,6 +1117,7 @@
                 <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
                     关闭后不会调用服务器对应引擎；当前选择服务端时自动切换到显示端。
                 </div>
+            </div>
             </div>
         </section>
     </main>
@@ -1349,6 +1361,7 @@
     <script src="js/quark-cache-progress.js"></script>
     <script src="js/background-media-control.js"></script>
     <script src="js/media-library.js"></script>
+    <script src="js/media-masonry.js"></script>
     <script src="js/device-list.js"></script>
     <script src="js/server-list.js"></script>
     <script src="js/websocket.js"></script>

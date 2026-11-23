@@ -349,7 +349,7 @@ callExternalTTS(text, voice, speed):
 
 ## Linux TTS 服务
 
-Linux TTS 的 HTTP、队列、CLI 和运行时路径伪代码见 `docs/spec/tts-linux.md`。
+Linux TTS 的 HTTP、队列、CLI 和运行时路径伪代码见 `3rd/tts-server/docs/spec/tts-linux.md`。
 
 ## tts.server 内置服务任务
 

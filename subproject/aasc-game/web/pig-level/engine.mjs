@@ -2,13 +2,13 @@
 const VECTORS = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
 
 export function createState(level) {
-    const state = { exitCount: 0, pigs: level.pigs.map(pig => ({ ...pig, gone: false })), ducks: (level.ducks || []).map(cell => [...cell]), remainingScissors: level.pigs.filter(pig => pig.kind === 'scissors').length };
+    const state = { exitCount: 0, failed: false, pigs: level.pigs.map(pig => ({ ...pig, gone: false })), ducks: (level.ducks || []).map(cell => [...cell]), remainingScissors: level.pigs.filter(pig => pig.kind === 'scissors').length };
     settleDucks(level, state);
     return state;
 }
 
 export function cloneState(state) {
-    return { exitCount: state.exitCount, pigs: state.pigs.map(pig => ({ ...pig })), ducks: state.ducks.map(cell => [...cell]), remainingScissors: state.remainingScissors };
+    return { exitCount: state.exitCount, failed: state.failed, pigs: state.pigs.map(pig => ({ ...pig })), ducks: state.ducks.map(cell => [...cell]), remainingScissors: state.remainingScissors };
 }
 
 function cells(pig) {
@@ -33,6 +33,7 @@ function settleDucks(level, state) {
 }
 
 export function movePig(level, state, id) {
+    if (state.failed) return { ok: false, message: '炸弹已爆炸，请撤回或重新开始' };
     const next = cloneState(state);
     const pig = next.pigs.find(item => item.id === id);
     if (!pig || pig.gone) return { ok: false, message: '这只小猪已经离开' };
@@ -41,7 +42,11 @@ export function movePig(level, state, id) {
     const cages = (level.cages || []).filter(cage => next.exitCount < cage.unlockAfter);
     const cageCells = new Set(cages.flatMap(cage => cage.cells.map(([x, y]) => `${x},${y}`)));
     if (cells(pig).some(([x, y]) => cageCells.has(`${x},${y}`))) return { ok: false, message: '铁笼尚未打开' };
-    const occupied = new Set(next.pigs.filter(item => !item.gone && item.id !== id).flatMap(cells).map(([x, y]) => `${x},${y}`));
+    const pigCells = new Map();
+    for (const other of next.pigs.filter(item => !item.gone && item.id !== id)) {
+        for (const [x, y] of cells(other)) pigCells.set(`${x},${y}`, other);
+    }
+    const occupied = new Set(pigCells.keys());
     for (const cell of cageCells) occupied.add(cell);
     for (const cell of next.ducks) occupied.add(cell.join(','));
     const vector = VECTORS[pig.direction];
@@ -58,6 +63,7 @@ export function movePig(level, state, id) {
             }
         }
         pig.gone = true;
+        next.exitCount += 1;
         settleDucks(level, next);
         return { ok: true, state: next, action: { id, from, to: null, exited: true }, won: next.pigs.every(item => item.gone) && !next.ducks.length };
     }
@@ -72,10 +78,19 @@ export function movePig(level, state, id) {
             next.exitCount += 1;
             if (pig.kind === 'scissors') next.remainingScissors -= 1;
             settleDucks(level, next);
-            return { ok: true, state: next, action: { id, from, to: null, exited: true }, won: next.pigs.every(item => item.gone) };
+            return { ok: true, state: next, action: { id, from, to: null, exited: true }, won: next.pigs.every(item => item.gone) && !next.ducks.length };
         }
-        if (Array.from({ length: pig.width || 1 }, (_, side) => `${headX + (horizontal ? 0 : side)},${headY + (horizontal ? side : 0)}`).some(cell => occupied.has(cell))) {
-            if (!distance) return { ok: false, message: '前方有阻挡' };
+        const front = Array.from({ length: pig.width || 1 }, (_, side) => `${headX + (horizontal ? 0 : side)},${headY + (horizontal ? side : 0)}`);
+        if (front.some(cell => occupied.has(cell))) {
+            // 弹簧猪遇阻不准半途停靠，弹回原位置。
+            if (pig.kind === 'spring') return { ok: false, message: '弹簧猪前方有阻挡，会弹回原位' };
+            // 同一次碰撞可能涉及多个占格，按炸弹对象去重后各减一次。
+            const struck = [...new Set(front.map(cell => pigCells.get(cell)).filter(Boolean))];
+            const bombs = new Set(struck.filter(item => item.kind === 'bomb'));
+            if (struck.length && pig.kind === 'bomb') bombs.add(pig);
+            if (!distance && !bombs.size) return { ok: false, message: '前方有阻挡' };
+            for (const bomb of bombs) bomb.bombCount = Math.max(0, bomb.bombCount - 1);
+            next.failed = [...bombs].some(bomb => bomb.bombCount === 0);
             settleDucks(level, next);
             return { ok: true, state: next, action: { id, from, to: [pig.x, pig.y], exited: false }, won: false };
         }
@@ -91,10 +106,12 @@ export function sameAction(a, b) {
 
 export function verifyPlan(level) {
     let state = createState(level);
-    for (let index = 0; index < level.steps.length; index += 1) {
-        const expected = level.steps[index];
+    const steps = level.steps || [];
+    if (!steps.length) return true;
+    for (let index = 0; index < steps.length; index += 1) {
+        const expected = steps[index];
         const result = movePig(level, state, expected.id);
-        if (!result.ok || !sameAction(result.action, expected)) throw new Error(`第 ${index + 1} 步不符合棋盘规则`);
+        if (!result.ok || result.state.failed || !sameAction(result.action, expected)) throw new Error(`第 ${index + 1} 步不符合棋盘规则`);
         state = result.state;
     }
     if (!state.pigs.every(pig => pig.gone) || state.ducks.length) throw new Error('步骤结束后棋盘仍有动物');

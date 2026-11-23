@@ -37,6 +37,13 @@ describe('ProgressStore', () => {
 });
 
 describe('GoalManager', () => {
+  it('同时判断前置条件和独立的完成条件', async () => {
+    const manager = new GoalManager({ progressStore: new ProgressStore() });
+    const goal = { id: 'pig', condition: 'state.ready == true', success: 'state.won == true' };
+    expect(await manager.evaluate({ state: { ready: true, won: false } }, goal)).toMatchObject({ status: 'pending', completed: false });
+    expect(await manager.evaluate({ state: { ready: true, won: true } }, goal)).toMatchObject({ status: 'complete', completed: true });
+    expect(await manager.evaluate({ state: { ready: false, won: false } }, goal)).toMatchObject({ status: 'blocked', completed: false });
+  });
   it('evaluates a goal success expression as completed progress', async () => {
     const manager = new GoalManager({ progressStore: new ProgressStore() });
 

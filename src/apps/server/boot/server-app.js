@@ -68,8 +68,7 @@ const {
     DEFAULT_TEMPORARY_HISTORY_GROUPS,
     DEFAULT_TEMPORARY_CONTEXT_GROUPS,
     normalizeTemporaryConversationHistoryConfig,
-    selectTemporaryConversationHistory,
-    getTemporaryConversationHistoryGroups
+    getContinuousTemporaryConversationHistory
 } = require('../modules/voice/temporary-conversation-history');
 const {
     beginRepairModeEntry,
@@ -436,7 +435,7 @@ const chatHistoryClear = createChatHistoryClearService({ chat, gameService: gomo
 const chatContextUsage = createChatContextUsageService({ chat,
     getGameSnapshot: displayId => gomokuGame.snapshot(displayId),
     getTemporaryConversation: () => ({ ...temporaryConversation,
-        history: getTemporaryConversationHistoryContext(temporaryConversation.id) })
+        history: getTemporaryConversationHistoryContext() })
 });
 gomokuDisplayDemo = createGomokuDisplayDemoService({
     getSnapshot: displayId => gomokuGame.snapshot(displayId),
@@ -1539,7 +1538,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'displayPlaylistRequest', 'displayPlaylistCancel', 'displayQuickControl', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['backgroundMediaStatus', 'chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'displayPlaylistRequest', 'displayPlaylistCancel', 'displayQuickControl', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1643,7 +1642,7 @@ async function startServer() {
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'setVoiceCaptureConfig', 'requestAudioInputDevices', 'setAudioOutputConfig', 'requestAudioOutputDevices', 'requestDisplayRecording', 'stopDisplayRecording',
                 'listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera',
                 'setGlobalRecordingPause',
-                'playlistRequest', 'playlistControl', 'bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove', 'shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet', 'gameDemoStart', 'gameDemoStop',
+                'playlistRequest', 'playlistUrlRequest', 'playlistControl', 'bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove', 'shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet', 'gameDemoStart', 'gameDemoStop',
                 'getWebProxyConfig', 'setWebProxyList', 'setProviderProxy',
                 'taskMediaCollectionsGet', 'taskMediaFolderCreate', 'taskMediaFolderDelete', 'taskMediaAdd', 'taskMediaMove', 'taskMediaRemove'
             ];
@@ -2243,19 +2242,17 @@ function getDisplayVoiceAssistantNames() {
 }
 
 function getTemporaryConversationSnapshot() {
-    const conversationConfig = getVoiceConversationWindowConfig();
+    const currentMessages = new Map(temporaryConversation.messages.map(message => [message.id, message]));
+    const messages = getContinuousTemporaryConversationHistory(chat.getHistory({ preserveThink: true }))
+        .map(message => ({ ...message, ...currentMessages.get(message.id) }));
     return {
         id: temporaryConversation.id,
         startedAt: temporaryConversation.startedAt,
         displayId: temporaryConversation.displayId,
         roleName: temporaryConversation.roleName,
         templateId: temporaryConversation.templateId,
-        messages: temporaryConversation.messages.map(message => ({ ...message })),
-        historyGroups: getTemporaryConversationHistoryGroups(
-            chat.getHistory(),
-            temporaryConversation.id,
-            conversationConfig
-        )
+        messages,
+        historyGroups: []
     };
 }
 
@@ -2294,24 +2291,8 @@ function clearTemporaryChatHistory(options = {}) {
     return chatHistoryClear.clear({ ...options, mode: 'temporary' });
 }
 
-function pruneTemporaryConversationHistory(currentSessionId) {
-    const conversationConfig = getVoiceConversationWindowConfig();
-    if (typeof chat.pruneHistorySessions !== 'function') return;
-    chat.pruneHistorySessions({
-        mode: 'temporary',
-        currentSessionId,
-        maxHistoricalSessions: conversationConfig.temporaryHistoryGroups
-    });
-}
-
-function getTemporaryConversationHistoryContext(currentSessionId) {
-    const conversationConfig = getVoiceConversationWindowConfig();
-    const selected = selectTemporaryConversationHistory(
-        chat.getHistory(),
-        currentSessionId,
-        conversationConfig
-    );
-    return selected.messages;
+function getTemporaryConversationHistoryContext() {
+    return getContinuousTemporaryConversationHistory(chat.getHistory());
 }
 
 function replaceTemporaryConversation(displayId, roleName = null) {
@@ -2355,11 +2336,12 @@ function ensureTemporaryConversation(displayId) {
 }
 
 function clearTemporaryConversation(options = {}) {
-    clearTemporaryChatHistory({ ...options, sessionId: temporaryConversation.id,
+    const history = clearTemporaryChatHistory({ ...options, sessionId: temporaryConversation.id,
         // 临时会话的所属显示端由服务器确定，控制端当前选中项可能已切换。
         ...(temporaryConversation.displayId ? { displayIds: [temporaryConversation.displayId] } : {}) });
     temporaryConversation.messages = [];
     broadcastTemporaryConversation('clear');
+    return history;
 }
 
 function appendTemporaryConversationMessage(message, conversationId) {
@@ -5756,7 +5738,8 @@ app.get('/api/chat/history', (req, res) => {
 
 app.post('/api/chat/clear', (req, res) => {
     try {
-        const history = chatHistoryClear.clear(req.body || {});
+        const history = req.body?.mode === 'temporary'
+            ? clearTemporaryConversation(req.body) : chatHistoryClear.clear(req.body || {});
         log('Chat', `清空聊天历史 source=http mode=${req.body?.mode || '-'} target=${req.body?.target || '-'} sessionId=${req.body?.sessionId || '-'}`);
         res.json({
             status: 'success',
@@ -9622,6 +9605,16 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     }
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;
     const displayData = displayClients.get(displayId);
+    if (data.type === 'backgroundMediaStatus') {
+        const valid = ['loading', 'playing', 'paused', 'sleeping', 'stopped', 'blocked', 'error'];
+        if (displayData?.ws === ws && valid.includes(data.status)
+            && data.url === (displayData.state.backgroundMedia?.url || '')) {
+            const status = { status: data.status, message: typeof data.message === 'string' ? data.message.slice(0, 120) : '' };
+            displayData.state.backgroundMediaStatus = status;
+            broadcastToControls({ type: 'backgroundMediaStatus', displayId, ...status });
+        }
+        return;
+    }
     if (data.type === 'getChatContextUsage') {
         if (displayData?.ws === ws) chatContextUsage.handle(ws, data, displayId);
         return;
@@ -11360,7 +11353,8 @@ async function handleControlMessageFallback(data, ws) {
                             target: data.target,
                             sessionId: data.sessionId
                         };
-                        const remainingHistory = chatHistoryClear.clear({ ...data, ...scope });
+                        const remainingHistory = scope.mode === 'temporary'
+                            ? clearTemporaryConversation({ ...data, ...scope }) : chatHistoryClear.clear({ ...data, ...scope });
                         // 显示端只接收被清空范围的快照，其他私聊历史不能阻止当前面板刷新。
                         const history = isDisplayChatSource
                             ? chat.getHistory({ ...scope, preserveThink: true }) : remainingHistory;
@@ -11569,7 +11563,7 @@ async function handleControlMessageFallback(data, ws) {
                         }
                     });
                     return;
-                } else if (data.type === 'playlistRequest') {
+                } else if (data.type === 'playlistRequest' || data.type === 'playlistUrlRequest') {
                     (async () => {
                         try {
                             const displayIds = data.displayIds || [];
@@ -11579,8 +11573,12 @@ async function handleControlMessageFallback(data, ws) {
                             }
                             let playlist;
                             let dynamicCursor = null;
-                            const dynamic = !data.temp && data.libraryType === 'quark';
-                            if (dynamic) {
+                            const urlList = data.type === 'playlistUrlRequest';
+                            const dynamic = !urlList && !data.temp && data.libraryType === 'quark';
+                            if (urlList) {
+                                if (data.temp) throw new Error('URL 列表不能与临时文件模式混用');
+                                playlist = playlistManager.buildFromUrls(data.urls);
+                            } else if (dynamic) {
                                 const cursor = playlistManager.createDirectoryCursor(data.libraryId, data.path, data);
                                 const batch = await nextDynamicPlaylistBatch(cursor, data.remoteNodeId);
                                 playlist = batch.playlist;
@@ -11816,6 +11814,7 @@ async function handleControlMessageFallback(data, ws) {
                             return;
                         }
                         displayData.state.backgroundMedia = backgroundMedia;
+                        displayData.state.backgroundMediaStatus = null;
                         persistDisplayState(displayData, { backgroundMedia });
                         sendToDisplay(displayId, { type: 'control', action: 'backgroundMedia', value: backgroundMedia });
                         broadcastToControls({ type: 'backgroundMediaChanged', displayId, backgroundMedia });
@@ -12157,7 +12156,6 @@ async function handleChatMessage(options) {
     await chatAttachments.bind(inputAttachments);
     if (isTemporaryConversation) {
         appendTemporaryConversationMessage(userMessageRecord, effectiveTemporaryConversationId);
-        pruneTemporaryConversationHistory(effectiveTemporaryConversationId);
     }
     
     const { systemPrompt, includeHistory, contextCount } = resolveChatContextOptions(chat, {
@@ -12277,7 +12275,7 @@ async function handleChatMessage(options) {
         templateTarget: effectiveTemplateTarget,
         sessionId: effectiveSessionId,
         historyMessages: isTemporaryConversation
-            ? getTemporaryConversationHistoryContext(effectiveTemporaryConversationId)
+            ? getTemporaryConversationHistoryContext()
             : null,
         images: [...images.map((image, index) => ({ ...savedInputImages[index], ...image })), ...inputAttachments.filter(file => file.kind === 'image')],
         attachments: inputAttachments,

@@ -34,7 +34,7 @@ test('B站标签展示封面标题并支持加入、播放与移除', async t =>
     assert.equal(await page.$eval('.bilibili-video-cover', el => el.getAttribute('src')), 'https://i0.hdslb.com/a.jpg');
     assert.equal(await page.$eval('#mediaLibraryContent', el => getComputedStyle(el).display), 'none');
     await page.type('#bilibiliVideoInput', 'https://www.bilibili.com/video/BV1B7411m7LV?p=2');
-    await page.$eval('#bilibiliVideoBar button', el => el.click());
+    await page.$eval('#bilibiliVideoBar button[onclick="MediaLibrary.addBilibiliVideo()"]', el => el.click());
     await page.$eval('.bilibili-video-actions button', el => el.click());
     await page.$eval('.bilibili-video-actions button:nth-child(2)', el => el.click());
     const sent = await page.evaluate(() => window.sent);
@@ -89,8 +89,8 @@ test('B 站收藏列表输入支持加入分类及直接批量播放', async t =
         document.getElementById('bilibiliVideoBar').style.display = '';
     });
     await page.type('#bilibiliVideoInput', 'https://www.bilibili.com/list/ml3316957636?oid=1');
-    await page.click('#bilibiliVideoBar button:nth-of-type(1)');
-    await page.click('#bilibiliVideoBar button:nth-of-type(2)');
+    await page.click('#bilibiliVideoBar button[onclick="MediaLibrary.addBilibiliVideo()"]');
+    await page.click('#bilibiliVideoBar button[onclick="MediaLibrary.playBilibiliInput()"]');
     await page.click('#plConfirmBtn');
     const sent = await page.evaluate(() => window.sent);
     assert.equal(sent[0].type, 'bilibiliListAdd');

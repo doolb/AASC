@@ -151,7 +151,7 @@ SHA长度 := 低32位与高32位均按大端写入；使用512MiB+1流式输入�
 
 ## HMR2 GPU API 与整图相对深度（2026-10-21，完成）
 
-本节以现成[Python GPU 服务](<E:/ai/ai-depthmap/hmr2_gpu_service.py>)为契约，独立网页接入已经实现；相关旧候选只作历史，不作为运行协议。任务见[接入结果](<../task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。
+本节以现成[Python GPU 服务](<E:/ai/ai-depthmap/hmr2_gpu_service.py>)为契约，独立网页接入已经实现；相关旧候选只作历史，不作为运行协议。任务见[接入结果](<../../3rd/hmr2-node-onnx/docs/task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。
 
 ```text
 范围 := 独立 MMD-AR 全身 IK 的图片区域；MediaPipe 默认保持；HMR2 API 为独立选择
@@ -444,7 +444,7 @@ XYZ验证 := 65坐标/根/非法输入 + 94记录/有限性/骨长/基线/初值
 ## 四模型对照试验（2026-10-16，完成，非运行代码变更）
 
 ```text
-方法归档 := docs/usage/mmd-pose-model-testing.md；固定输入/权重SHA/后端/预后处理 → 同框或全图变体 → 原图语义12点 → 失败保留与计时口径；旧MP Worker探针不得误读当前RTMPose结果
+方法归档 := 3rd/mmd-ar-test/docs/usage/mmd-pose-model-testing.md；固定输入/权重SHA/后端/预后处理 → 同框或全图变体 → 原图语义12点 → 失败保留与计时口径；旧MP Worker探针不得误读当前RTMPose结果
 输入 := 236×314侧身坐姿图与追加450×407二次元跪坐图，各自四模型同图推理 + 当前固定MediaPipe + 官方RTMPose-m Body7 384 + 官方DWPose ONNX + 官方ControlNet OpenPose参考网络/PAF/权重
 第三图 := 236×314交叉腿人体示意图 → 同一client/四权重 → MP可靠姿态失败与OP两档无人物保留真实错误/空结果；YOLOX1框 → RTM/DW相同框与全图对照，不手工改点
 对齐 := 所有结果逆变换回原图像素 → 统一COCO语义身体12点/连线/线宽/颜色 → 橙色模型左腿/蓝色模型右腿；缺失点不补画

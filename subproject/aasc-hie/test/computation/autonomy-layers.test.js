@@ -7,6 +7,22 @@ import {
 } from '../../src/computation/autonomy-layers.js';
 
 describe('hierarchical autonomy layers', () => {
+  it('仅在没有计划或存在明确缺口时调用高层，并保持默认行为', async () => {
+    const planner = vi.fn(() => ({ plans: [] }));
+    const coordinator = new AutonomyCoordinator({ intelligenceOnGapOnly: true,
+      muscleMemory: { planner: () => ({ id: 'known', plan: { action: 'tap' } }) },
+      intelligence: { planner } });
+    expect((await coordinator.decide()).selected.id).toBe('known');
+    expect(planner).toHaveBeenCalledTimes(0);
+    await coordinator.decide({ gaps: [{ requiresIntelligence: true }] });
+    expect(planner).toHaveBeenCalledTimes(1);
+    const empty = new AutonomyCoordinator({ intelligenceOnGapOnly: true, intelligence: { planner } });
+    await empty.decide();
+    expect(planner).toHaveBeenCalledTimes(2);
+    const legacy = new AutonomyCoordinator({ muscleMemory: { planner: () => ({ id: 'known' }) }, intelligence: { planner } });
+    await legacy.decide();
+    expect(planner).toHaveBeenCalledTimes(3);
+  });
   it('lets the instinct layer override lower-priority plans with a safety command', async () => {
     const layer = new InstinctLayer({
       rules: [{

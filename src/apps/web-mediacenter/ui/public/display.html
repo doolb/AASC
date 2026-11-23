@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="css/android-color-picker.css">
     <link rel="stylesheet" href="css/display-voice-controls.css">
     <link rel="stylesheet" href="css/display-wallpaper-controls.css">
+    <link rel="stylesheet" href="css/display-ui.css">
     <script type="importmap">
         {
             "imports": {
@@ -71,12 +72,14 @@
     </div>
 
     <div id="mediaContainer">
+        <img id="backgroundMediaImage" alt="">
         <video id="backgroundMediaVideo" playsinline preload="auto"></video>
         <audio id="backgroundMediaAudio" preload="auto"></audio>
         <div id="waitingMessage">
             <h2>等待媒体...</h2>
             <p>请在上传端选择图片或视频</p>
         </div>
+        <canvas id="mediaImageHold" aria-hidden="true"></canvas>
         <img id="mediaImage">
         <video id="mediaVideo" autoplay loop playsinline></video>
         <audio id="mediaAudio" preload="auto" style="display:none;"></audio>
@@ -764,7 +767,6 @@
             <button id="displayMediaLibraryClose" class="display-stage-button" type="button">关闭</button>
         </div>
         <div class="display-media-library-body">
-            <div id="displayMediaLibrarySources" class="display-media-library-sources"></div>
             <div class="display-media-library-main">
                 <div class="display-media-library-toolbar">
                     <button id="displayMediaLibraryUp" type="button">返回上级</button>
@@ -785,6 +787,7 @@
     <script src="js/video-black-borders.js"></script>
     <script src="js/display-video-black-borders.js"></script>
     <script src="js/media-loop.js"></script>
+    <script src="js/display-image-preloader.js"></script>
     <script src="js/quark-cache-progress.js"></script>
     <script src="js/sherpa-asr.js"></script>
     <script src="js/pcm-audio-capture.js"></script>
@@ -854,7 +857,9 @@
         const voiceTextDisplay = document.getElementById('voiceTextDisplay');
         const monitorWrapper = document.getElementById('monitorWrapper');
         const waitingMessage = document.getElementById('waitingMessage');
+        const mediaImageHold = document.getElementById('mediaImageHold');
         const mediaImage = document.getElementById('mediaImage');
+        const imagePreloader = window.DisplayImagePreloader?.createController?.() || null;
         const mediaVideo = document.getElementById('mediaVideo');
         const mediaAudio = document.getElementById('mediaAudio');
         const mediaHtml = document.getElementById('mediaHtml');
@@ -958,6 +963,11 @@
         }
         let htmlMediaAbortController = null;
         let displayWs = null;
+        window.DisplayBackgroundMedia.onStatus = (status) => {
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({ type: 'backgroundMediaStatus', ...status }));
+            }
+        };
         // ASR 来源必须与当前 WebSocket 使用同一个持久化显示端 ID；连接确认前也允许使用本地 ID 上传。
         let displayId = '';
 
@@ -4145,6 +4155,10 @@
             if (!playlistState) return;
             cancelPlaylistCache(playlistState);
             playlistState.active = false;
+            playlistState.imageLoadingIndex = null;
+            if (typeof imagePreloader !== 'undefined' && imagePreloader) imagePreloader.reset();
+            window.DisplayImagePreloader?.hideHold?.(typeof mediaImageHold !== 'undefined' ? mediaImageHold : null);
+            mediaImage.style.visibility = '';
             // 先解绑列表上下文再停止，过期 TTS 回包不会再推进已经停止的列表。
             TextMediaPlayer.attachPlaylist(null);
             TextMediaPlayer.stop();
@@ -4185,8 +4199,9 @@
                     currentTime = Number.isFinite(mediaVideo.currentTime) ? mediaVideo.currentTime : 0;
                     duration = Number.isFinite(mediaVideo.duration) ? mediaVideo.duration : 0;
                 } else {
-                    width = mediaImage.naturalWidth || undefined;
-                    height = mediaImage.naturalHeight || undefined;
+                    const isImageLoading = (!item.mediaType || item.mediaType === 'image' || item.mediaType === 'gif') && ps.imageLoadingIndex === ps.index;
+                    width = isImageLoading ? undefined : (mediaImage.naturalWidth || undefined);
+                    height = isImageLoading ? undefined : (mediaImage.naturalHeight || undefined);
                     if (item.mediaType === 'audio') {
                         currentTime = Number.isFinite(mediaAudio.currentTime) ? mediaAudio.currentTime : 0;
                         duration = Number.isFinite(mediaAudio.duration) ? mediaAudio.duration : 0;
@@ -4320,6 +4335,7 @@
                 }
             }
             ps.cacheReadyIndex = null;
+            ps.imageLoadingIndex = null;
             mediaLoopPlayers.forEach(player => player.reset());
             // 清除上一项残留的定时器/ended 监听/加载失败回调，
             // 防止切换时重复触发 next 跳过媒体项
@@ -4388,8 +4404,25 @@
                     onVideoFailure();
                 };
             };
-            showMedia(mediaData, true, ps.paused, resumeTime);  // 播放列表自动切播不激活（显示端内部行为）
-            // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
+            const isImageItem = item.mediaType !== 'video' && item.mediaType !== 'audio' && item.mediaType !== 'html' && item.mediaType !== 'text';
+            const scheduleImageNext = () => {
+                if (playlistState !== ps || !ps.active || ps.paused || isSleepPaused() || ps.index !== itemIndex) return;
+                if (ps.timer) clearTimeout(ps.timer);
+                ps.timer = setTimeout(playlistNext, ps.interval);
+            };
+            const prefetchNextImage = () => {
+                if (typeof imagePreloader === 'undefined' || !imagePreloader) return;
+                if (playlistState !== ps || !ps.active || ps.paused || isSleepPaused() || ps.index !== itemIndex) return;
+                const nextIndex = ps.index + 1 < ps.playlist.length
+                    ? ps.index + 1
+                    : (ps.loop && ps.playlist.length > 1 ? 0 : -1);
+                if (nextIndex < 0 || nextIndex === ps.index) return;
+                const nextItem = ps.playlist[nextIndex];
+                if (nextItem) {
+                    imagePreloader.prefetchNext({ listId: ps.listId, index: nextIndex, item: nextItem });
+                }
+            };
+            let imageSettled = false;
             const reportSizeOnce = () => {
                 if (playlistState && playlistState.paused) {
                     sendPlaylistProgress('paused');
@@ -4398,14 +4431,43 @@
                 }
                 if (playlistState) playlistState.resumeTime = null;
             };
+            const finishImageReady = () => {
+                if (imageSettled || playlistState !== ps || !ps.active || ps.index !== itemIndex) return;
+                imageSettled = true;
+                ps.imageLoadingIndex = null;
+                reportSizeOnce();
+                if (!ps.paused && !isSleepPaused()) {
+                    scheduleImageNext();
+                    prefetchNextImage();
+                }
+            };
+            const finishImageError = () => {
+                if (imageSettled || playlistState !== ps || !ps.active || ps.index !== itemIndex) return;
+                imageSettled = true;
+                ps.imageLoadingIndex = null;
+                mediaImage.onerror = null;
+                if (!ps.paused && !isSleepPaused()) {
+                    scheduleImageNext();
+                    prefetchNextImage();
+                }
+            };
+            if (isImageItem) {
+                ps.imageLoadingIndex = itemIndex;
+                mediaData.playlistListId = ps.listId;
+                mediaData.playlistIndex = itemIndex;
+                mediaData.onImageReady = finishImageReady;
+                mediaData.onImageError = finishImageError;
+            }
+            showMedia(mediaData, true, ps.paused, resumeTime);  // 播放列表自动切播不激活（显示端内部行为）
+            // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
             if (item.mediaType === 'video') {
                 mediaVideo.addEventListener('loadedmetadata', reportSizeOnce, { once: true });
             } else if (item.mediaType === 'audio') {
                 mediaAudio.addEventListener('loadedmetadata', reportSizeOnce, { once: true });
             } else if (item.mediaType === 'html') {
                 mediaHtml.addEventListener('load', reportSizeOnce, { once: true });
-            } else {
-                mediaImage.addEventListener('load', reportSizeOnce, { once: true });
+            } else if (!mediaData._imageHandledByShowMedia) {
+                mediaImage.addEventListener('load', finishImageReady, { once: true });
             }
             if (item.mediaType === 'video') {
                 // 视频用自己的时长播放，播完后再等间隔
@@ -4419,7 +4481,10 @@
                     mediaVideo.addEventListener('ended', ps.videoEndedHandler);
                 }
                 const fallbackOnError = mediaVideo.onerror;
-                mediaVideo.onerror = item.bilibiliDash ? fallbackOnError : onVideoFailure;
+                mediaVideo.onerror = item.bilibiliDash ? fallbackOnError : () => {
+                    if (fallbackOnError?.() === true) return;
+                    onVideoFailure();
+                };
             } else if (item.mediaType === 'audio') {
                 // 音频按自然时长播放，结束后等待间隔再切换，和视频批量语义一致。
                 mediaAudio.loop = false;
@@ -4431,7 +4496,9 @@
                     };
                     mediaAudio.addEventListener('ended', ps.audioEndedHandler);
                 }
+                const fallbackOnError = mediaAudio.onerror;
                 mediaAudio.onerror = function() {
+                    if (fallbackOnError?.() === true) return;
                     // 音频加载失败：等待间隔后播下一个，避免单项错误卡住列表。
                     mediaAudio.onerror = null;
                     if (ps.paused) return;
@@ -4441,15 +4508,22 @@
                     }
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
-            } else {
-                // 图片按间隔时间切换
-                mediaImage.onerror = function() {
-                    // 图片加载失败：等间隔后播下一个，不卡死循环
-                    mediaImage.onerror = null;
+            } else if (item.mediaType === 'html') {
+                // html 按间隔时间切换
+                mediaHtml.onerror = function() {
+                    mediaHtml.onerror = null;
                     if (ps.paused) return;
+                    if (ps.timer) clearTimeout(ps.timer);
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
                 if (!ps.paused) ps.timer = setTimeout(playlistNext, ps.interval);
+            } else if (!mediaData._imageHandledByShowMedia) {
+                // 兼容只注入基础 setMediaSourceWithFallback 的测试桩：等待图片加载或全部地址失败后再调度切换
+                const fallbackOnError = mediaImage.onerror;
+                mediaImage.onerror = function() {
+                    if (fallbackOnError?.() === true) return;
+                    finishImageError();
+                };
             }
             sendPlaylistProgress(ps.paused ? 'paused' : 'playing');
         }
@@ -4544,7 +4618,9 @@
             // 清除加载失败回调，防止 pause 后 error 事件重新设置定时器自动播下一项
             mediaVideo.onerror = null;
             mediaAudio.onerror = null;
-            mediaImage.onerror = null;
+            if (typeof imagePreloader !== 'undefined' && imagePreloader) imagePreloader.clearPrefetch();
+            const hasPendingSwap = typeof imagePreloader !== 'undefined' && imagePreloader && imagePreloader.getState().hasCurrentLoad;
+            if (!hasPendingSwap) mediaImage.onerror = null;
             sendPlaylistProgress('paused');
         }
 
@@ -4579,9 +4655,24 @@
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
                 mediaAudio.addEventListener('ended', ps.audioEndedHandler);
+            } else if (item && (!item.mediaType || item.mediaType === 'image' || item.mediaType === 'gif')
+                && ps.imageLoadingIndex === ps.index
+                && typeof imagePreloader !== 'undefined' && imagePreloader && imagePreloader.getState().hasCurrentLoad) {
+                // 后台切图加载尚未完成：等待加载就绪或失败回调再启动唯一间隔定时器
             } else {
                 // 图片或间隔等待中 → 重新计时
+                if (ps.timer) clearTimeout(ps.timer);
+                ps.imageLoadingIndex = null;
                 ps.timer = setTimeout(playlistNext, ps.interval);
+                if (item && (!item.mediaType || item.mediaType === 'image' || item.mediaType === 'gif')
+                    && typeof imagePreloader !== 'undefined' && imagePreloader && !isSleepPaused()) {
+                    const nextIndex = ps.index + 1 < ps.playlist.length
+                        ? ps.index + 1
+                        : (ps.loop && ps.playlist.length > 1 ? 0 : -1);
+                    if (nextIndex >= 0 && nextIndex !== ps.index && ps.playlist[nextIndex]) {
+                        imagePreloader.prefetchNext({ listId: ps.listId, index: nextIndex, item: ps.playlist[nextIndex] });
+                    }
+                }
                 // html 项暂停时滚动已冻结，恢复时继续滚动
                 if (item && item.mediaType === 'html') {
                     startHtmlScroll(mediaHtml, item.htmlScroll || null);
@@ -4601,6 +4692,8 @@
                 state: 'finished'
             };
             playlistState.active = false;
+            playlistState.imageLoadingIndex = null;
+            if (typeof imagePreloader !== 'undefined' && imagePreloader) imagePreloader.reset();
             TextMediaPlayer.attachPlaylist(null);
             TextMediaPlayer.stop();
             stopHtmlScroll();
@@ -5440,7 +5533,9 @@
                 ? mediaVideo
                 : (data.mediaType === 'audio' ? mediaAudio : (data.mediaType === 'html' ? mediaHtml : mediaImage));
             const readyEvent = data.mediaType === 'video' || data.mediaType === 'audio' ? 'loadedmetadata' : 'load';
-            if (data.mediaType === 'html') {
+            if (data._deferTempImageReport) {
+                data._onTempImageReady = sendTempInfo;
+            } else if (data.mediaType === 'html') {
                 // html 无固有尺寸，加载完成即上报（不含宽高）
                 readyTarget.addEventListener(readyEvent, sendTempInfo, { once: true });
             } else if (readyTarget.readyState >= 1 || (readyTarget.complete && readyTarget.naturalWidth > 0)) {
@@ -5527,13 +5622,13 @@
                 element.src = url;
             };
             element.onerror = () => {
-                if (loadSequence !== mediaLoadSequence) return;
+                if (loadSequence !== mediaLoadSequence) return true;
                 if (element === mediaVideo && element.hasAttribute('crossorigin')) {
                     const directSource = element.src;
                     element.removeAttribute('crossorigin');
                     element.src = directSource;
                     if (reload) element.load();
-                    return;
+                    return true;
                 }
                 if (!fallbackUsed && safeFallbackUrl && safeFallbackUrl !== safeDirectUrl) {
                     fallbackUsed = true;
@@ -5541,7 +5636,9 @@
                     if (reload && typeof element.load === 'function') {
                         element.load();
                     }
+                    return true;
                 }
+                return false;
             };
             if (source) setSource(source);
             if (reload && typeof element.load === 'function') {
@@ -5619,11 +5716,20 @@
             window.DisplayMediaLibrary?.setCurrentMedia(data);
             mediaLoopPlayers.forEach(player => player.reset());
             const loadSequence = ++mediaLoadSequence;
+            if (typeof imagePreloader !== 'undefined' && imagePreloader) {
+                imagePreloader.cancelCurrentLoad();
+            }
             stopBilibiliDash();
             stopBilibiliDanmaku();
             htmlMediaAbortController?.abort();
             htmlMediaAbortController = null;
-            mediaImage.onload = null;
+            const incomingIsImage = data.mediaType !== 'text' && data.mediaType !== 'html' && data.mediaType !== 'audio' && data.mediaType !== 'video';
+            if (!incomingIsImage) {
+                if (typeof imagePreloader !== 'undefined' && imagePreloader) imagePreloader.clearPrefetch();
+                window.DisplayImagePreloader?.hideHold?.(typeof mediaImageHold !== 'undefined' ? mediaImageHold : null);
+                mediaImage.style.visibility = '';
+                mediaImage.onload = null;
+            }
             mediaHtml.onload = null;
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
@@ -5735,6 +5841,115 @@
 
             let mediaName = '';
 
+            const applyImageMedia = () => {
+                const hasPreloader = typeof imagePreloader !== 'undefined' && imagePreloader && window.DisplayImagePreloader;
+                const canHoldCurrentImage = Boolean(
+                    hasPreloader
+                    && (previousMediaType === 'image' || previousMediaType === 'gif')
+                    && mediaImage.style.display !== 'none'
+                    && mediaImage.complete
+                    && mediaImage.naturalWidth > 0
+                );
+                data._imageHandledByShowMedia = true;
+                if (!canHoldCurrentImage) {
+                    window.DisplayImagePreloader?.hideHold?.(typeof mediaImageHold !== 'undefined' ? mediaImageHold : null);
+                    mediaImage.style.visibility = '';
+                    mediaVideo.style.display = 'none';
+                    mediaImage.style.display = 'block';
+                    let settled = false;
+                    const onDone = () => {
+                        if (settled || loadSequence !== mediaLoadSequence) return;
+                        settled = true;
+                        restartDynamicFitAfterMediaLoad();
+                        data.onImageReady?.();
+                    };
+                    const onFail = () => {
+                        if (settled || loadSequence !== mediaLoadSequence) return;
+                        settled = true;
+                        data.onImageError?.();
+                    };
+                    mediaImage.onload = onDone;
+                    if (data.type === 'url') {
+                        setMediaSourceWithFallback(mediaImage, data.url, data.fallbackUrl);
+                        const fallbackOnError = mediaImage.onerror;
+                        mediaImage.onerror = () => {
+                            if (fallbackOnError?.() === true) return true;
+                            onFail();
+                            return false;
+                        };
+                    } else {
+                        const mimeType = data.mimeType || 'application/octet-stream';
+                        mediaImage.src = 'data:' + mimeType + ';base64,' + data.data;
+                        mediaImage.onerror = () => { onFail(); return false; };
+                    }
+                    return;
+                }
+
+                // 已有图片在屏幕显示时，保留当前画面不清空，后台加载解码后再同位垫底切换
+                data._deferTempImageReport = true;
+                imagePreloader.loadForSwap({
+                    listId: data.playlistListId || '',
+                    index: Number.isFinite(data.playlistIndex) ? data.playlistIndex : -1,
+                    data,
+                    isStale: () => loadSequence !== mediaLoadSequence,
+                    onReady: (resolvedUrl) => {
+                        if (loadSequence !== mediaLoadSequence) return;
+                        const holdEl = typeof mediaImageHold !== 'undefined' ? mediaImageHold : null;
+                        window.DisplayImagePreloader.captureHold(mediaImage, holdEl);
+                        mediaVideo.style.display = 'none';
+                        mediaImage.style.display = 'block';
+
+                        let finalized = false;
+                        const finalizeSwap = () => {
+                            if (finalized || loadSequence !== mediaLoadSequence) return;
+                            finalized = true;
+                            restartDynamicFitAfterMediaLoad();
+                            mediaImage.style.visibility = '';
+                            window.DisplayImagePreloader.hideHold(holdEl);
+                            data.onImageReady?.();
+                            data._onTempImageReady?.();
+                        };
+
+                        let sameSource = false;
+                        try {
+                            const targetHref = new URL(resolvedUrl, location.href).href;
+                            const currentHref = mediaImage.currentSrc || (mediaImage.getAttribute('src') ? new URL(mediaImage.src, location.href).href : '');
+                            sameSource = Boolean(currentHref && currentHref === targetHref && mediaImage.complete && mediaImage.naturalWidth > 0);
+                        } catch {
+                            sameSource = Boolean(mediaImage.src === resolvedUrl && mediaImage.complete && mediaImage.naturalWidth > 0);
+                        }
+                        if (sameSource) {
+                            finalizeSwap();
+                            return;
+                        }
+
+                        mediaImage.style.visibility = 'hidden';
+                        mediaImage.onload = () => {
+                            if (loadSequence !== mediaLoadSequence) return;
+                            const waitDecode = typeof mediaImage.decode === 'function'
+                                ? Promise.resolve(mediaImage.decode()).catch(() => {})
+                                : Promise.resolve();
+                            waitDecode.then(finalizeSwap);
+                        };
+                        mediaImage.onerror = () => {
+                            if (loadSequence !== mediaLoadSequence) return true;
+                            mediaImage.style.visibility = '';
+                            window.DisplayImagePreloader.hideHold(holdEl);
+                            data.onImageError?.();
+                            return false;
+                        };
+                        mediaImage.src = resolvedUrl;
+                    },
+                    onError: () => {
+                        if (loadSequence !== mediaLoadSequence) return;
+                        const holdEl = typeof mediaImageHold !== 'undefined' ? mediaImageHold : null;
+                        mediaImage.style.visibility = '';
+                        window.DisplayImagePreloader.hideHold(holdEl);
+                        data.onImageError?.();
+                    }
+                });
+            };
+
             if (data.type === 'url') {
                 if (data.mediaType === 'audio') {
                     mediaImage.style.display = 'none';
@@ -5803,10 +6018,7 @@
                     // DASH/MP4 分支统一在视频元素就绪后挂载弹幕；HTML/音频/图片分支不创建。
                     setupBilibiliDanmaku(data);
                 } else {
-                    mediaVideo.style.display = 'none';
-                    mediaImage.style.display = 'block';
-                    setMediaSourceWithFallback(mediaImage, data.url, data.fallbackUrl);
-                    mediaImage.onload = restartDynamicFitAfterMediaLoad;
+                    applyImageMedia();
                 }
                 const urlParts = data.url.split('/');
                 mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || '来自URL';
@@ -5845,10 +6057,7 @@
                         playVideoAuto(mediaVideo);
                     }
                 } else {
-                    mediaVideo.style.display = 'none';
-                    mediaImage.style.display = 'block';
-                    mediaImage.src = src;
-                    mediaImage.onload = restartDynamicFitAfterMediaLoad;
+                    applyImageMedia();
                 }
                 mediaName = data.fileName || '未知文件';
                 fileNameDisplay.textContent = mediaName;
@@ -5893,6 +6102,9 @@
             mediaRecoveryTimer = null;
             mediaRecoveryAttempts = 0;
             stopPlaylist();
+            if (typeof imagePreloader !== 'undefined' && imagePreloader) imagePreloader.reset();
+            window.DisplayImagePreloader?.hideHold?.(typeof mediaImageHold !== 'undefined' ? mediaImageHold : null);
+            mediaImage.style.visibility = '';
             stopDynamicFit();
             stopHtmlScroll();
             // 关闭网页控制截图，不能在清空后继续发送旧网页画面。
@@ -6179,6 +6391,15 @@
             }
             if (item.mediaType !== 'video' && item.mediaType !== 'audio') {
                 ps.timer = setTimeout(playlistNext, ps.interval);
+                if (item.mediaType !== 'html' && item.mediaType !== 'text'
+                    && typeof imagePreloader !== 'undefined' && imagePreloader) {
+                    const nextIndex = ps.index + 1 < ps.playlist.length
+                        ? ps.index + 1
+                        : (ps.loop && ps.playlist.length > 1 ? 0 : -1);
+                    if (nextIndex >= 0 && nextIndex !== ps.index && ps.playlist[nextIndex]) {
+                        imagePreloader.prefetchNext({ listId: ps.listId, index: nextIndex, item: ps.playlist[nextIndex] });
+                    }
+                }
             }
         }
 

@@ -9,3 +9,4 @@ export { EnvironmentRegistry, normalizeEnvironment } from './environment.js';
 export { RoleRuntime, normalizeRole } from './role-runtime.js';
 export { RoleHost } from './role-host.js';
 export { GameTaskBridge } from './game-task-bridge.js';
+export { PigNavigation } from './pig-navigation.js';

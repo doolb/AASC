@@ -129,7 +129,7 @@ system 保留原生成设备与回退策略；云端失败明确报告，不切�
 
 ## 3rd/tts-server Linux TTS
 
-- Linux TTS 服务设计见 `docs/design/tts-linux.md`。
+- Linux TTS 服务设计见 `3rd/tts-server/docs/design/tts-linux.md`。
 - `tts-linux.js` 与 Wine TTS 保持 HTTP 接口兼容，但默认通过独立 Linux CLI 子进程执行合成。
 - 正式运行时资源放在 `3rd/tts-server/linux` 或由环境变量指定，不依赖 `NaturalVoiceSAPIAdapter`。
 - Linux/Wine/APK 使用同一硬编码授权串；Wine 默认 prefix 位于 `3rd/tts-server/wine/runtime/prefix`。

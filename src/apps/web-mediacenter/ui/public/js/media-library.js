@@ -2461,7 +2461,7 @@ const MediaLibrary = {
                         <div class="item-meta">${item.mediaType} · ${this.formatSize(item.size)}</div>
                         <div class="item-actions">
                             <button class="btn-play" onclick="MediaLibrary.playMedia('${this._escapeHtml(playbackUrl)}', '${this._escapeHtml(item.mediaType)}', '${this._escapeHtml(item.name)}', '${this._escapeHtml(item.format || '')}', '${this._escapeHtml(directUrl ? fallbackUrl : '')}', this.closest('.media-library-item').dataset.cachePath || '')">播放</button>
-                            ${['audio', 'video'].includes(item.mediaType) ? '<button class="btn-play" onclick="BackgroundMediaControl.select(this.closest(\'.media-library-item\').dataset.backgroundUrl, this.closest(\'.media-library-item\').dataset.backgroundType)">背景播放</button>' : ''}
+                            ${['audio', 'video', 'image', 'gif'].includes(item.mediaType) ? '<button class="btn-play" onclick="BackgroundMediaControl.select(this.closest(\'.media-library-item\').dataset.backgroundUrl, this.closest(\'.media-library-item\').dataset.backgroundType)">背景播放</button>' : ''}
                             ${this.currentLibrary?.type === 'quark'
                                 ? `<button class="btn-download" ${item.downloaded ? 'disabled' : ''} onclick="event.stopPropagation(); MediaLibrary.showQuarkFileDownloadDialog('${this._escapeHtml(item.path)}')">${item.downloaded ? '已下载' : '下载'}</button>`
                                 : (webdavDownloadUrl ? `<a class="btn-download" href="${this._escapeHtml(webdavDownloadUrl)}" download>下载</a>` : '')}

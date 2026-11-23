@@ -3,9 +3,9 @@
 - [显示端快捷控制](spec/display-quick-control.md)
 # Web MediaCenter - 项目实现文档
 
-- [Retop 肩甲经纬走线伪代码](spec/retop-orthogonal-flow.md)
+- [Retop 肩甲经纬走线伪代码](../subproject/retop/docs/spec/retop-orthogonal-flow.md)
 
-- [个人 Agent 伪代码](spec/aasc-agent.md)
+- [个人 Agent 伪代码](../subproject/aasc-agent/docs/spec/aasc-agent.md)
 
 - [桌面浏览器媒体服务伪代码](spec/browser-media-service.md)
 
@@ -21,7 +21,7 @@
 
 - [Node子显示端退出回收mpv伪代码](spec/node-display-exit.md)
 
-- [HMR2 Node项目服务/模型获取实现（原图代码、模型准备与CPU验收完成）](<spec/hmr2-node-onnx-project-service.md>)
+- [HMR2 Node项目服务/模型获取实现（原图代码、模型准备与CPU验收完成）](<../3rd/hmr2-node-onnx/docs/spec/hmr2-node-onnx-project-service.md>)
 
 - [ASR 内容过滤伪代码](spec/asr-content-filter.md)
 
@@ -51,24 +51,24 @@
 
 - [AI模型发布与同步伪代码（TTS/LLM外置已实现）](spec/ai-model-sync.md)
 
-- [MMD-AR统一灯光预设伪代码（已实现）](spec/mmd-ar-lighting-presets.md)
+- [MMD-AR统一灯光预设伪代码（已实现）](../3rd/mmd-ar-test/docs/spec/mmd-ar-lighting-presets.md)
 
 
 - [MMD Human控制、正式手势/躯干避让与PMX全身IK伪代码](spec/mmd-human-interface.md)
 
-- [独立MMD-AR回复识别与动作调度](spec/mmd-ar-ai-reply.md)
+- [独立MMD-AR回复识别与动作调度](../3rd/mmd-ar-test/docs/spec/mmd-ar-ai-reply.md)
 
 - [正式显示端 TTS 口型实现](spec/mmd-display-lipsync.md)
 
-- [MMD-AR文字口型实现](spec/mmd-ar-lipsync.md)
+- [MMD-AR文字口型实现](../3rd/mmd-ar-test/docs/spec/mmd-ar-lipsync.md)
 
 - [正式显示端 MPL 历史实现（调试功能已撤回）](spec/mmd-display-mpl.md)
 
 - [正式显示端表情历史实现（仅保留口型底层）](spec/mmd-display-expressions.md)
 
-- [独立MMD-AR手动表情实现](spec/mmd-ar-expressions.md)
+- [独立MMD-AR手动表情实现](../3rd/mmd-ar-test/docs/spec/mmd-ar-expressions.md)
 
-- [独立 MMD-AR MPL 编译播放](spec/mmd-ar-mpl.md)
+- [独立 MMD-AR MPL 编译播放](../3rd/mmd-ar-test/docs/spec/mmd-ar-mpl.md)
 
 ## 项目概述
 
@@ -79,9 +79,9 @@
 | 模块 | 文档 | 说明 |
 |------|------|------|
 | 显示端监听开关与语音状态按钮 | [display-voice-controls.md](spec/display-voice-controls.md) | 模式权威同步、单次识别与六状态归约 |
-| MMD-AR PMX文件导出 | [mmd-ar-pmx-export.md](spec/mmd-ar-pmx-export.md) | 原文件扫描、来源基线、物理段写入及冲量/软体引用重排伪代码 |
-| MMD刚体XPBD WebGL2 | [mmd-xpbd-webgl.md](spec/mmd-xpbd-webgl.md) | 测试版WebGL2 ping-pong刚体后端、碰撞/约束并行、骨骼读回与CPU回退 |
-| 六轴IMU共享3D测试网页 | [imu-six-axis-test.md](spec/imu-six-axis-test.md) | 六轴/时速轨迹、磁场/快停、瞬时角增量、连续低通区间矩及守恒平滑、显示/积分信号分离伪代码 |
+| MMD-AR PMX文件导出 | [mmd-ar-pmx-export.md](../3rd/mmd-ar-test/docs/spec/mmd-ar-pmx-export.md) | 原文件扫描、来源基线、物理段写入及冲量/软体引用重排伪代码 |
+| MMD刚体XPBD WebGL2 | [mmd-xpbd-webgl.md](../3rd/mmd-ar-test/docs/spec/mmd-xpbd-webgl.md) | 测试版WebGL2 ping-pong刚体后端、碰撞/约束并行、骨骼读回与CPU回退 |
+| 六轴IMU共享3D测试网页 | [imu-six-axis-test.md](../3rd/imu-six-axis-test/docs/spec/imu-six-axis-test.md) | 六轴/时速轨迹、磁场/快停、瞬时角增量、连续低通区间矩及守恒平滑、显示/积分信号分离伪代码 |
 | HTTP API | [api.md](spec/api.md) | 文件上传、媒体管理、TTS、提醒、聊天、整点报时等 API |
 | 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](spec/display-camera-chat.md) | 摄像头能力远端配置、请求转发、单次拍照、实时预览和多模态聊天伪代码 |
 | API 使用与命令行工具 | [api-usage.md](spec/api-usage.md) | 服务器 HTTP API 目录、Bash 调用器和安全测试伪代码 |
@@ -99,9 +99,9 @@
 | render-display 监控覆盖层 | [render-display.md](spec/render-display.md) | DPR 缩放、旋转包围盒、媒体名避让和视口约束伪代码 |
 | MMD 图片基准图 AR | [mmd-image-ar.md](spec/mmd-image-ar.md) | 拍照校准、四角选区、本地目标跟踪、姿态平滑和 MMD 绑定伪代码 |
 | 正式 Offline MMD AR 同步 | [mmd-ar-production-offline.md](spec/mmd-ar-production-offline.md) | 正式定位/物理/渲染合成、TAA/FSR2输入输出尺寸、配置隔离及code-only发布伪代码 |
-| MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](spec/mmd-ar-test-apk.md) | APK 本地页面与 HTTPS 静态页、PMX/MindAR 资源校验、网页动作播放开关及 tracker A/B 对比伪代码 |
-| MMD-AR Blender 工程工作区 | [mmd-ar-blender-workbench.md](spec/mmd-ar-blender-workbench.md) | 用户点击后加载 Blender WASM、选择本地工程目录、打开/预览/保存 `.blend` 的适配伪代码 |
-| MindAR Basic 独立 HTTPS 测试页 | [mindar-basic-web.md](spec/mindar-basic-web.md) | 目标生命周期、IMU/视觉融合、质量观测及传感器降级伪代码 |
+| MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](../3rd/mmd-ar-test/docs/spec/mmd-ar-test-apk.md) | APK 本地页面与 HTTPS 静态页、PMX/MindAR 资源校验、网页动作播放开关及 tracker A/B 对比伪代码 |
+| MMD-AR Blender 工程工作区 | [mmd-ar-blender-workbench.md](../3rd/mmd-ar-test/docs/spec/mmd-ar-blender-workbench.md) | 用户点击后加载 Blender WASM、选择本地工程目录、打开/预览/保存 `.blend` 的适配伪代码 |
+| MindAR Basic 独立 HTTPS 测试页 | [mindar-basic-web.md](../3rd/mind-basic/docs/spec/mindar-basic-web.md) | 目标生命周期、IMU/视觉融合、质量观测及传感器降级伪代码 |
 | PMX/VMD 与 Offline 静态代理 | [mmd-pmx-vmd-local.md](spec/mmd-pmx-vmd-local.md) | PMX/VMD 加载、Offline MMD 静态资源本地持久缓存与版本化 HTTP 缓存伪代码 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](spec/chat-output-filter.md) | think/正文/播报文本分流、控制端弹窗、显示端展示和私聊清空错误伪代码 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](spec/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出伪代码 |
@@ -135,10 +135,10 @@
 | 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求保护、内置 tts.server 服务任务与通用 HTTP URL |
 | TTS Provider 与播报配置 | [tts-providers.md](spec/tts-providers.md) | 模板继承、AI/Agent、文本阅读、系统播报及权威配置伪代码 |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/spec/android-asr-apk.md) | SenseVoice 模型、音频输入、识别耗时和 HTTP 服务伪代码 |
-| Android ASR 测试 APK 网页版 | [android-asr-web-test.md](spec/android-asr-web-test.md) | Apache 模型目录、浏览器离线 ASR、临时声纹与原生/网页对比伪代码 |
+| Android ASR 测试 APK 网页版 | [android-asr-web-test.md](../3rd/tts-server/docs/spec/android-asr-web-test.md) | Apache 模型目录、浏览器离线 ASR、临时声纹与原生/网页对比伪代码 |
 | 独立 Android RapidOCR HTTP 测试 APK | [android-rapidocr-apk.md](../3rd/tts-server/docs/spec/android-rapidocr-apk.md) | RapidOCR 模型、图片 HTTP 上传和网页测试伪代码 |
 | 独立 Android YOLO11 五模型测速 APK | [android-yolo-apk.md](../3rd/tts-server/docs/spec/android-yolo-apk.md) | 五个 YOLO11 ONNX 模型、目标检测、HTTP/网页和测速伪代码 |
-| Linux TTS 服务 | [tts-linux.md](spec/tts-linux.md) | Linux Embedded Speech TTS HTTP 服务、队列与独立运行时路径 |
+| Linux TTS 服务 | [tts-linux.md](../3rd/tts-server/docs/spec/tts-linux.md) | Linux Embedded Speech TTS HTTP 服务、队列与独立运行时路径 |
 | 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/spec/android-offline-tts-apk.md) | 内置模型离线合成、WAV 播放和耗时显示伪代码 |
 | Android TTS CPU 核心模式 | [android-tts-cpu-affinity.md](../3rd/tts-server/docs/spec/android-tts-cpu-affinity.md) | CPU 核心识别、JNI affinity、回退和状态显示伪代码 |
 | 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
@@ -167,7 +167,7 @@
 | Android 原生声纹识别 | [voiceprint.md](spec/voiceprint.md) | 说话人识别、多人分割、服务器权威库、声纹门控 |
 | 正式 Android 原生 OCR 与 YOLO11n | [android-native-ocr-yolo.md](spec/android-native-ocr-yolo.md) | 正式显示端单小核 OCR/YOLO11n、NativeBridge 和网页伪代码 |
 | 正式 Android 统一模型分发 | [android-model-distribution.md](spec/android-model-distribution.md) | 正式 APK 全模型服务器下载、清单、校验、缓存和构建约束伪代码 |
-| 独立 Android 声纹对比测试 APK | [android-voiceprint-test-apk.md](spec/android-voiceprint-test-apk.md) | APK HTTP 网页、Sherpa 声纹和流式 ASR 接口伪代码 |
+| 独立 Android 声纹对比测试 APK | [android-voiceprint-test-apk.md](../3rd/tts-server/docs/spec/android-voiceprint-test-apk.md) | APK HTTP 网页、Sherpa 声纹和流式 ASR 接口伪代码 |
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
 | 显示端睡眠模式 | [display-sleep-mode.md](spec/display-sleep-mode.md) | 时段判定/媒体遮罩/深度 UI 遮罩/临时激活/控制端配置 |
 | 音频媒体播放 | [audio-media.md](spec/audio-media.md) | audio 类型识别、服务器 MIME/WS、显示端播放与批量控制 |
@@ -343,4 +343,5 @@
 
 - [聊天附件上传伪代码](spec/chat-attachments.md)
 
-- [HIE 子工程与游戏任务桥接](spec/subprojects-hie.md)
+- [HIE 子工程与游戏任务桥接](../subproject/aasc-hie/docs/spec/subprojects-hie.md)
+- [显示端界面优化伪代码](spec/display-ui.md)

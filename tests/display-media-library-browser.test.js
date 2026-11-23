@@ -96,6 +96,7 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/display.html`);
+    for (const css of ['theme.css', 'display.css', 'display-mmd.css', 'display-media-library.css', 'display-ui.css']) await page.addStyleTag({ path: path.join(publicDir, 'css', css) });
     await page.addScriptTag({ path: path.join(publicDir, 'js/display-media-library.js') });
     await page.evaluate(() => {
         window.sent = [];
@@ -115,14 +116,15 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     }), true);
 
     await page.click('#displayMediaLibraryToggle');
-    await page.waitForSelector('.display-media-library-source');
+    await page.waitForSelector('.display-media-library-entry[data-library-id="display-bilibili"]');
     await page.$eval('#displayMediaLibraryOpacity', node => { node.value = '75'; node.dispatchEvent(new Event('input', { bubbles: true })); });
     assert.equal(await page.$eval('#displayMediaLibraryPanel', node => node.style.getPropertyValue('--display-media-background-alpha')), '0.25');
     assert.equal(await page.$eval('#displayMediaLibraryOpacityValue', node => node.textContent), '75%');
     assert.equal(await page.evaluate(() => localStorage.getItem('aasc.display.mediaLibraryTransparency')), '75');
-    await page.click('[data-library-id="display-bilibili"]');
-    await page.waitForFunction(() => document.querySelector('#displayMediaLibraryPath').textContent === '/d:home');
-    assert.match(await page.$eval('#displayMediaLibraryEntries', node => node.textContent), /B站热门/);
+    assert.equal(await page.$eval('#displayMediaLibraryPath', node => node.textContent), '全部媒体');
+    assert.ok(await page.$('.display-media-library-entry[data-library-id="local1"]'));
+    assert.ok(await page.$('.display-media-library-entry[data-library-id="quark1"]'));
+    assert.match(await page.$eval('#displayMediaLibraryStatus', node => node.textContent), /部分媒体来源加载失败/);
     assert.deepEqual(await page.$$eval('.display-media-bilibili-actions button', nodes => nodes.map(node => node.textContent)), ['播放', '加入', '下载', '复制链接']);
     await page.evaluate(() => [...document.querySelectorAll('.display-media-bilibili-actions button')].find(node => node.textContent === '加入').click());
     await page.waitForFunction(() => document.getElementById('displayMediaLibraryNotice').textContent === '已加入 B 站视频');
@@ -139,7 +141,7 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     await page.evaluate(() => [...document.querySelectorAll('.display-media-bilibili-actions button')].find(node => node.textContent === '播放').click());
     assert.equal(await page.evaluate(() => window.sent.at(-1).path), '/d:home/v:BVabcdefghij:1');
     await page.click('#displayMediaLibraryToggle');
-    await page.waitForFunction(() => document.querySelector('#displayMediaLibraryPath').textContent === '/d:home');
+    await page.waitForFunction(() => document.querySelector('#displayMediaLibraryPath').textContent === '全部媒体' && document.querySelector('.display-media-bilibili-actions'));
     await page.evaluate(() => window.DisplayMediaLibrary.setCurrentMedia({ url: '/api/bilibili/dash/BVabcdefghij?p=1', fileName: '当前视频' }));
     await page.waitForFunction(() => document.querySelector('#displayMediaLibraryEntries').textContent.includes('正在播放：当前视频'));
     await page.evaluate(() => {
@@ -151,20 +153,9 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     assert.doesNotMatch(await page.$eval('#displayMediaLibraryEntries', node => node.textContent), /旧视频/);
     await page.evaluate(() => window.DisplayMediaLibrary.setCurrentMedia(null));
     assert.doesNotMatch(await page.$eval('#displayMediaLibraryEntries', node => node.textContent), /相关推荐/);
-    assert.deepEqual(
-        await page.$$eval('.display-media-library-source', nodes => nodes.map(node => node.textContent)),
-        ['上传', '夸克分享', 'B 站', '红果短剧']
-    );
-    assert.deepEqual(
-        await page.$$eval('.display-media-library-group-title', nodes => nodes.map(node => node.textContent)),
-        ['本地媒体', '国内媒体']
-    );
-    for (const sourceId of ['quark1', 'display-bilibili', 'task-auto:hongguo', 'local1']) {
-        await page.click(`[data-library-id="${sourceId}"]`);
-        assert.equal(await page.$eval(`[data-library-id="${sourceId}"]`, node => node.classList.contains('active')), true);
-    }
+    assert.equal(await page.$('#displayMediaLibrarySources'), null);
     await page.waitForSelector('.display-media-library-entry');
-    await page.evaluate(() => [...document.querySelectorAll('.display-media-library-entry-name')]
+    await page.evaluate(() => [...document.querySelectorAll('.display-media-library-entry[data-library-id="local1"] .display-media-library-entry-name')]
         .find(node => node.textContent === 'a.mp4').click());
     assert.equal(await page.evaluate(() => window.played.length), 0);
     await page.evaluate(() => {
@@ -181,7 +172,7 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
 
     await page.click('#displayMediaLibraryToggle');
     await page.waitForSelector('.display-media-library-entry');
-    await page.evaluate(() => [...document.querySelectorAll('.display-media-library-batch')]
+    await page.evaluate(() => [...document.querySelectorAll('.display-media-library-entry[data-library-id="local1"] .display-media-library-batch')]
         .find(node => node.closest('.display-media-library-entry').textContent.includes('合集A')).click());
     const folderRequest = await page.evaluate(() => window.sent.at(-1));
     assert.equal(folderRequest.type, 'displayPlaylistRequest');
@@ -191,7 +182,7 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     // 打开面板单文件播放后，迟到的带标识列表不得进入真实显示端播放分支。
     await page.click('#displayMediaLibraryToggle');
     await page.waitForSelector('.display-media-library-entry');
-    await page.evaluate(() => [...document.querySelectorAll('.display-media-library-entry-name')]
+    await page.evaluate(() => [...document.querySelectorAll('.display-media-library-entry[data-library-id="local1"] .display-media-library-entry-name')]
         .find(node => node.textContent === 'a.mp4').click());
     assert.equal(await page.evaluate(() => window.sent.at(-1).type), 'displayPlaylistCancel');
     assert.equal(await page.evaluate(() => window.played.length), 1);
@@ -200,7 +191,7 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     assert.equal(await page.$eval('#displayMediaLibraryNotice', node => node.textContent), '解析失败');
     assert.equal(await page.evaluate(() => window.played.length), 1);
     await page.evaluate(() => {
-        document.querySelector('.display-media-library-entry-name:last-child')?.click();
+        [...document.querySelectorAll('.display-media-library-entry[data-library-id="local1"] .display-media-library-entry-name')].find(node => node.textContent === 'a.mp4')?.click();
         window.DisplayMediaLibrary.handleServerMessage({ type: 'displayMediaDisconnected' });
     });
     assert.equal(await page.$eval('#displayMediaLibraryNotice', node => node.textContent), '连接已断开，请稍后重试');
@@ -217,11 +208,8 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     assert.equal(await page.$eval('#displayMediaLibraryNotice', node => node.hidden), false);
     assert.equal(await page.$eval('#displayMediaLibraryNotice', node => node.textContent), '该目录没有可播放的媒体');
     await page.click('#displayMediaLibraryToggle');
-    await page.waitForSelector('.display-media-library-source');
-    await page.evaluate(() => document.querySelector('[data-library-id="task-auto:hongguo"]').click());
-    await page.waitForFunction(() => document.getElementById('displayMediaLibraryStatus').textContent === '任务媒体源已停止');
-    assert.equal(await page.$eval('#displayMediaLibraryPath', node => node.textContent), '/');
-    assert.equal(await page.$$eval('.display-media-library-entry', nodes => nodes.length), 0);
+    await page.waitForSelector('.display-media-library-entry[data-library-id="local1"]');
+    assert.match(await page.$eval('#displayMediaLibraryStatus', node => node.textContent), /部分媒体来源加载失败/);
     assert.deepEqual(errors, []);
 });
 

@@ -54,13 +54,15 @@ def profile_level(data):
     has_special_tools = bool(data.get('scissors') or data.get('ropes'))
     has_cages = bool(data.get('dynamic_cages') or data.get('cage_cells'))
     has_locks = bool(data.get('locks'))
+    has_bombs = data.get('bomb_policy') == 'avoid_contact'
+    has_springs = any(pig.get('kind') == 'spring' for pig in pigs)
     has_unreviewed_cage = bool(data.get('cage_unknown') or data.get('cage_cells'))
     has_non_cardinal_or_wide = any(
         pig.get('width', 1) != 1 or pig.get('direction') not in ('north', 'south', 'east', 'west')
         for pig in pigs
     )
     heuristic_supported = not (
-        has_ducks or has_blockers or has_special_tools or has_unreviewed_cage or has_non_cardinal_or_wide
+        has_ducks or has_blockers or has_special_tools or has_unreviewed_cage or has_non_cardinal_or_wide or has_bombs or has_springs
     )
     return {
         'pig_count': len(pigs),
@@ -102,6 +104,8 @@ def solve(data, seeds=(17, 1, 2, 4, 5, 6, 7, 8, 9), allow_partial=False, forbid_
                 last_error = error
         raise last_error or ValueError('自动求解未找到可行路线')
     if strategy == 'heuristic':
+        if any(pig.get('kind') == 'spring' for pig in data.get('pigs', [])):
+            raise ValueError('启发式求解器暂不支持弹簧猪')
         if forbid_first is not None or target_exits is not None:
             raise ValueError('启发式策略暂不支持首步限制或阶段离场目标')
         return solve_heuristic(data, allow_partial=allow_partial, time_limit=time_limit)
@@ -118,6 +122,8 @@ def solve(data, seeds=(17, 1, 2, 4, 5, 6, 7, 8, 9), allow_partial=False, forbid_
     ducks = tuple(tuple(cell) for cell in data.get('ducks', []))
     blockers = tuple(tuple(cell) for cell in data.get('blockers', []))
     cages = data.get('dynamic_cages', [])
+    bomb_mode = data.get('bomb_policy') == 'avoid_contact'
+    spring_mode = any(pig.get('kind') == 'spring' for pig in pigs)
     if cages and ducks:
         raise ValueError('动态铁笼与鸭子混合尚未验证')
     if len(ducks) > 63:
@@ -125,14 +131,16 @@ def solve(data, seeds=(17, 1, 2, 4, 5, 6, 7, 8, 9), allow_partial=False, forbid_
     module = locked_module()
     # 外部布局先经 Python 校验，防止非法格子或计数传入原生搜索器。
     module.validate_plan(dict(data, actions=[]), require_complete=False)
+    bomb_ids = {int(key) for key in data['bombs']} if bomb_mode else set()
     if forbid_first is not None and forbid_first not in {pig['id'] for pig in pigs}:
         raise ValueError('禁止首步的小猪不在当前布局')
     if target_exits is not None and (type(target_exits) is not int or not 1 <= target_exits <= len(pigs) or ducks):
         raise ValueError('阶段离场目标无效或包含未支持的鸭子')
-    lines = [f'{len(pigs)} {columns} {rows} {len(ducks)} {len(blockers)} {len(cages)}']
+    lines = [f'{len(pigs)} {columns} {rows} {len(ducks)} {len(blockers)} {len(cages)} {int(bomb_mode)} {int(spring_mode)}']
     for pig in pigs:
         position = pig['grid']
-        lines.append(f"{position['col']} {position['row']} {pig['direction']} {pig.get('length', 2)} {pig.get('width', 1)} {pig['id']} {locks.get(pig['id'], 0)} {int(pig['id'] in data.get('scissors', []))} {int(pig['id'] in data.get('ropes', []))}")
+        line = f"{position['col']} {position['row']} {pig['direction']} {pig.get('length', 2)} {pig.get('width', 1)} {pig['id']} {locks.get(pig['id'], 0)} {int(pig['id'] in data.get('scissors', []))} {int(pig['id'] in data.get('ropes', []))}"
+        lines.append(line + (f" {int(pig['id'] in bomb_ids)}" if bomb_mode else '') + (f" {int(pig.get('kind') == 'spring')}" if spring_mode else ''))
     lines.extend(f'{x} {y}' for x, y in ducks)
     lines.extend(f'{x} {y}' for x, y in blockers)
     for cage in cages:
@@ -219,7 +227,7 @@ def solve_heuristic(data, allow_partial=False, time_limit=90):
     """在受控子进程中搜索，并以项目独立移动规则重新验证每一步。"""
     if isinstance(time_limit, bool) or not isinstance(time_limit, (int, float)) or not math.isfinite(time_limit) or not 0 < time_limit <= 3600:
         raise ValueError('搜索时间必须在 0 到 3600 秒之间')
-    if any(data.get(key) for key in ('ducks', 'blockers', 'scissors', 'ropes', 'cage_unknown', 'cage_cells')):
+    if data.get('bomb_policy') or any(data.get(key) for key in ('ducks', 'blockers', 'scissors', 'ropes', 'cage_unknown', 'cage_cells')):
         raise ValueError('启发式策略暂不支持鸭子、固定阻挡、剪刀、绳索或未复核铁笼')
     pigs, grid = data['pigs'], data['grid']
     if any(pig.get('width', 1) != 1 or pig.get('direction') not in ('north', 'south', 'east', 'west') for pig in pigs):

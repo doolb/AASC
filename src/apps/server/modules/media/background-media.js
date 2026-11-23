@@ -11,7 +11,7 @@ function updateBackgroundMedia(previous, change) {
         try {
             if (url && !['http:', 'https:'].includes(new URL(url, 'http://localhost').protocol)) return null;
         } catch (_) { return null; }
-        if (url && !['audio', 'video'].includes(change.mediaType)) return null;
+        if (url && !['audio', 'video', 'image', 'gif'].includes(change.mediaType)) return null;
         state.url = url;
         if (url) state.mediaType = change.mediaType;
     }

@@ -1,0 +1,177 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const cheerio = require('cheerio');
+const puppeteer = require('puppeteer-core');
+
+const root = path.resolve('src/apps/web-mediacenter/ui/public');
+const chrome = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
+
+test('媒体瀑布流按真实尺寸重排，动态加载和缩放不重叠', { skip: !fs.existsSync(chrome), timeout: 45000 }, async t => {
+    const $ = cheerio.load(fs.readFileSync(path.join(root, 'upload.html'), 'utf8'));
+    $('script,link,style').remove();
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 900, hasTouch: true });
+    await page.setContent($.html());
+    for (const css of ['upload.css', 'chat.css', 'media-library.css', 'theme.css', 'control-workspace.css']) await page.addStyleTag({ path: path.join(root, 'css', css) });
+    await page.addStyleTag({ content: '*, *::before, *::after { transition:none !important; animation:none !important; }' });
+    await page.evaluate(() => {
+        document.querySelectorAll('.panel').forEach(p => p.style.display = p.id === 'panel-media' ? 'block' : 'none');
+        const root = document.getElementById('mediaLibraryContent');
+        root.innerHTML = '';
+        const card = (id, src, folder = false) => {
+            const el = document.createElement('div'); el.id = id; el.className = 'media-library-item' + (folder ? ' folder' : '');
+            if (src !== null) el.innerHTML = `<div class="media-thumb-wrapper"><img class="media-thumb" ${src ? `src="${src}"` : ''}></div><div class="item-name">测试媒体</div><div class="item-meta">image</div><div class="item-actions"><button onclick="window.played = (window.played || 0) + 1">播放</button></div>`;
+            else el.innerHTML = '<div class="folder-icon">文件夹</div><div class="item-name">目录</div>';
+            root.append(el);
+            return el;
+        };
+        window.svgImage = (w, h, color) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="${color}"/></svg>`);
+        card('wide', window.svgImage(900, 600, 'red'));
+        card('tall', window.svgImage(400, 800, 'blue'));
+        card('square', window.svgImage(400, 400, 'green'));
+        card('unknown', '', false);
+        card('folder', null, true);
+        for (let i = 0; i < 5; i++) card('extra' + i, window.svgImage(400, 600 + i * 50, 'purple'));
+        const remote = document.getElementById('bilibiliVideoList'); remote.style.display = 'grid';
+        remote.innerHTML = '<div class="bilibili-section-title">推荐</div><div id="remote" class="bilibili-video-card"><img class="bilibili-video-cover"><div class="bilibili-video-title">远程内容</div><div class="bilibili-video-actions"><button>播放</button></div></div>';
+        remote.querySelector('img').src = window.svgImage(400, 800, 'orange');
+    });
+    await page.addScriptTag({ path: path.join(root, 'js/media-masonry.js') });
+    const settle = async () => { await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))))); await new Promise(resolve => setTimeout(resolve, 200)); };
+    await page.waitForFunction(() => document.querySelector('#wide').style.getPropertyValue('--media-aspect') && document.querySelector('#remote').style.getPropertyValue('--media-aspect'));
+    await settle();
+    const check = async (width, expectFallback = true) => {
+        const data = await page.evaluate(() => {
+            const box = id => { const r = document.getElementById(id).getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height }; };
+            const root = document.getElementById('mediaLibraryContent');
+            return { wide: box('wide'), tall: box('tall'), square: box('square'), unknown: box('unknown'), folder: box('folder'), remote: box('remote'), items:[...root.children].map(el => ({ id: el.id, ...box(el.id) })), loaded: document.getElementById('wide').style.getPropertyValue('--media-aspect'), fallback: document.getElementById('unknown').style.getPropertyValue('--media-aspect'), remoteAspect: document.getElementById('remote').style.getPropertyValue('--media-aspect') };
+        });
+        assert.match(data.loaded, /900\s*\/\s*600/);
+        assert.match(data.remoteAspect, /400\s*\/\s*800/);
+        if (expectFallback) assert.equal(data.fallback, '');
+        else assert.match(data.fallback, /800\s*\/\s*400/);
+        assert.ok(data.wide.width > data.tall.width, `${width} 横向卡片应更宽`);
+        assert.ok(data.tall.height > data.tall.width, `${width} 竖向卡片应更高`);
+        assert.ok(data.items.some(item => item.id !== 'tall' && item.top > data.tall.top + 1 && item.top < data.tall.bottom - 1), `${width} 较短卡片下方应能放置其他卡片`);
+        for (let i = 0; i < data.items.length; i++) for (let j = i + 1; j < data.items.length; j++) {
+            const a = data.items[i], b = data.items[j];
+            assert.ok(a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1, `${width} 卡片重叠: ${a.id}/${b.id}`);
+        }
+    };
+    await check(1440);
+    await page.evaluate(() => { document.querySelector('#unknown img').src = window.svgImage(800, 400, 'pink'); });
+    await page.waitForFunction(() => document.querySelector('#unknown').classList.contains('masonry-wide'));
+    await settle();
+    await check(1440, false);
+    await page.evaluate(async () => {
+        const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 180;
+        const stream = canvas.captureStream(10);
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        const chunks = [];
+        recorder.ondataavailable = event => chunks.push(event.data);
+        const finished = new Promise(resolve => { recorder.onstop = resolve; });
+        recorder.start(); canvas.getContext('2d').fillRect(0, 0, 320, 180);
+        await new Promise(resolve => setTimeout(resolve, 250)); recorder.stop(); await finished;
+        stream.getTracks().forEach(track => track.stop());
+        const card = document.createElement('div'); card.id = 'video'; card.className = 'media-library-item';
+        card.innerHTML = '<div class="media-thumb-wrapper"><video class="media-thumb" preload="metadata" muted></video></div><div class="item-name">视频</div>';
+        card.querySelector('video').src = URL.createObjectURL(new Blob(chunks, { type:'video/webm' }));
+        document.getElementById('mediaLibraryContent').append(card);
+    });
+    await page.waitForFunction(() => document.querySelector('#video').style.getPropertyValue('--media-aspect').includes('320'));
+    await page.setViewport({ width: 390, height: 844, hasTouch: true });
+    await settle();
+    const mobile = await page.evaluate(() => [...document.querySelectorAll('#mediaLibraryContent > *')].map(el => { const r = el.getBoundingClientRect(); return { id:el.id, l:r.left, r:r.right, t:r.top, b:r.bottom }; }));
+    for (let i = 0; i < mobile.length; i++) for (let j = i + 1; j < mobile.length; j++) { const a = mobile[i], b = mobile[j]; assert.ok(a.r <= b.l + 1 || b.r <= a.l + 1 || a.b <= b.t + 1 || b.b <= a.t + 1, `手机卡片重叠: ${a.id}/${b.id}`); }
+    assert.equal(await page.$eval('#wide .item-actions', element => getComputedStyle(element).opacity), '1');
+    await page.click('#wide .item-actions button');
+    assert.equal(await page.evaluate(() => window.played), 1);
+});
+
+test('文件夹长名称在多操作按钮、主题和不同屏幕下可见', { skip: !fs.existsSync(chrome), timeout: 30000 }, async t => {
+    const $ = cheerio.load(fs.readFileSync(path.join(root, 'upload.html'), 'utf8'));
+    $('script,link,style').remove();
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.setViewport({ width: 390, height: 844, hasTouch: true });
+    await page.setContent($.html());
+    for (const css of ['upload.css', 'chat.css', 'media-library.css', 'theme.css', 'control-workspace.css']) await page.addStyleTag({ path: path.join(root, 'css', css) });
+    await page.addStyleTag({ content: '*, *::before, *::after { transition:none !important; animation:none !important; }' });
+    await page.evaluate(() => {
+        document.querySelectorAll('.panel').forEach(panel => panel.style.display = panel.id === 'panel-media' ? 'block' : 'none');
+        const list = document.getElementById('mediaLibraryContent');
+        list.innerHTML = Array.from({ length: 6 }, (_, index) => `<div class="media-library-item folder" data-index="${index}" onclick="window.opened = ${index}"><div class="folder-icon">📁</div><div class="item-name">超长文件夹名称用于检查换行和显示完整程度ABCDEFGHIJK${index}</div><div class="item-actions"><button onclick="event.stopPropagation(); window.action = 'batch'">批量播放</button><button>下载到媒体库</button><button>删除</button></div></div>`).join('');
+    });
+    await page.addScriptTag({ path: path.join(root, 'js/media-masonry.js') });
+    for (const [width, height] of [[390, 844], [1440, 900]]) {
+        await page.setViewport({ width, height, hasTouch: true });
+        for (const theme of ['dark', 'light', 'warm']) {
+            await page.evaluate(theme => { document.documentElement.dataset.theme = theme; document.documentElement.dataset.themeMode = theme === 'dark' ? 'dark' : 'light'; }, theme);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            const data = await page.evaluate(() => [...document.querySelectorAll('#mediaLibraryContent .folder')].map(card => {
+                const name = card.querySelector('.item-name'); const actions = card.querySelector('.item-actions');
+                const box = element => { const r = element.getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, height:r.height }; };
+                return { card:box(card), name:box(name), actions:box(actions), nameHeight:name.clientHeight, nameScroll:name.scrollHeight, opacity:getComputedStyle(actions).opacity, color:getComputedStyle(name).color, cardColor:getComputedStyle(card).color };
+            }));
+            for (const item of data) {
+                assert.ok(item.name.height >= 32 && item.nameHeight >= item.nameScroll, `${width}/${theme} 名称被压缩或裁切`);
+                assert.ok(item.name.top >= item.card.top && item.actions.bottom <= item.card.bottom + 1, `${width}/${theme} 内容超出卡片`);
+                assert.equal(item.opacity, '1', `${width}/${theme} 触屏按钮应可见`);
+                assert.equal(item.color, item.cardColor, `${width}/${theme} 名称应使用主题文字色`);
+            }
+            for (let i = 0; i < data.length; i++) for (let j = i + 1; j < data.length; j++) {
+                const a=data[i].card, b=data[j].card;
+                assert.ok(a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1, `${width}/${theme} 文件夹卡片重叠`);
+            }
+        }
+    }
+    await page.click('[data-index="0"] .item-actions button');
+    assert.equal(await page.evaluate(() => window.action), 'batch');
+    assert.equal(await page.evaluate(() => window.opened), undefined);
+    await page.click('[data-index="1"] .item-name');
+    assert.equal(await page.evaluate(() => window.opened), 1);
+});
+
+test('普通目录和分享目录在所有现有主题中保持文字对比度', { skip: !fs.existsSync(chrome), timeout: 30000 }, async t => {
+    const $ = cheerio.load(fs.readFileSync(path.join(root, 'upload.html'), 'utf8'));
+    $('script,link,style').remove();
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.setViewport({ width: 390, height: 844, hasTouch: true });
+    await page.setContent($.html());
+    for (const css of ['upload.css', 'chat.css', 'media-library.css', 'theme.css', 'control-workspace.css']) await page.addStyleTag({ path: path.join(root, 'css', css) });
+    await page.addStyleTag({ content: '*, *::before, *::after { transition:none !important; animation:none !important; }' });
+    await page.evaluate(() => {
+        document.querySelectorAll('.panel').forEach(panel => panel.style.display = panel.id === 'panel-media' ? 'block' : 'none');
+        document.getElementById('mediaLibraryContent').innerHTML = '<div class="media-library-item folder"><div class="folder-icon">📁</div><div class="item-name">普通目录</div><div class="item-actions"><button class="btn-batch">批量播放</button><button class="btn-delete">删除</button></div></div><div class="media-library-item folder share-link-card"><div class="folder-icon">📁</div><div class="item-name">夸克目录</div><div class="item-meta">主服务器</div><div class="share-link-actions"><button>移动</button><button>设置</button><button>下载</button></div></div>';
+    });
+    await page.addScriptTag({ path: path.join(root, 'js/media-masonry.js') });
+    const themes = ['dark','light','warm','pink','lavender-yellow','red-blue','gold','mint','ocean','forest','slate','algae-salt','girl-pink','rose-gold','new-year-red'];
+    for (const theme of themes) {
+        const checks = await page.evaluate(theme => {
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.dataset.themeMode = theme === 'dark' ? 'dark' : 'light';
+            // 按 WCAG 相对亮度计算实际文字色与其不透明背景的对比度。
+            const luminance = color => {
+                const values = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => x / 255).map(x => x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+                return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+            };
+            const contrast = (foreground, background) => {
+                const a = luminance(foreground), b = luminance(background);
+                return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+            };
+            return [...document.querySelectorAll('#mediaLibraryContent .folder')].flatMap(card => {
+                const background = getComputedStyle(card).backgroundColor;
+                return [...card.querySelectorAll('.item-name, .item-meta, button')].map(node => ({ label: node.textContent, foreground: getComputedStyle(node).color, background: node.tagName === 'BUTTON' ? getComputedStyle(node).backgroundColor : background, ratio: contrast(getComputedStyle(node).color, node.tagName === 'BUTTON' ? getComputedStyle(node).backgroundColor : background) }));
+            });
+        }, theme);
+        for (const item of checks) assert.ok(item.ratio >= 4.5, `${theme} ${item.label} 对比度不足：${item.ratio.toFixed(2)} ${item.foreground} / ${item.background}`);
+    }
+});

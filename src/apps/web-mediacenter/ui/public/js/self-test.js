@@ -50,7 +50,7 @@ const SelfTest = {
                     const html = await response.text();
                     const valid = response.ok && ids.every(id => document.getElementById(id))
                         && typeof window.BackgroundMediaControl?.change === 'function'
-                        && html.includes('backgroundMediaVideo') && html.includes('backgroundMediaAudio');
+                        && html.includes('backgroundMediaVideo') && html.includes('backgroundMediaAudio') && html.includes('backgroundMediaImage');
                     return { success: !!valid, message: valid ? '背景媒体控件和播放节点已加载' : '背景媒体资源不完整', details: '只检查结构，实际解码及声音输出需在设备上验证' };
                 } catch (error) { return { success: false, message: `检查背景媒体失败: ${error.message}` }; }
             }
@@ -603,6 +603,47 @@ const SelfTest = {
             }
         },
         {
+            id: 'media_breadcrumb_contrast',
+            name: '媒体库路径文字对比度',
+            description: '只读检查当前主题的路径文字和背景对比度',
+            category: '界面布局',
+            run: async () => {
+                const bar = document.getElementById('mediaLibraryBreadcrumb');
+                const item = bar?.querySelector('.breadcrumb-item');
+                if (!item) return { success: false, message: '媒体库路径文字不存在' };
+                // 当前路径背景为不透明主题色，按照 sRGB 相对亮度计算文字对比度。
+                const luminance = color => {
+                    const channels = color.match(/[\d.]+/g)?.map(Number);
+                    if (!channels || channels.length < 3 || (channels.length > 3 && channels[3] !== 1)) return null;
+                    const linear = channels.slice(0, 3).map(value => {
+                        const component = value / 255;
+                        return component <= 0.04045 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4;
+                    });
+                    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+                };
+                const background = luminance(getComputedStyle(bar).backgroundColor);
+                const foreground = luminance(getComputedStyle(item).color);
+                const contrast = background === null || foreground === null ? 0 : (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+                const valid = contrast >= 4.5;
+                return { success: valid, message: valid ? '媒体库路径文字清晰' : '媒体库路径文字对比度不足', details: `当前主题对比度 ${contrast.toFixed(2)}:1` };
+            }
+        },
+        {
+            id: 'media_masonry_structure',
+            name: '媒体库自适应卡片',
+            description: '只读检查尺寸监听与瀑布流资源',
+            category: '界面布局',
+            run: async () => {
+                try {
+                    const responses = await Promise.all(['/control', '/js/media-masonry.js', '/css/control-workspace.css'].map(url => fetch(url, { cache: 'no-store' })));
+                    if (responses.some(response => !response.ok)) return { success: false, message: '媒体卡片布局资源不可读取' };
+                    const [html, script, style] = await Promise.all(responses.map(response => response.text()));
+                    const valid = html.includes('js/media-masonry.js') && script.includes('loadedmetadata') && script.includes('naturalWidth') && style.includes('.media-masonry-ready') && style.includes('.media-library-item.folder .item-name') && style.includes('.media-library-item.folder .item-meta');
+                    return { success: valid, message: valid ? '媒体卡片布局资源正常' : '媒体卡片布局资源缺失', details: '尺寸加载、重排与触屏操作由浏览器测试和设备验收覆盖' };
+                } catch (error) { return { success: false, message: `媒体卡片检查失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'share_move_dialog_structure',
             name: '分享移动文件夹弹窗',
             description: '只读检查分享移动弹窗和文件夹选项',
@@ -645,7 +686,7 @@ const SelfTest = {
                         .map(url => fetch(url, { cache: 'no-store' })));
                     if (responses.some(response => !response.ok)) return { success: false, message: '显示端媒体来源资源不可读取' };
                     const [script, html, css] = await Promise.all(responses.map(response => response.text()));
-                    const valid = ['quark', 'bilibili', '国内媒体', 'display-local/libraries', '/d:home', '/d:related:'].every(value => script.includes(value))
+                    const valid = ['quark', 'bilibili', 'Promise.allSettled', 'display-local/libraries', '/d:home', '/d:related:'].every(value => script.includes(value))
                         && html.includes('displayMediaLibraryOpacity') && css.includes('--display-media-background-alpha');
                     return { success: valid, message: valid ? '显示端媒体来源结构正常' : '显示端媒体来源结构缺失', details: '仅检查入口结构；实际浏览和播放需设备及来源验收' };
                 } catch (error) { return { success: false, message: `显示端媒体来源检查失败: ${error.message}` }; }

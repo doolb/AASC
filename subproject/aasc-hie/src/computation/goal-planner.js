@@ -65,7 +65,9 @@ export class GoalPlanner {
     if (stack.has(effectiveGoal.id)) return { id: nodeId, goalId: effectiveGoal.id, kind: effectiveGoal.kind, status: 'blocked', reason: 'goal-cycle', condition: this.condition(worldState, effectiveGoal), children: [], nodes: [] };
     const nextStack = new Set(stack).add(effectiveGoal.id);
     const condition = this.condition(worldState, effectiveGoal);
-    if (condition.satisfied === false) return { id: nodeId, goalId: effectiveGoal.id, kind: effectiveGoal.kind, status: 'blocked', reason: 'goal-condition-not-satisfied', condition, children: [], nodes: [] };
+    const completion = effectiveGoal.success ? this.condition(worldState, { condition: effectiveGoal.success }) : undefined;
+    // condition/when 是执行前置条件；success 仅判断是否已完成，未完成仍应继续规划。
+    if ((effectiveGoal.condition ?? effectiveGoal.when) && condition.satisfied === false) return { id: nodeId, goalId: effectiveGoal.id, kind: effectiveGoal.kind, status: 'blocked', reason: 'goal-condition-not-satisfied', condition, ...(completion ? { completion } : {}), children: [], nodes: [] };
     const navigator = this.navigatorFor(effectiveGoal);
     const delegatedGoal = effectiveGoal.kind?.startsWith('retreat-') && navigator?.mode
       ? { ...effectiveGoal, kind: navigator.mode, delegate: navigator.mode }
@@ -82,6 +84,7 @@ export class GoalPlanner {
       status,
       ...(reason ? { reason } : {}),
       condition,
+      ...(completion ? { completion } : {}),
       children,
       nodes: children.flatMap((child) => [child, ...child.nodes]),
       ...(navigator ? { delegatedTo: navigator.id ?? delegatedGoal.delegate ?? delegatedGoal.kind } : {}),

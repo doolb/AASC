@@ -1,0 +1,105 @@
+/* 显示端交互面板共用主题层次；不改变媒体画布和舞台的定位、旋转或层级。 */
+.display-quick-control {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 12px 32px var(--shadow-color);
+    overscroll-behavior: contain;
+}
+.display-quick-control header { gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+.display-quick-control header strong { font-size: 16px; }
+.display-quick-control #quickControlStatus { color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.display-quick-control section { min-width: 0; padding: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-background); }
+.display-quick-control label { color: var(--text-secondary); font-size: 12px; }
+.display-quick-control button, .display-quick-control select, .display-quick-control input[type="text"] {
+    min-height: 36px; border-color: var(--border-color); background: var(--input-background); color: var(--text-primary);
+}
+.display-quick-control .quick-buttons button { flex: 1 1 auto; }
+.display-quick-control button.active { border-color: var(--accent-color); background: var(--accent-secondary); color: #fff; }
+.display-quick-control input[type="range"] { accent-color: var(--accent-color); }
+:root[data-theme-mode="light"] .display-quick-control button.active { background: var(--accent-secondary) !important; color: #fff !important; }
+
+/* 标题与消息使用主题边界；聊天仍由原舞台和键盘适配控制位置。 */
+.display-chat-header { border-color: var(--border-color); }
+.display-chat-title-row h2 { letter-spacing: .01em; }
+.display-chat-message { border: 1px solid var(--border-color); box-shadow: 0 2px 8px var(--shadow-color); }
+.display-chat-message.is-user { border-color: var(--accent-color); }
+.display-chat-compose textarea { box-shadow: inset 0 1px 2px var(--shadow-color); }
+.display-chat-compose-actions button, .display-chat-dropdown-toggle { min-height: 36px; }
+
+/* 媒体库保留可调透明深色背景，在透明画面上用深色卡片保护文字对比度。 */
+.display-media-library-header { gap: 10px; flex-wrap: wrap; padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); }
+.display-media-library-header > strong { margin-right: auto; font-size: 17px; }
+.display-media-library-opacity { color: #e2e8f0; }
+.display-media-library-sources { flex: 0 0 210px; width: 210px; overscroll-behavior: contain; }
+.display-media-library-source { min-height: 38px; border: 1px solid transparent; }
+.display-media-library-source.active { border-color: var(--accent-color); background: var(--accent-secondary); color: #fff; }
+.display-media-library-main { min-height: 0; }
+.display-media-library-toolbar { flex-wrap: wrap; }
+.display-media-library-toolbar button, .display-media-library-batch, .display-media-bilibili-actions button, .display-media-bilibili-nav button {
+    min-height: 36px; padding: 7px 10px; border: 1px solid #ffffff30; border-radius: 8px; background: #263449; color: #fff;
+}
+.display-media-library-entries { overscroll-behavior: contain; }
+.display-media-library-entry { min-width: 0; margin-bottom: 8px; padding: 10px; border: 1px solid #ffffff1f; border-radius: 10px; background: #111b2bd9; }
+.display-media-library-entry:hover { background: #243249ed; }
+.display-media-library-entry-name { min-height: 36px; }
+.display-media-bilibili-cover { flex: none; }
+:root[data-theme-mode="light"] .display-media-library-panel button.display-media-library-source { background: #263449 !important; color: #fff !important; border-color: transparent !important; }
+:root[data-theme-mode="light"] .display-media-library-panel button.display-media-library-source.active { background: var(--accent-secondary) !important; border-color: var(--accent-color) !important; }
+:root[data-theme-mode="light"] .display-media-library-panel button.display-media-library-entry-name { background: transparent !important; color: #fff !important; border-color: transparent !important; }
+
+/* 设置面板沿用原透明度计算，不对整块面板设置 opacity。 */
+.display-mmd-lighting-panel, .display-mmd-ar-panel { border-radius: 16px; box-shadow: 0 12px 32px var(--shadow-color); }
+.display-appearance-panel > strong, .display-tts-voice-header strong { font-size: 15px; }
+.display-stage-button { cursor: pointer; }
+.display-stage-button:focus-visible, .display-quick-control :focus-visible, .display-media-library-panel :focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+
+/* 壁纸浮层保持深色高对比，不改变拖动、贴边、隐藏和触摸层。 */
+.wallpaper-controls-panel { border: 1px solid #ffffff3b; border-radius: 12px; box-shadow: 0 8px 24px #0006; }
+.wallpaper-controls-drag { gap: 8px; padding-bottom: 8px; border-bottom: 1px solid #ffffff30; font-weight: 600; }
+.wallpaper-controls-panel label { line-height: 1.4; }
+.wallpaper-controls-panel input[type="range"], .wallpaper-controls-panel input[type="checkbox"] { accent-color: var(--accent-color); }
+
+@media (orientation: landscape) and (min-width: 720px) {
+    /* 展开时才占用空间，短屏通过原有面板滚动访问剩余选项。 */
+    .display-quick-control:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 8px; width: min(620px, calc(100vw - 24px)); }
+    .display-quick-control header, .display-quick-control #quickControlStatus { grid-column: 1 / -1; }
+    .display-quick-control section { margin: 0; }
+}
+@media (orientation: portrait), (max-width: 700px) {
+    /* 竖屏把来源变成顶部可滚动导航，让内容列获得完整宽度。 */
+    .display-media-library-body { flex-direction: column; }
+    .display-media-library-sources { display: flex; flex: 0 0 auto; align-items: center; width: 100%; max-height: 68px; gap: 6px; overflow: auto hidden; padding: 8px 12px; border-right: 0; border-bottom: 1px solid #ffffff1f; }
+    .display-media-library-group-title { flex: 0 0 auto; margin: 0 4px 0 0; white-space: nowrap; }
+    .display-media-library-source { flex: 0 0 auto; width: auto; margin: 0; white-space: nowrap; }
+    .display-media-library-main { flex: 1 1 0; }
+    .display-media-library-entry { flex-wrap: wrap; }
+    .display-media-bilibili-actions { width: 100%; }
+}
+
+/* 显示端来源汇总：列流容纳不同高度，卡片自身按封面比例生长。 */
+.display-media-library-entries { display: block; }
+.display-media-card-grid { column-width: 180px; column-gap: 10px; }
+.display-media-library-entries > .display-media-bilibili-nav { margin-bottom: 10px; }
+.display-media-library-panel .display-media-library-entry {
+    position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end;
+    width: 100%; min-height: 140px; aspect-ratio: var(--display-card-aspect, 4 / 3);
+    break-inside: avoid; margin: 0 0 10px; padding: 10px; overflow: hidden; isolation: isolate;
+}
+.display-media-library-entry.has-cover::before {
+    content: ''; position: absolute; inset: 28% 0 0; z-index: -1;
+    background: linear-gradient(transparent, rgba(0, 0, 0, .76)); pointer-events: none;
+}
+.display-media-card-cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.display-media-library-icon { margin: auto; font-size: 42px; }
+.display-media-library-panel .display-media-library-entry.is-directory { aspect-ratio: auto; }
+.display-media-library-entry.is-directory :is(.display-media-library-icon, .display-media-library-entry-name, .display-media-library-batch) { flex-shrink: 0; }
+.display-media-library-panel .display-media-library-entry-name { flex: 0 0 auto; width: 100%; overflow-wrap: anywhere; text-shadow: 0 1px 3px #000; }
+.display-media-library-panel .display-media-bilibili-row { min-height: 190px; }
+.display-media-bilibili-row .display-media-library-entry-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.display-media-library-panel .display-media-bilibili-actions { width: 100%; }
+@media (max-width: 600px) {
+    .display-media-library-entries { padding: 10px; }
+    .display-media-card-grid { column-width: 140px; }
+}

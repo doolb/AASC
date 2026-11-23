@@ -74,7 +74,8 @@ function normalizeDisplayEntries(items, { isHttps = false } = {}) {
             mediaType: item.mediaType === 'gif' ? 'image' : item.mediaType,
             directUrl: urls.directUrl,
             proxyUrl: urls.proxyUrl,
-            ...(item.bvid ? { bvid: item.bvid, page: item.page, cover: item.cover, author: item.author } : {}),
+            ...(typeof item.cover === 'string' && item.cover ? { cover: item.cover } : {}),
+            ...(item.bvid ? { bvid: item.bvid, page: item.page, author: item.author } : {}),
             ...(item.mediaType === 'text' ? { format: item.format === 'markdown' ? 'markdown' : 'plain' } : {})
         });
     }

@@ -90,6 +90,18 @@ test('模型反复提出指令时受到调用轮数限制', async () => {
   assert.equal(executed, 1);
 });
 
+test('可选择在轮次上限安全停止，保留已执行结果且不执行最后命令', async () => {
+  let executed = 0;
+  const subject = agent({ maxModelTurns: 2,
+    tools: { echo: { async execute() { executed++; return 'ok'; } } },
+    model: { async respond() { return { commands: ['[子,任务]'] }; }, async decide() { return { tool: 'echo' }; } },
+  });
+  const result = await subject.chat('测试', { stopAtTurnLimit: true });
+  assert.equal(executed, 1);
+  assert.equal(result.results.length, 1);
+  assert.match(result.text, /最后提出的命令未执行/);
+});
+
 test('未授权或格式错误的模型命令不会部分执行', async () => {
   let executed = 0;
   const subject = agent({

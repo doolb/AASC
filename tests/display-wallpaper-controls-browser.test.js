@@ -18,6 +18,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     const panel = html.slice(html.indexOf('    <div id="wallpaperInteractionShield"'), html.indexOf('    </aside>') + '    </aside>'.length);
     const css = fs.readFileSync(path.join(dir, 'css/display-wallpaper-controls.css'), 'utf8');
     await page.setContent(`<style>${css} #timeDisplay { position: fixed; top: 0; right: 0; } #cover { position: fixed; inset: 0; z-index: 999999; }</style><div id="cover"></div><div id="timeDisplay">12:00</div>${panel}<div id="connectionStatus">已连接</div><div id="voiceStatus">监听中</div><div id="displayStageLayers"><div id="displayInteractionLayer"><button id="normalControl">按钮</button><div id="displayVoiceAsrResult" hidden>识别文字</div></div><div id="displayMmdFps">60 FPS</div></div>`);
+    await page.addStyleTag({ path: path.join(dir, 'css/display-ui.css') });
     await page.evaluate(() => {
         const preferences = {};
         Object.defineProperty(window, 'localStorage', { value: { getItem: key => preferences[key] ?? null, setItem: (key, value) => { preferences[key] = value; } } });

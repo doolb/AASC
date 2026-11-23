@@ -22,6 +22,7 @@ export async function loadConfig(path = DEFAULT_CONFIG_PATH) {
   }
   if (typeof api.apiKey !== 'string' || !api.apiKey.trim()) throw new Error('请在配置中填写 API Key');
   if (typeof api.model !== 'string' || !api.model.trim()) throw new Error('请在配置中填写模型名称');
+  if (api.instructionsEachRequest !== undefined && typeof api.instructionsEachRequest !== 'boolean') throw new Error('instructionsEachRequest 必须为布尔值');
   const timeoutMs = api.timeoutMs ?? 300000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 1800000) throw new Error('API 超时须为 1000 到 1800000 毫秒');
   if (!Array.isArray(config.roles) || !config.roles.length) throw new Error('至少配置一个角色');

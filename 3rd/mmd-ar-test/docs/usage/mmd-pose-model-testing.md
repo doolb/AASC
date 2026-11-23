@@ -1,0 +1,141 @@
+# MMD 图片姿态：HMR2.0b 与人物分割测试
+
+## MMD-AR 实际图片骨骼入口（2026-10-21）
+
+这次接入的是独立 MMD-AR 网页的“全身IK → 图片姿态”，不是下面旧 `tmp` 报告的复用，也没有改变正式显示端、Offline/APK或外部 Python 服务。最新源码需由 `npm run build:web:mmd-ar-test` 构建，刷新原独立网页即可使用；没有启动替代服务器。
+
+1. 先加载支持的 PMX，展开“全身IK”的“图片姿态”。**默认仍为 MediaPipe 本地识别**；默认不会请求 HMR 或下载深度模型。
+2. 在“骨骼计算方式”选择 **HMR2.0b · GPU API**。服务根地址默认 `http://127.0.0.1:8768`，可填写带代理前缀的 HTTP(S) 地址；只有地址保存在当前浏览器，Bearer token 仅当前面板会话、不写存储。点击“测试连接（不上传图片）”只调用 `/health`。
+3. 选择或粘贴 JPG/PNG/WebP（20MiB以内、解码不超过4096²；处理后最长边1600）。页面显示实际处理尺寸；可勾选人物框并填写 **左x1、上y1、右x2、下y2**，以这张处理/定向后的图片像素为准。没有框只是整图单人假设，**不是人物检测**。
+4. 点击“识别姿态”。**HMR 会将处理后的图片编码为 PNG 上传到所填 API**；请求只含 `image_base64` 与可选 `bbox_xyxy`，上传 PNG 另限16MiB。预览保持原生 BODY25 左右及脚趾连线；“几何可用”不代表识别准确，也没有逐点置信度。确认后点击“应用姿态”，才经当前 PMX 固定骨长/FK/关节限位和既有物理入口提交目标。
+5. 可单独点击“计算整图相对深度”。Depth Anything V2 Small 在浏览器专用 Worker/WASM 中计算**当前原图的整图相对深度**，约27.3MB量化模型按需读取；HMR 方式初次选择默认勾选“识别时同时计算整图深度”，可关闭，MediaPipe 默认不勾选。数值和热图绑定当前图片，不复用固定三图 PNG。
+6. **相对深度：黄色较近、蓝色较远；只比较当前图片的可见表面。** 每图独立P5/P95归一化；衣物/道具/背景/遮挡物也可能被采样，不能跨图比较成米制距离。退化深度显示灰图并不提供排序。
+7. “相对深度辅助骨骼拟合”是实验选项，**默认关闭**。开启后必须先完成当前图深度，只尝试八条相邻肢段的小权重前后顺序；无效、局部不稳定、差异不足或原生三维冲突会拒绝。没有有效线索时 MediaPipe 保持原同步主路径及head目标；有效辅助的所有目标也来自同一合法FK。状态显示采用/拒绝/回退，不覆盖原始XYZ、不直接写SMPL旋转、不自动交换左右，不保证修复坐姿、隐藏腿或脚掌。
+
+取消、换图、方式/API/token/框/PMX变化及收起均拒绝迟到参考或提交；正在计算的深度取消会终止专用Worker，销毁面板释放客户端/热图。HMR取消只停止当前HTTP等待，服务端CUDA计算可能继续，busy时稍后重试；不终止或接管用户GPU服务。失败不会改坏已提交的骨骼目标，不静默切换识别算法。重置控制点可恢复原动作，仍可在3D场景微调；相机匹配使用十二真实身体对应，不把BODY25鼻点当PMX头中心。
+
+### 部署及资源预算
+
+- 先由用户自己启动现成[GPU服务](<E:/ai/ai-depthmap/hmr2_gpu_service.py>)；本次没有擅自启动、停止或接管它。服务需精确允许 **MMD-AR页面的Origin**，有token时 `/health` 和 `/infer` 均需Bearer。健康测试不等于识图精度验收。
+- 手机上的 `127.0.0.1` 是手机自己，调用电脑服务要填电脑LAN地址；服务非loopback绑定必须配置token。HTTPS页面不能绕过远端HTTP混合内容限制，可能还需浏览器本地网络授权；优先使用受信的同源/HTTPS部署，不新增任意URL后端代理，不在公网暴露无TLS服务。
+- DA按实际minimal/14倍数缩放，模型输入最长1024、最多518×1024像素；1600×900→924×518支持。缩放结果超预算时明确拒绝、不静默裁切，必要时先缩小原图。资源固定revision、大小/SHA、预处理配置和完整Apache-2.0许可，复用匹配ORT；gzip/br按解码后实际字节门禁，运行不依赖临时报告目录。构建必检SHA；HTTPS/localhost有SubtleCrypto时运行时再次核对，明文LAN缺此能力时只信任已校验部署并检查清单/长度，不保证传输完整性，因此推荐HTTPS。
+- 本机真实DA 924×518推理约10.38秒是一次桌面Chrome/WASM `session.run` 记录，**不含模型加载和预处理**，不是手机性能承诺。HMR HTTP浏览器测试为模拟协议、真实PMX另有合成回环；真实GPU跨域联网与实机性能仍需用户环境验收。
+
+实现与验证见[接入任务](<../../../hmr2-node-onnx/docs/task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。
+
+## 以下为历史本机模型试验记录
+
+更新日期：2026-10-16。用户确认本机姿态试验仅保留 **HMR2.0b** 与暂时保留的 **人物分割**。四模型对照、RTMW3D/XYZ、NLF-S/L及SAM 3D Body旧独立试验不再作为可运行入口；历史观察与命令保留在[历史任务](../task/20261016_MMDAR四模型姿态效果对照.md)、[三维辅助评估](../task/20261016_MMDAR人体三维深度辅助模型评估.md)、[NLF-S](../../../../docs/task/20261016_NLFS浏览器骨骼试验.md)、[NLF-L](../../../../docs/task/20261016_NLFL浏览器骨骼试验.md)及[清理执行记录](../task/20261016_MMD姿态试验仅保留HMR与人物分割.md)。
+
+**本次只清理本机临时试验，不把正式全身IK改成HMR。正式默认仍是MediaPipe人物检测＋33点估计world，RTMPose兼容代码、生产模型缓存与既有集成测试不变。**
+
+## 打开两类报告
+
+从项目根目录由用户在另一个终端运行：
+
+```powershell
+node tmp/mmd-pose/depth-eval/serve-report.cjs
+```
+
+该入口现在使用HMR完整本机服务，输出实际端口的HMR地址；固定三图和自选/粘贴图片均可使用。服务只绑定`127.0.0.1`。不要沿用历史56173/60934端口，端口不固定；不自动停止、重启或替换用户原有服务器。
+
+在同一输出端口下打开：
+
+| 报告 | URL路径 |
+|---|---|
+| HMR2.0b | `/_depth/hmr2-sam3d/report.html?image=seated` |
+| 人物分割三输入 | `/_depth/rigid-projection/person-seg/report.html?image=seated` |
+| 真人左右腿对应 | `/_depth/rigid-projection/person-seg/leg-report.html` |
+
+三图参数为`seated`、`anime`、`diagram`。也可由用户直接运行`node tmp/mmd-pose/depth-eval/hmr2-sam3d/custom-report-server.cjs`，使用它输出的端口。已有旧静态服务不包含自选图HMR接口；只刷新页面不能给已载入内存的旧服务补接口。
+
+## HMR2.0b 固定三图与自选图片
+
+[报告](../../../../tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html)读取同目录[页面逻辑](../../../../tmp/mmd-pose/depth-eval/hmr2-sam3d/report.mjs)、状态及七份结果。三列为原图二维叠点、受光圆柱/球形关节骨架、整图相对深度；人物左蓝、右橙，3D可拖动旋转、双击复位，不加投影阴影。WebGL不可用时回退线条预览，深度缺失或来源SHA不匹配时只提示缺失，不影响原图/骨架。
+
+动漫可切原版、扩框、人物框左移/右移、镜像输入五份HMR结果。四候选均未改善脚掌，原版仍默认；切候选不改变原图深度。BODY25左右标签和原始JSON不被静默修补。
+
+自选图：选择PNG/JPEG/WebP、按Ctrl+V/⌘V或用粘贴按钮；确认处理后像素的X/Y/宽/高人物框，点击“识别 HMR＋深度”。HMR通过同机Python处理一次性临时PNG，Depth Anything在当前浏览器本地ONNX/WASM推理。原文件上限20MiB、解码像素上限4096²，处理后最长边1600；HMR任务串行，自选结果不覆盖固定三图JSON。
+
+### 模型、环境与边界
+
+官方4D-Humans源码固定提交`efe18deff163b29dff87ddbd575fa29b716a356c`；归档2,710,589,440字节，checkpoint 2,709,521,501字节，实际资源摘要见[状态](../../tmp/mmd-pose/depth-eval/hmr2-sam3d/status.json)。保留[运行环境](../../tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/)、官方源码、Windows缓存/OpenGL适配补丁与解压模型。
+
+checkpoint包含完整SMPL层张量；[推理脚本](../../../../tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py)严格加载网络并校验SMPL形状/BODY25映射，用相同`smplx.lbs`/顶点选择路径重建关节和原图投影，不额外下载独立SMPL人体文件。不能将它描述为逐字调用官方完整包装类。
+
+三张原图及人工框由[样本配置](../../tmp/mmd-pose/depth-eval/hmr2-sam3d/sample-config.json)固定：真人236×314、动漫450×407、示意236×314；框依次为`[10,15,226,299]`、`[96,10,280,375]`、`[40,8,160,300]`（xywh）。图片仍在本机用户目录/Temp，不提交Git；Temp图片可能被系统清掉，报告状态不代表路径永远有效。
+
+注意：现有环境必须保留。历史Python锁清单未覆盖`psutil`，仅依赖锁文件不能承诺完全重建；原审计框验证与推理xywh语义的统一仍待后续修正，不在清理任务中改变模型路径。
+
+### HMR复测
+
+没有专用npm script；从项目根依次执行，推理命令会写状态/本机结果，复测前保留基线：
+
+```powershell
+& tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/Scripts/python.exe -X utf8 tmp/mmd-pose/depth-eval/hmr2-sam3d/audit.py
+& tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/Scripts/python.exe -X utf8 tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py
+& tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/Scripts/python.exe -X utf8 tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py --anime-foot-trials
+node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-report.cjs
+node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-custom-report.cjs
+# 真实Python端到端，非快速UI替身检查：
+node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-custom-report.cjs --real
+```
+
+默认自选图检查注入HMR测试结果但真实运行浏览器Depth，不能当成Python推理通过。真实HMR历史三图单图前向约0.7～2.0秒、模型加载约6.1秒、进程峰值约5.9GiB；这是Windows CPU记录，不是手机性能。真人抬高膝仍被误归右腿，左脚超画幅；动漫脚趾候选仍在y=389～404且偏离鞋面，示意末端也偏。数值/工具通过不代表姿态正确；不接入VAM。详见[单模型测试](../../../hmr2-node-onnx/docs/task/20261016_HMR2单模型三图骨骼测试.md)、[动漫复测](../../../hmr2-node-onnx/docs/task/20261016_HMR2动漫脚掌重测.md)、[自选图片](../../../hmr2-node-onnx/docs/task/20261016_HMR2自选图片文件粘贴.md)。
+
+## 人物分割：暂时保留完整试验
+
+[person-seg目录](../../../../tmp/mmd-pose/depth-eval/rigid-projection/person-seg)整体保留：PPHumanSeg权重/版权、mask、透明人物/裁剪/抠图输入、二维点、实际Ammo/PMX正侧结果、三图报告、真人左右腿报告、旧快照和复测工具。
+
+PPHumanSeg原精度ONNX为6,163,938字节，SHA-256 `552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24`；RGB192×192/NCHW/负1到1，两类概率先逆映回原图再判人物，单线程WASM Worker并保留取消/资源释放。
+
+原图、人物框裁剪、同框灰底抠图分别使用相同RTMPose-m二维权重；映回原图后比较，不提高模型分数、不补隐藏z。正式MediaPipe构建不再分发RTMPose，故**仅试验静态服务**把其固定请求URL映射到[既有RTMPose缓存](../../3rd/mmd-ar-test/model-cache/pose-onnx/rtmpose-m-body7-384x288.onnx)，不修改正式构建和生产缓存。
+
+人物分割仍依赖已有[原图二维缓存](../../tmp/mmd-pose/depth-eval/inference-wasm.json)、[深度浮点图](../../tmp/mmd-pose/depth-eval/rigid-projection/depth-results.json)、321骨初值、rig/drive、肩髋模块及历史控制JSON。它们只作为保留功能依赖，不再开放旧刚体/肩髋独立报告。可以沿用缓存重跑分割与物理；已清理的RTMW3D全链缓存生成工具不再提供，不能声称仍支持旧四模型/RTMW全流程从零重建。
+
+三图结构筛查不代表语义正确：动漫猪剑被保留，两新三维分支拒绝并回退原图；真人/示意仅本次观察允许实验。深度仍用原图上下文，新变体仅取概率≥0.8且完整邻域位于人物内部的表面线索，不对抠图重新推理深度。
+
+真人leg报告默认按用户本图标注保留髋、交换膝踝（26/28→左25/27），蓝左、黄橙右；可切原图/抠图、原始/局部/整腿、PMX/刚体。整腿候选几何失败未采用，本图修正不是通用自动左右识别。抠图抬高膝仍远169.37mm、整体投影8.132%，完整姿态未通过，正式IK不变。详见[分割任务](../task/20261016_MMDAR人物分割辅助姿态计算.md)和[腿对应任务](../task/20261016_MMDAR真人坐姿左右腿归属修正.md)。
+
+### 人物分割复测
+
+以下完整重跑会改写inference及实际结果；旧[视觉复核](../../tmp/mmd-pose/depth-eval/rigid-projection/person-seg/visual-review.json)绑定原inference SHA，重跑后必须重新人工复核并绑定，不能沿用旧资格。
+
+```powershell
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/check-unit.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/run-person.cjs
+# 人工复核新mask并更新visual-review的inference摘要后，再运行物理。
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/run-physics.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/check-results.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/build-report.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/check-report.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/check-leg-unit.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/run-leg-correspondence.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/check-leg-results.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/build-leg-report.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/build-report.cjs
+node tmp/mmd-pose/depth-eval/rigid-projection/person-seg/check-leg-report.cjs
+```
+
+仅查看既有报告或运行`check-unit`/`check-leg-unit`/`check-results`/`check-leg-results`/报告检查，不会重算原始推理与物理结果。检查脚本启动自己的临时HTTP/Edge并关闭，不替换用户服务器。缓存的protectedHashes包含工作区绝对路径，迁移目录后需审查来源，不能直接改摘要让检查通过。
+
+## 共享深度与清理后检查
+
+Depth Anything V2 Small量化ONNX、预处理配置、三张PNG和原图浮点深度保持。HMR固定三图按原图SHA对照深度清单；颜色为每图5%～95%独立归一化，黄色近、蓝色远，只表示可见表面相对顺序，不是米制关节深度、遮挡真值或掌面旋转。
+
+`node tmp/mmd-pose/depth-eval/check-retained.cjs`定向核对七份HMR结果、人物分割历史输入摘要、相对模块依赖、保留HTTP资源、RTMPose缓存路由、移除的旧入口及非法HMR框；不重新运行Python或改写推理结果。加`--worker`真实重跑PPHumanSeg/RTMPose三图九输入，并验原尺寸mask、原图逐点一致、两session释放、取消和本机GET；只更新独立检查摘要，不覆盖历史推理/物理/视觉复核。
+
+模型/私人图片/环境及大结果仍只留本机，不随Git分发；新检出工作区需要恢复保留资产。共用Three/Ammo/ORT来自既有web-dist及node_modules，不在清理范围。
+
+## 正式MediaPipe集成测试（未改变）
+
+正式使用说明见[Human](../../../../docs/usage/mmd-human-interface.md)，恢复验证见[任务](../task/20261016_MMDAR图片识别切回MediaPipePose.md)。只有缺web-dist或正式代码变化时才构建；构建完成后再跑消费测试，不并行构建与测试。
+
+```powershell
+npm run build:web:mmd-ar-test
+node --test --test-concurrency=1 tests/mmd-ar-human-pose-fk.test.js tests/mmd-ar-human-rtmpose.test.js tests/mmd-ar-human-image-pose.test.js tests/mmd-ar-human-physics.test.js tests/mmd-ar-human-pose-camera.test.js tests/mmd-ar-human-pose-projection.test.js tests/mmd-ar-human-camera-ownership.test.js tests/mmd-ar-human-damping.test.js
+$env:PUPPETEER_EXECUTABLE_PATH = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+node --test --test-concurrency=1 tests/mmd-ar-human-image-pose-browser.test.js tests/mmd-ar-human-image-pose-clipboard-browser.test.js
+```
+
+缺浏览器/参考图/模型环境导致跳过不算真实推理通过；手机性能、系统剪贴板、更多PMX/遮挡/坐姿质量仍待实机验收。单张图无3D真值，模型参考RMS不能冒充人体标注准确率。

@@ -135,6 +135,21 @@ class PlaylistManager {
         }
     }
 
+    // URL 列表直接下发给显示端，按调用方提供的顺序播放，不读取媒体内容。
+    buildFromUrls(items) {
+        if (!Array.isArray(items) || !items.length || items.length > 10000) throw new Error('URL 列表数量须为 1 至 10000 项');
+        return items.map((item, index) => {
+            if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.url !== 'string' || item.url.length > 16384) throw new Error(`第 ${index + 1} 项地址无效`);
+            let url;
+            try { url = new URL(item.url); } catch { throw new Error(`第 ${index + 1} 项地址无效`); }
+            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error(`第 ${index + 1} 项地址无效`);
+            if (!MEDIA_TYPES.includes(item.mediaType)) throw new Error(`第 ${index + 1} 项媒体类型无效`);
+            if (item.mediaType === 'text' && item.format !== undefined && !['plain', 'markdown'].includes(item.format)) throw new Error(`第 ${index + 1} 项文本格式无效`);
+            if (item.fileName !== undefined && typeof item.fileName !== 'string') throw new Error(`第 ${index + 1} 项文件名无效`);
+            return { url: url.href, fileName: (item.fileName || `媒体 ${index + 1}`).trim().slice(0, 200) || `媒体 ${index + 1}`, mediaType: item.mediaType, ...(item.mediaType === 'text' && item.format ? { format: item.format } : {}) };
+        });
+    }
+
     // 从控制端上传的 base64 文件构建播放列表
     buildFromTemp(files, options = {}) {
         const { mode = 'sequence', sortBy = 'name', direction = 'asc', mediaTypes } = options;

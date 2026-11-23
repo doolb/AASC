@@ -42,6 +42,14 @@ function normalizeTemporaryHistoryMessages(messages) {
         });
 }
 
+// 保留旧会话 ID 作为消息元数据，但展示和上下文按时间组成一条连续历史。
+function getContinuousTemporaryConversationHistory(messages) {
+    return (Array.isArray(messages) ? messages : [])
+        .filter(message => message?.mode === 'temporary')
+        .map(message => ({ ...message }))
+        .sort((left, right) => Number(left.timestamp || 0) - Number(right.timestamp || 0));
+}
+
 function groupTemporaryConversationMessages(messages) {
     const groups = new Map();
     for (const message of normalizeTemporaryHistoryMessages(messages)) {
@@ -121,6 +129,7 @@ module.exports = {
     MIN_TEMPORARY_CONTEXT_GROUPS,
     MAX_TEMPORARY_CONTEXT_GROUPS,
     normalizeGroupLimit,
+    getContinuousTemporaryConversationHistory,
     normalizeTemporaryConversationHistoryConfig,
     normalizeTemporaryHistoryMessages,
     groupTemporaryConversationMessages,

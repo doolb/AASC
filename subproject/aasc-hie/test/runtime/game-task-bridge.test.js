@@ -69,4 +69,15 @@ describe('game task bridge', () => {
     await expect(bridge.run({ startLevel: 30, windowId: '0x12', maxLevels: 2, duckAuto: true })).resolves.toEqual({ code: 0, signal: null, success: true });
     expect(launch).toHaveBeenCalledWith('python3', ['scripts/auto-pig-levels.py', '--start-level', '30', '--window-id', '0x12', '--display', ':1', '--max-levels', '2', '--duck-auto'], { cwd: '/tmp/game', stdio: 'inherit', shell: false });
   });
+
+  it('passes the observation-only option to the fixed game script', async () => {
+    const launch = vi.fn(() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit('close', 2, null));
+      return child;
+    });
+    const bridge = new GameTaskBridge({ enabled: true, gameRoot: '/tmp/game', spawn: launch });
+    await bridge.run({ startLevel: 81, windowId: '0x12', maxLevels: 1, inspectOnly: true });
+    expect(launch.mock.calls[0][1]).toContain('--inspect-only');
+  });
 });

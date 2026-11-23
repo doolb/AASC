@@ -42,29 +42,63 @@
         return button;
     }
 
-    function renderSources() {
-        const root = byId('displayMediaLibrarySources');
-        if (!root) return;
-        root.replaceChildren();
-        const groups = [
-            { title: '本地媒体', items: state.libraries.filter(item => !['task', 'quark', 'bilibili'].includes(item.type)) },
-            { title: '国内媒体', items: state.libraries.filter(item => ['quark', 'bilibili'].includes(item.type) || (item.type === 'task' && item.region !== 'overseas')) },
-            { title: '国外媒体', items: state.libraries.filter(item => item.type === 'task' && item.region === 'overseas') }
-        ];
-        for (const group of groups) {
-            if (!group.items.length) continue;
-            const heading = document.createElement('div');
-            heading.className = 'display-media-library-group-title';
-            heading.textContent = group.title;
-            root.appendChild(heading);
-            for (const library of group.items) {
-                const button = createButton(library.name, () => void openLibrary(library.id));
-                button.className = 'display-media-library-source';
-                button.dataset.libraryId = library.id;
-                if (library.id === state.libraryId) button.classList.add('active');
-                root.appendChild(button);
-            }
+    // 同一汇总视图中的每个条目仍绑定原来源，避免同名目录或相同路径串库。
+    function libraryFor(entry) {
+        return state.libraries.find(item => item.id === (entry.libraryId || state.libraryId));
+    }
+
+    function createCover(entry, card) {
+        const library = libraryFor(entry);
+        const isVideo = entry.mediaType === 'video';
+        const url = entry.cover || entry.proxyUrl || entry.directUrl;
+        if (!url || (!entry.cover && !['image', 'video'].includes(entry.mediaType))) return;
+        // 夸克视频没有可用封面时不额外请求整个远程视频。
+        if (isVideo && !entry.cover && library?.type === 'quark') return;
+        const media = document.createElement(isVideo && !entry.cover ? 'video' : 'img');
+        media.className = 'display-media-card-cover';
+        if (media.tagName === 'VIDEO') {
+            media.preload = 'metadata'; media.muted = true; media.playsInline = true;
+            // 首帧解码后略微前移，尽可能避开视频片头黑帧，不启动播放。
+            media.addEventListener('loadeddata', () => {
+                if (Number.isFinite(media.duration) && media.duration > 0.1 && media.currentTime === 0) media.currentTime = 0.1;
+            }, { once: true });
         }
+        else { media.loading = 'lazy'; media.alt = ''; media.referrerPolicy = 'no-referrer'; }
+        const update = () => {
+            const width = media.videoWidth || media.naturalWidth;
+            const height = media.videoHeight || media.naturalHeight;
+            if (width > 0 && height > 0) card.style.setProperty('--display-card-aspect', `${width} / ${height}`);
+        };
+        media.addEventListener(media.tagName === 'VIDEO' ? 'loadedmetadata' : 'load', update);
+        media.addEventListener('error', () => { card.classList.remove('has-cover'); media.remove(); }, { once: true });
+        media.src = url;
+        card.classList.add('has-cover');
+        card.append(media);
+    }
+
+    function createEntry(entry) {
+        const card = document.createElement('div');
+        card.className = 'display-media-library-entry';
+        card.dataset.libraryId = entry.libraryId || state.libraryId;
+        const library = libraryFor(entry);
+        if (entry.type === 'directory') {
+            card.classList.add('is-directory');
+            const icon = document.createElement('div'); icon.className = 'display-media-library-icon'; icon.textContent = '📁'; card.append(icon);
+        } else createCover(entry, card);
+        const title = createButton(entry.name, () => {
+            if (entry.type === 'directory') void enterDirectory(entry);
+            else playEntry(entry);
+        });
+        title.className = 'display-media-library-entry-name';
+        card.append(title);
+        if (entry.type === 'directory') {
+            const batch = createButton('批量播放', () => requestFolderPlayback(entry));
+            batch.className = 'display-media-library-batch'; card.append(batch);
+        }
+        if (library?.type === 'bilibili' && entry.bvid) {
+            card.classList.add('display-media-bilibili-row'); card.append(createBilibiliActions(entry));
+        }
+        return card;
     }
 
     function renderEntries() {
@@ -72,54 +106,26 @@
         if (!root) return;
         root.replaceChildren();
         const path = byId('displayMediaLibraryPath');
-        if (path) path.textContent = state.path;
+        if (path) path.textContent = state.libraryId ? state.path : '全部媒体';
         const up = byId('displayMediaLibraryUp');
-        if (up) up.disabled = state.path === '/';
+        if (up) up.disabled = !state.libraryId;
         const isBilibili = state.libraries.find(item => item.id === state.libraryId)?.type === 'bilibili';
         if (isBilibili) {
-            const navigation = document.createElement('div');
-            navigation.className = 'display-media-bilibili-nav';
+            const navigation = document.createElement('div'); navigation.className = 'display-media-bilibili-nav';
             navigation.append(createButton('首页', () => void openDirectory('/d:home')),
                 createButton('已保存', () => void openDirectory('/')));
             root.append(navigation);
         }
-        if (isBilibili && state.path === '/d:home') {
-            const heading = document.createElement('h3'); heading.textContent = 'B站热门'; root.append(heading);
-        }
-        for (const entry of state.entries) {
-            const row = document.createElement('div');
-            row.className = 'display-media-library-entry';
-            const open = createButton(entry.name, () => {
-                if (entry.type === 'directory') void openDirectory(entry.path);
-                else playEntry(entry);
-            });
-            open.className = 'display-media-library-entry-name';
-            if (isBilibili && entry.bvid && entry.cover) {
-                const cover = document.createElement('img'); cover.src = entry.cover; cover.alt = ''; cover.loading = 'lazy';
-                cover.referrerPolicy = 'no-referrer'; cover.className = 'display-media-bilibili-cover';
-                cover.onerror = () => cover.remove(); row.append(cover);
-            }
-            row.appendChild(open);
-            if (entry.type === 'directory') {
-                const batch = createButton('批量播放', () => requestFolderPlayback(entry));
-                batch.className = 'display-media-library-batch';
-                row.appendChild(batch);
-            }
-            if (isBilibili && entry.bvid) { row.classList.add('display-media-bilibili-row'); row.append(createBilibiliActions(entry)); }
-            root.appendChild(row);
-        }
-        if (isBilibili && currentBilibili && relatedEntries.length) {
-            const heading = document.createElement('h3'); heading.textContent = '相关推荐'; root.append(heading);
+        const fragment = document.createElement('div');
+        fragment.className = 'display-media-card-grid';
+        for (const entry of state.entries) fragment.append(createEntry(entry));
+        if ((!state.libraryId || isBilibili) && currentBilibili && relatedEntries.length) {
             for (const [index, entry] of relatedEntries.entries()) {
-                const row = document.createElement('div'); row.className = 'display-media-library-entry display-media-bilibili-row';
-                if (entry.cover) {
-                    const cover = document.createElement('img'); cover.src = entry.cover; cover.alt = ''; cover.loading = 'lazy';
-                    cover.referrerPolicy = 'no-referrer'; cover.className = 'display-media-bilibili-cover'; cover.onerror = () => cover.remove(); row.append(cover);
-                }
-                const title = createButton((index === 0 ? '正在播放：' : '') + (index === 0 ? currentBilibili.title : entry.name), () => playEntry(entry));
-                title.className = 'display-media-library-entry-name'; row.append(title, createBilibiliActions(entry)); root.append(row);
+                fragment.append(createEntry({ ...entry, libraryId: 'display-bilibili',
+                    name: index === 0 ? `正在播放：${currentBilibili.title}` : entry.name }));
             }
         }
+        root.append(fragment);
     }
 
     function createBilibiliActions(entry) {
@@ -179,27 +185,54 @@
     }
 
     async function loadLibraries() {
-        setStatus('');
+        const version = ++directoryVersion;
+        state.libraryId = ''; state.path = '/'; state.parent = '/'; state.entries = [];
+        renderEntries(); setStatus('加载中…');
         try {
             const payload = await requestJson('/api/display-local/libraries');
+            if (version !== directoryVersion) return;
             state.libraries = Array.isArray(payload.libraries) ? payload.libraries : [];
-            renderSources();
-            if (!state.libraries.length) {
-                setStatus('此目录没有可播放的媒体');
-                return;
-            }
-            const preferred = state.libraries.find(item => item.id === state.libraryId) || state.libraries[0];
-            await openLibrary(preferred.id);
+            const requests = state.libraries.flatMap(library => (library.type === 'bilibili' ? ['/', '/d:home'] : ['/'])
+                .map(path => ({ library, path })));
+            renderEntries();
+            if (!requests.length) { setStatus('此目录没有可播放的媒体'); return; }
+            const seen = new Set();
+            let pending = requests.length;
+            let failed = 0;
+            await Promise.allSettled(requests.map(async ({ library, path }) => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 8000);
+                try {
+                    const query = new URLSearchParams({ libraryId: library.id, path });
+                    const result = await requestJson(`/api/display-local/list?${query}`, { signal: controller.signal });
+                    if (version !== directoryVersion) return;
+                    const fragment = document.createDocumentFragment();
+                    for (const item of Array.isArray(result.entries) ? result.entries : []) {
+                        const entry = { ...item, libraryId: library.id };
+                        const key = `${entry.libraryId}\0${entry.path}`;
+                        if (seen.has(key)) continue;
+                        seen.add(key); state.entries.push(entry); fragment.append(createEntry(entry));
+                    }
+                    byId('displayMediaLibraryEntries')?.querySelector('.display-media-card-grid')?.append(fragment);
+                } catch (error) {
+                    failed++;
+                } finally {
+                    clearTimeout(timer);
+                    pending--;
+                    if (version === directoryVersion) {
+                        setStatus(failed ? '部分媒体来源加载失败，请稍后重试'
+                            : pending ? '加载中…' : state.entries.length ? '' : '此目录没有可播放的媒体');
+                    }
+                }
+            }));
         } catch (error) {
-            setStatus('媒体库加载失败，请稍后重试');
+            if (version === directoryVersion) setStatus('媒体库加载失败，请稍后重试');
         }
     }
 
-    async function openLibrary(libraryId) {
-        state.libraryId = libraryId;
-        state.path = '/';
-        renderSources();
-        await loadDirectory(state.libraries.find(item => item.id === libraryId)?.type === 'bilibili' ? '/d:home' : '/');
+    async function enterDirectory(entry) {
+        state.libraryId = entry.libraryId || state.libraryId;
+        await openDirectory(entry.path);
     }
 
     async function openDirectory(path) {
@@ -208,32 +241,20 @@
     }
 
     async function loadDirectory(path) {
-        // 仅应用最后一次浏览请求，旧来源或旧目录的响应不能覆盖新目录。
         const version = ++directoryVersion;
-        state.entries = [];
-        renderEntries();
-        setStatus('加载中…');
+        state.entries = []; renderEntries(); setStatus('加载中…');
         try {
             const query = new URLSearchParams({ libraryId: state.libraryId, path });
             const payload = await requestJson(`/api/display-local/list?${query}`);
             if (version !== directoryVersion) return;
-            setStatus('');
             state.path = typeof payload.path === 'string' ? payload.path : path;
             state.parent = typeof payload.parent === 'string' ? payload.parent : '/';
-            state.entries = Array.isArray(payload.entries) ? payload.entries : [];
-            renderEntries();
-            if (!state.entries.length) setStatus('此目录没有可播放的媒体');
+            state.entries = (Array.isArray(payload.entries) ? payload.entries : []).map(entry => ({ ...entry, libraryId: state.libraryId }));
+            renderEntries(); setStatus(state.entries.length ? '' : '此目录没有可播放的媒体');
         } catch (error) {
             if (version !== directoryVersion) return;
-            if (error.status === 410 || error.code === 'TASK_SOURCE_STOPPED') {
-                state.path = '/';
-                state.parent = '/';
-                state.entries = [];
-                renderEntries();
-                setStatus('任务媒体源已停止');
-                return;
-            }
-            setStatus('媒体库加载失败，请稍后重试');
+            state.entries = []; renderEntries();
+            setStatus(error.status === 410 || error.code === 'TASK_SOURCE_STOPPED' ? '任务媒体源已停止' : '媒体库加载失败，请稍后重试');
         }
     }
 
@@ -242,7 +263,7 @@
         if (pendingRequestId) cancelledRequests.add(pendingRequestId);
         pendingRequestId = null;
         pendingSingleRequestId = `display-single-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        if (options?.send?.({ type: 'displayPlaylistCancel', libraryId: state.libraryId, path: entry.path, requestId: pendingSingleRequestId }) === false) {
+        if (options?.send?.({ type: 'displayPlaylistCancel', libraryId: entry.libraryId || state.libraryId, path: entry.path, requestId: pendingSingleRequestId }) === false) {
             pendingSingleRequestId = null;
             setStatus('连接已断开，请稍后重试');
             return;
@@ -255,7 +276,7 @@
         pendingSingleRequestId = null;
         setStatus('');
         pendingRequestId = `display-library-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        if (options?.send?.({ type: 'displayPlaylistRequest', libraryId: state.libraryId, path: entry.path, requestId: pendingRequestId }) === false) {
+        if (options?.send?.({ type: 'displayPlaylistRequest', libraryId: entry.libraryId || state.libraryId, path: entry.path, requestId: pendingRequestId }) === false) {
             pendingRequestId = null;
             setStatus('连接已断开，请稍后重试');
             return;
@@ -372,7 +393,9 @@
         if (closeButton) closeButton.onclick = close;
         const up = byId('displayMediaLibraryUp');
         if (up) up.onclick = () => {
-            if (state.path !== '/') void openDirectory(state.parent);
+            if (!state.libraryId) return;
+            if (state.path === '/' || state.parent === '/') void loadLibraries();
+            else void openDirectory(state.parent);
         };
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && !byId('displayMediaLibraryPanel')?.hidden) close();

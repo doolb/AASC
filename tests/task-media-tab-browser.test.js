@@ -15,8 +15,9 @@ test('运行中的任务分别显示顶部页签，搜索结果可复制链接�
   const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
   t.after(() => browser.close());
   const page = await browser.newPage();
-  await page.setContent(`<div class="media-library-container">${$('.media-library-container').first().html()}</div>`);
+  await page.setContent(`<div id="panel-media"><div class="media-library-container">${$('.media-library-container').first().html()}</div></div>`);
   await page.addStyleTag({ path: path.join(root, 'css/media-library.css') });
+  await page.addStyleTag({ path: path.join(root, 'css/control-workspace.css') });
   await page.addScriptTag({ path: path.join(root, 'js/media-library.js') });
   await page.evaluate(() => {
     window.showToast = () => {};
@@ -47,12 +48,12 @@ test('运行中的任务分别显示顶部页签，搜索结果可复制链接�
     const tabs = document.querySelector('.media-library-tabs');
     const sections = [...tabs.querySelectorAll('.media-tab-section')];
     return { labels: sections.map(section => section.textContent.trim()),
-      rows: sections.map(section => Math.round(section.getBoundingClientRect().top)),
+      rows: sections.map(section => { const box = section.getBoundingClientRect(); return Math.round(box.top + box.height / 2); }),
       overflow: tabs.scrollWidth > tabs.clientWidth };
   });
   assert.equal(layout.rows.length, 4);
-  assert.ok(layout.rows.every((row, index) => index === 0 || layout.rows[index - 1] < row));
-  assert.equal(layout.overflow, false);
+  assert.ok(layout.rows.every(row => row === layout.rows[0]));
+  assert.equal(layout.overflow, true);
   assert.equal(await page.$('#taskMediaBar'), null);
   await page.click('[data-task-media-source="hongguo"]');
   await page.waitForFunction(() => document.querySelector('#mediaLibraryContent').textContent.includes('剧集目录'));
@@ -67,7 +68,7 @@ test('运行中的任务分别显示顶部页签，搜索结果可复制链接�
   assert.equal(await page.evaluate(() => MediaLibrary.activeTab), 'libraries');
   await page.click('#mediaTabBilibili');
   assert.equal(await page.$eval('#mediaTabBilibili', el => el.getAttribute('aria-selected')), 'true');
-  assert.equal(await page.$eval('#bilibiliProxySelect', el => getComputedStyle(el.closest('label')).display), 'none');
+  assert.equal(await page.$eval('#bilibiliProxySelect', el => getComputedStyle(el.closest('label')).display), 'flex');
   assert.equal(await page.$eval('#bilibiliVideoBar', el => el.firstElementChild.id), 'bilibiliHomeBtn');
   assert.equal(await page.$eval('#bilibiliHomeBtn', el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth; }), true);
   await page.evaluate(() => { MediaLibrary.loadBilibiliHome = () => { window.bilibiliHomeClicked = true; }; });

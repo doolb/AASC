@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import cv2
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('pig_auto_test', ROOT / 'scripts/auto-pig-levels.py')
@@ -31,6 +32,36 @@ def candidate():
 
 
 class AutoTest(unittest.TestCase):
+    def test_unknown_direction_requires_stable_and_agreeing_frames(self):
+        unknown = dict(candidate(), direction='unknown')
+        east = candidate()
+        west = dict(candidate(), direction='west')
+        shifted = dict(candidate(), center=[180, 299])
+        self.assertEqual(app.refine_unknown_directions([unknown], [[east], [west]]), 0)
+        self.assertEqual(unknown['direction'], 'unknown')
+        self.assertEqual(app.refine_unknown_directions([unknown], [[east], [shifted]]), 0)
+        self.assertEqual(app.refine_unknown_directions([unknown], [[east], [east]]), 1)
+        self.assertEqual(unknown['direction'], 'east')
+        self.assertEqual(unknown['direction_source'], 'stable_multi_frame_candidate')
+
+    def test_inspect_only_saves_candidates_without_clicking_or_solving(self):
+        frame = np.zeros((942, 530, 3), dtype=np.uint8)
+        class Fake:
+            def capture(self): return frame.copy()
+            def click(self, *_): raise AssertionError('只采集模式不能点击')
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'inspection'
+            with patch.object(app.auto, 'ui_state', return_value='unknown'), \
+                 patch.object(app.player.extract, 'valid_board', return_value=(74, 205, 391, 602)), \
+                 patch.object(app.player.extract, 'identify', return_value=([candidate()], None, [])), \
+                 patch.object(app.auto, 'find_yellow_ducks', return_value=[]), \
+                 patch.object(app.player.extract, 'annotate', return_value=frame), \
+                 patch.object(app.cage_vision, 'detect', side_effect=AssertionError('不得进入求解或操作')):
+                status, _ = app.run_level(Fake(), output, 81, inspect_only=True)
+            result = json.loads((output / 'result.json').read_text())
+            self.assertEqual(status, 'inspection_only')
+            self.assertEqual((result['clicks'], result['confirmed']), (0, 0))
+
     def test_yellow_candidates_merge_only_overlapping_boxes_in_same_cell(self):
         grid = (0, 0, 30, 4, 4)
         ducks = [

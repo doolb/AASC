@@ -15,6 +15,8 @@ test('背景状态验证输入并保留独立设置', () => {
         assert.equal(updateBackgroundMedia(initial, { url, mediaType: 'video' }), null);
     }
     assert.equal(updateBackgroundMedia(initial, { playing: 'true' }), null);
+    assert.equal(updateBackgroundMedia(initial, { url: '/image.png', mediaType: 'image', playing: true }).mediaType, 'image');
+    assert.equal(updateBackgroundMedia(initial, { url: '/animated.gif', mediaType: 'gif', playing: true }).mediaType, 'gif');
 });
 
 test('背景节点切换、休眠及恢复不会重新加载或操作主媒体', () => {
@@ -23,7 +25,8 @@ test('背景节点切换、休眠及恢复不会重新加载或操作主媒体',
     }
     const video = media();
     const audio = media();
-    const context = { window: {}, document: { getElementById(id) { return id === 'backgroundMediaVideo' ? video : audio; } }, console };
+    const image = media();
+    const context = { window: {}, document: { getElementById(id) { return { backgroundMediaVideo: video, backgroundMediaAudio: audio, backgroundMediaImage: image }[id]; } }, console };
     vm.runInNewContext(fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-background-media.js', 'utf8'), context);
     const player = context.window.DisplayBackgroundMedia;
     const state = { url: '/music.mp3', mediaType: 'audio', playing: true, loop: true, volume: 50 };
@@ -31,6 +34,7 @@ test('背景节点切换、休眠及恢复不会重新加载或操作主媒体',
     player.apply({ ...state, volume: 25 });
     assert.equal(audio.loads, 1);
     assert.equal(audio.volume, 0.25);
+    assert.equal(audio.muted, false);
     player.setSleeping(true);
     assert.equal(audio.pauses, 1);
     player.setSleeping(false);
@@ -43,4 +47,32 @@ test('背景节点切换、休眠及恢复不会重新加载或操作主媒体',
     assert.equal(video.plays, 0);
     player.apply({ ...state, url: '', playing: false });
     assert.equal(video.style.display, 'none');
+    player.apply({ ...state, url: '/picture.png', mediaType: 'image' });
+    assert.equal(image.style.display, 'block');
+    player.apply({ ...state, url: '/picture.png', mediaType: 'image', playing: false });
+    assert.equal(image.style.display, 'block');
+    player.apply({ ...state, url: '', playing: false });
+    assert.equal(image.style.display, 'none');
+});
+
+test('播放受限反馈真实状态，迟到的失败不会覆盖新媒体', async () => {
+    let rejectPlay;
+    const mk = () => ({ style: {}, load() {}, pause() {}, removeAttribute() {}, play() { return new Promise((_resolve, reject) => { rejectPlay = reject; }); } });
+    const audio = mk(), video = mk(), image = mk();
+    const context = { window: {}, document: { getElementById(id) { return { backgroundMediaVideo: video, backgroundMediaAudio: audio, backgroundMediaImage: image }[id]; } }, console };
+    vm.runInNewContext(fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-background-media.js', 'utf8'), context);
+    const player = context.window.DisplayBackgroundMedia;
+    const statuses = [];
+    player.onStatus = status => statuses.push(status);
+    const state = { url: '/music.mp3', mediaType: 'audio', playing: true, volume: 50 };
+    player.apply(state);
+    rejectPlay(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(statuses.at(-1).status, 'blocked');
+    player.apply(state);
+    const staleReject = rejectPlay;
+    player.apply({ ...state, url: '/image.png', mediaType: 'image' });
+    staleReject(new Error('old source'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.notEqual(statuses.at(-1).status, 'error');
 });
