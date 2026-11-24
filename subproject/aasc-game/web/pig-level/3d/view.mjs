@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124c';
-import { createTextureLibrary } from './textures.mjs?v=20261124c';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124c';
-import { createScenery } from './scenery.mjs?v=20261124c';
-import { createGrass } from './grass.mjs?v=20261124c';
-import { createParticles } from './particles.mjs?v=20261124c';
-import { createEnvironment } from './environment.mjs?v=20261124c';
-import { createHoloUI } from './holo-ui.mjs?v=20261124c';
-import { createAudioSystem } from './audio.mjs?v=20261124c';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124c';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124d';
+import { createTextureLibrary } from './textures.mjs?v=20261124d';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124d';
+import { createScenery } from './scenery.mjs?v=20261124d';
+import { createGrass } from './grass.mjs?v=20261124d';
+import { createParticles } from './particles.mjs?v=20261124d';
+import { createEnvironment } from './environment.mjs?v=20261124d';
+import { createHoloUI } from './holo-ui.mjs?v=20261124d';
+import { createAudioSystem } from './audio.mjs?v=20261124d';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124d';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -573,7 +573,6 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     const activePointers = new Map();
     let pointerConsumedByUi = false;
     let rightRotating = false;
-    let downOnPig = false;
     let downX = 0, downY = 0, lastX = 0, lastY = 0, dragged = false;
     let prevPinch = null;
     let pinchTransition = false;
@@ -706,7 +705,6 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             pickGroundTarget(ndcMid.x, ndcMid.y, pivotWorld);
             pivotMode = 'spin';
             dragged = true;
-            downOnPig = false;
             pointerConsumedByUi = false;
             return;
         }
@@ -724,13 +722,10 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             pivotMode = 'none';
         }
         if (!rightRotating && holoUI.handlePointerDown(x, y)) {
-            downOnPig = false;
             pointerConsumedByUi = true;
             return;
         }
         pointerConsumedByUi = false;
-        // 若左键/单指按下时落点在小猪身上，后续拖动不触发相机平移
-        downOnPig = !rightRotating && pickActor(e.clientX, e.clientY) !== null;
     };
 
     const onPointerMove = e => {
@@ -792,7 +787,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
                     applySpin(-dx * 0.0075);
                     targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.35, 1.38);
                     lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
-                } else if (!downOnPig) {
+                } else {
                     applyPan(dx, dy);
                 }
                 return;
@@ -816,7 +811,6 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             downX = lastX = rem.x;
             downY = lastY = rem.y;
             pinchTransition = true;
-            downOnPig = false;
             dragged = true;
             return;
         }
@@ -825,17 +819,12 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         if (pointerConsumedByUi) {
             holoUI.handlePointerUp(x, y);
             pointerConsumedByUi = false;
-            downOnPig = false;
             return;
         }
         if (!dragged && !rightRotating) {
-            if (holoUI.handlePointerUp(x, y)) {
-                downOnPig = false;
-                return;
-            }
+            if (holoUI.handlePointerUp(x, y)) return;
             const pigId = pickActor(e.clientX, e.clientY);
             if (pigId !== null) {
-                downOnPig = false;
                 audio.playSfx('oink');
                 onPick?.(pigId);
                 return;
@@ -847,7 +836,6 @@ export async function createView3D({ container, level, levels, onPick, onAction 
                 audio.playSfx('rustle');
             }
         }
-        downOnPig = false;
         rightRotating = false;
     };
 
@@ -1124,10 +1112,12 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             markers.arrowGroup.position.set(p.x, 1.52 + Math.sin(elapsedTotal * 4.4) * 0.14, p.z);
             markers.arrowGroup.rotation.y = elapsedTotal * 1.8;
             if (markers.handSprite.visible) {
-                // 模拟新手引导白手套手指在猪背右前侧轻按提示
+                // 食指指尖中心(center 0.35,0.84)直接落在目标猪背部中心上方，并按当前相机平面轻抬轻按，旋转任意角度均不偏移
                 const tap = Math.pow(Math.abs(Math.sin(elapsedTotal * 3.8)), 2.2);
-                markers.handSprite.position.set(p.x + 0.36 - tap * 0.1, 1.24 - tap * 0.18, p.z + 0.28 - tap * 0.08);
-                const hs = 0.96 - tap * 0.12;
+                const lift = (1 - tap) * 0.22;
+                const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
+                markers.handSprite.position.set(p.x + rightX * lift * 0.35, 0.62 + lift, p.z + rightZ * lift * 0.35);
+                const hs = 0.96 - tap * 0.1;
                 markers.handSprite.scale.set(hs, hs, 1);
             }
 
@@ -1183,6 +1173,15 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         getActorCount: () => actorMap.size,
         getGuideText: () => latestUi?.guideText || '',
         hasGuideHand: () => markers.handSprite.visible,
+        getGuideHandScreen() {
+            if (!markers.handSprite.visible) return null;
+            tmpVec.copy(markers.handSprite.position).project(camera);
+            const rect = domEl.getBoundingClientRect();
+            return {
+                x: rect.left + (tmpVec.x * 0.5 + 0.5) * rect.width,
+                y: rect.top + (-tmpVec.y * 0.5 + 0.5) * rect.height
+            };
+        },
         getDuckExitTweenCount: () => duckExitTweens.length,
         getEyeOffsetY: id => actorMap.get(Number(id))?.eyeMesh?.position?.y ?? null,
         getTimerSeconds: id => actorMap.get(Number(id))?.root?.userData?.pig?.timerSeconds ?? null,

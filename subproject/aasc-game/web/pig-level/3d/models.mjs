@@ -1,6 +1,6 @@
 // 角色与棋盘物件程序化建模：猪、小象、小鸭、铁笼、各类机制配件与提示指示器。
 import * as THREE from '../vendor/three.module.min.js';
-import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261124c';
+import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261124d';
 
 export const DIR_ANGLES = { south: 0, north: Math.PI, east: Math.PI / 2, west: -Math.PI / 2 };
 export const DIR_VECTORS = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -594,6 +594,8 @@ export function createModelFactory(textures) {
             depthWrite: false
         });
         const handSprite = new THREE.Sprite(handMat);
+        // 将精灵枢轴对齐贴图中食指指尖位置（Canvas -0.42 rad 旋转后的指尖 UV），确保任意视角旋转都精准指在目标猪身上
+        handSprite.center.set(0.35, 0.84);
         handSprite.scale.set(0.96, 0.96, 1);
         handSprite.renderOrder = 25;
         handSprite.visible = false;

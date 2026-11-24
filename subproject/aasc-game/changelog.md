@@ -1,3 +1,9 @@
+- ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124d`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-24] 恢复在小猪身上拖动平移相机，并修复旋转视角后 3D 新手引导手指偏斜问题（`?v=20261124d`）
+  - `web/pig-level/3d/models.mjs`、`web/pig-level/3d/view.mjs`：移除 `downOnPig` 平移拦截，恢复左键/单指在小猪身上拖动时正常平移相机（保持拖动 `>8px` 抬手不触发点击离场）；将 `handSprite.center` 设到白手套食指指尖 UV `(0.35, 0.84)`，并直接锚定在目标小猪背部中心上方 `(p.x, 0.62 + lift, p.z)` 随当前相机右向微抬轻按，使 360° 任意旋转视角下引导手指始终精准贴合目标小猪；暴露 `getGuideHandScreen()`。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/20261124_恢复猪身拖动与引导手势视角跟随.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261124d`，同步更新规格/任务文档与端到端测试（第 1 关旋转视角后手势贴合校验、PC/移动端猪身拖动平移校验）。
+  - 验证：`npm run test:pig-web`（`119 / 119`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124c`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-24] 环境面板升级为 3 指针时钟圆盘（季节/天气/24h）、主光源随时间联动并缩短周期、限制第 1 关引导误点与猪身拖动平移，同时下调移动端草叶数量（`?v=20261124c`）

@@ -1,7 +1,7 @@
 // 动态环境：手绘天空穹顶、飘动积云、三层远山、太阳与半球光、指数雾、昼夜缓慢流逝与天气闪电。
 import * as THREE from '../vendor/three.module.min.js';
-import { buildPreset, seededRandom } from './presets.mjs?v=20261124c';
-import { blobSphere } from './geometry.mjs?v=20261124c';
+import { buildPreset, seededRandom } from './presets.mjs?v=20261124d';
+import { blobSphere } from './geometry.mjs?v=20261124d';
 
 export const TIME_SLOTS = ['morning', 'noon', 'evening', 'night'];
 export const TIME_LABELS = { morning: '早', noon: '中', evening: '晚', night: '夜' };

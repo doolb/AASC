@@ -1,7 +1,7 @@
 // 3D 卡通浮动 UI：高饱和圆角描边卡片、3D 浮漂与视差、居中无限滑动关卡选择、精确包围盒拾取。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261124c';
-import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261124c';
+import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261124d';
+import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261124d';
 
 // 3 指针时钟圆盘环形配置表：外圈 24h 时段、中圈天气、内圈季节
 const DIAL_SIZE = 180;

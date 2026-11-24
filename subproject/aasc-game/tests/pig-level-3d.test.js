@@ -178,12 +178,25 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         assert.equal(lv1Info.actors, 6, '第 1 关应包含 6 只小猪');
         assert.match(lv1Info.guide, /点击高亮小猪/, '第 1 关首步应显示新手引导提示');
         assert.equal(lv1Info.hand, true, '第 1 关引导目标应显示 3D 手势精灵');
+        // 右键旋转视角后，手指指尖锚点仍应紧贴目标猪 1 号，不发生偏斜
+        await page.mouse.move(450, 340);
+        await page.mouse.down({ button: 'right' });
+        await page.mouse.move(680, 340, { steps: 6 });
+        await page.mouse.up({ button: 'right' });
+        await new Promise(r => setTimeout(r, 200));
+        const lv1Rot = await page.evaluate(() => ({
+            pig: window.__pig3d.screenOf(1),
+            hand: window.__pig3d.getGuideHandScreen(),
+            otherPt: window.__pig3d.screenOf(6)
+        }));
+        const handDist = Math.hypot(lv1Rot.hand.x - lv1Rot.pig.x, lv1Rot.hand.y - lv1Rot.pig.y);
+        assert.ok(handDist < 42, `旋转视角后引导手指指尖应依然贴合目标小猪 (${handDist.toFixed(1)}px)`);
         // 引导期点击非目标猪（6号）应被拦截，不能出局或推进步骤
-        await page.mouse.click(lv1Info.otherPt.x, lv1Info.otherPt.y);
+        await page.mouse.click(lv1Rot.otherPt.x, lv1Rot.otherPt.y);
         await new Promise(r => setTimeout(r, 120));
         assert.equal(await page.evaluate(() => document.querySelector('#progressText').textContent), '0 / 6', '引导期点击其它小猪不应触发离场');
         assert.match(await page.evaluate(() => window.__pig3d.getGuideText()), /手势指引/, '引导期误点其它猪应提示先点击手势指引的高亮小猪');
-        await page.mouse.click(lv1Info.pt.x, lv1Info.pt.y);
+        await page.mouse.click(lv1Rot.pig.x, lv1Rot.pig.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '1 / 6', { timeout: 15000 });
 
         await page.goto(`http://127.0.0.1:${port}/?level=48`, { waitUntil: 'domcontentloaded' });
@@ -226,7 +239,7 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.mouse.click(pt2.x, pt2.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '2 / 176', { timeout: 15000 });
 
-        // 1b. 验证在猪身上左键拖动不平移相机、空白地面左键拖拽平移、右键拖拽旋转（抑制浏览器右键弹窗且不触发点击）
+        // 1b. 验证在小猪身上与空白地面左键拖拽均正常平移相机、右键拖拽旋转（抑制浏览器右键弹窗且不触发点击）
         const camOnPigBefore = await page.evaluate(() => window.__pig3d.getCameraState());
         const dragPigPt = await page.evaluate(id => window.__pig3d.screenOf(id), 1);
         await page.mouse.move(dragPigPt.x, dragPigPt.y);
@@ -234,8 +247,9 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.mouse.move(dragPigPt.x + 80, dragPigPt.y + 35, { steps: 4 });
         await page.mouse.up({ button: 'left' });
         const camOnPigAfter = await page.evaluate(() => window.__pig3d.getCameraState());
-        assert.ok(Math.hypot(camOnPigAfter.panX - camOnPigBefore.panX, camOnPigAfter.panZ - camOnPigBefore.panZ) < 1e-4,
-            '鼠标在小猪身上按下拖动不应平移相机');
+        assert.ok(Math.hypot(camOnPigAfter.panX - camOnPigBefore.panX, camOnPigAfter.panZ - camOnPigBefore.panZ) > 0.05,
+            '鼠标在小猪身上按下拖动也应正常平移相机');
+        assert.ok(Math.abs(camOnPigAfter.yaw - camOnPigBefore.yaw) < 1e-4, '左键平移不应改变偏航角');
         assert.equal(await page.evaluate(() => document.querySelector('#progressText').textContent), '2 / 176', '小猪身上拖动不应触发离场点击');
 
         const camBefore = await page.evaluate(() => window.__pig3d.getCameraState());
@@ -416,7 +430,7 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
                 const cInertia = window.__pig3d.getCameraState();
                 return { c0, cOnPig, c1, cVert, cRelease, cInertia };
             });
-            assert.ok(Math.hypot(mobGesture.cOnPig.panX - mobGesture.c0.panX, mobGesture.cOnPig.panZ - mobGesture.c0.panZ) < 1e-4, '移动端单指在小猪身上拖动不应平移相机');
+            assert.ok(Math.hypot(mobGesture.cOnPig.panX - mobGesture.c0.panX, mobGesture.cOnPig.panZ - mobGesture.c0.panZ) > 0.05, '移动端单指在小猪身上拖动也应正常平移视角');
             assert.ok(Math.hypot(mobGesture.c1.panX - mobGesture.c0.panX, mobGesture.c1.panZ - mobGesture.c0.panZ) > 0.05, '移动端空白地面单指拖拽应平移视角');
             assert.ok(Math.abs(mobGesture.cVert.pitch - mobGesture.c1.pitch) < 1e-4, `双指纯纵向平移不应直接改动俯仰角 (${mobGesture.c1.pitch} -> ${mobGesture.cVert.pitch})`);
             assert.ok(mobGesture.cRelease.yaw > 0.75, `双指应支持突破 ±0.62 弧度的无极旋转 (yaw=${mobGesture.cRelease.yaw})`);
