@@ -69,7 +69,7 @@ cancelAnimation():
 格子 (x, y) 中心 → 世界 (x - cols/2 + 0.5, 0, y - rows/2 + 0.5)；1 格 = 1 世界单位，行号朝 +Z（朝向镜头）
 
 SEASON_BASE / WEATHER_BASE / CAGE_DUSK:
-    完全采用外网原版水粉预设（春 #74bf54→#b4e36e / 夏 #68b84c→#a2de64 / 秋 #c8a85a→#f0cf72 / 冬 #9cb5aa→#f6fafc）
+    完全采用外网原版水粉预设（春 #74bf54→#b4e36e / 夏高饱和 #3ea824→#8ee632 / 秋 #c8a85a→#f0cf72 / 冬 #9cb5aa→#f6fafc）
 buildPreset(season, weather, options): 合成基础季节与天气参数（含晴/阴/雨/雪与铁笼黄昏 dusk=1）
 ```
 

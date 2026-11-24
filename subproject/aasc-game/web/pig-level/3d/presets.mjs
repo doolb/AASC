@@ -17,11 +17,11 @@ export const SEASON_BASE = {
         sunElevation: 36, hillColor: '#7cc458', mountainTint: '#8ebde6'
     },
     summer: {
-        grassRoot: '#68b84c', grassTip: '#a2de64', lawn: '#88cf58', ground: '#6dba4c',
+        grassRoot: '#3ea824', grassTip: '#8ee632', lawn: '#62cb34', ground: '#48ac26',
         foliage: ['#4ea836', '#64c244', '#40942e', '#76d452'], treeType: 'broadleaf',
         flowers: ['#ffe33d', '#fffbe8', '#ff9a3d', '#ffffff', '#ffe066'], flowerDensity: 0.95,
         ambientLife: 'firefly', seasonParticle: 'pollen', props: ['sunflower'],
-        sunElevation: 38, hillColor: '#70bd52', mountainTint: '#7eb4e0'
+        sunElevation: 38, hillColor: '#52b832', mountainTint: '#7eb4e0'
     },
     autumn: {
         grassRoot: '#c8a85a', grassTip: '#f0cf72', lawn: '#dfc274', ground: '#c6a65c',

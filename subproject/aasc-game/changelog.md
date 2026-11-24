@@ -1,3 +1,9 @@
+- ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261123h`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 10 个变更文件并核验全量 16 个 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-24] 提高夏季草地、草坪地面与远景丘陵饱和度（`?v=20261123h`）
+  - `web/pig-level/3d/presets.mjs`：`SEASON_BASE.summer` 调整为 `grassRoot: '#3ea824'`、`grassTip: '#8ee632'`、`lawn: '#62cb34'`、`ground: '#48ac26'`、`hillColor: '#52b832'`。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`：同步升级 `?v=20261123h` 与夏季预设伪代码规格。
+  - 验证：`npm run test:pig-web`（`118 / 118`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-23] 将最新网页版 `web/pig-level/`（`?v=20261123g`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 10 个变更文件并核验全量 16 个 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-23] 修复手机双指旋转视角后全息 UI 消失隐患并升级资源版本（`?v=20261123g`）
