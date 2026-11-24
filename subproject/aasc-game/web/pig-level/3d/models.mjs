@@ -1,6 +1,6 @@
 // 角色与棋盘物件程序化建模：猪、小象、小鸭、铁笼、各类机制配件与提示指示器。
 import * as THREE from '../vendor/three.module.min.js';
-import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261123h';
+import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261124a';
 
 export const DIR_ANGLES = { south: 0, north: Math.PI, east: Math.PI / 2, west: -Math.PI / 2 };
 export const DIR_VECTORS = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -586,8 +586,20 @@ export function createModelFactory(textures) {
         crossGroup.add(bar1, bar2);
         crossGroup.visible = false;
 
-        disposables.push(ringGeo, ringMat, bodyDecalMat, bodyDecal.geometry, arrowMat, arrowEdgeMat, coneGeo, stemGeo, crossMat, bar1.geometry);
-        return { ring, bodyDecal, bodyDecalUniforms, arrowGroup, crossGroup };
+        // 3D 新手点击手势贴图精灵，悬停在提示目标上方做轻点动画
+        const handMat = new THREE.SpriteMaterial({
+            map: textures.handPointer(),
+            transparent: true,
+            depthTest: false,
+            depthWrite: false
+        });
+        const handSprite = new THREE.Sprite(handMat);
+        handSprite.scale.set(0.96, 0.96, 1);
+        handSprite.renderOrder = 25;
+        handSprite.visible = false;
+
+        disposables.push(ringGeo, ringMat, bodyDecalMat, bodyDecal.geometry, arrowMat, arrowEdgeMat, coneGeo, stemGeo, crossMat, bar1.geometry, handMat);
+        return { ring, bodyDecal, bodyDecalUniforms, arrowGroup, crossGroup, handSprite };
     }
 
     return {

@@ -3,7 +3,7 @@
 ## 1. 入口、视图切换与回退（app.mjs）
 ```
 start():
-    加载关卡 JSON、verifyPlan(level) 校验步骤（不变）
+    加载关卡 JSON（默认第 1 关，可通过 `?level=` 切换 1..118）、verifyPlan(level) 校验步骤（不变）
     view3d := null
     use3D := URL 参数 view != '2d' 且 WebGL 可用
     若 use3D:
@@ -89,6 +89,7 @@ createTextureLibrary(tier):
     label(text, style): 圆角牌 + 描边粗体字，按 text+style 缓存（LRU 64）
     flowerSprite(): 128×128 手绘 5 瓣星形白花贴图（黑色细描边轮廓 + #ffd046 金黄花蕊中心，配合 instanceColor 染色）
     hintDecal(): 地面及猪背表面贴花提示环纹理（高饱和鲜艳红色 #ff2432 / #ff5454 环形光晕与虚线描边角标）
+    handPointer(): 128×128 手绘卡通白手套点击手势贴图（#4d2b18 描边与手指纹路，配合点按动画提示目标小猪）
 ```
 
 ## 4. 通用几何与角色模型（3d/geometry.mjs + 3d/models.mjs）
@@ -103,7 +104,7 @@ createModelFactory(textures):
     按 (kind, length, width) 缓存几何体与描边几何体：
         - pig / elephant / duck 与六种机制配件（lock / scissors / rope / spring / bomb / timer_bomb）
     铁笼(cage): 外网原始笼框与 'steel' 金属计数牌
-    提示与受阻: 脚下旋转鲜艳红贴花环 + 猪背表面贴花（片元尾部补全 #include <tonemapping_fragment> 与 #include <colorspace_fragment> 保真鲜红显色） + 头顶浮动全息箭头；受阻弹出红色全息叉号
+    提示与受阻: 脚下旋转鲜艳红贴花环 + 猪背表面贴花（片元尾部补全 #include <tonemapping_fragment> 与 #include <colorspace_fragment> 保真鲜红显色） + 头顶浮动全息箭头 + 卡通点按手势精灵 `handSprite`（`showGuideHand` 开启时在目标猪上方做轻点动画）；受阻弹出红色全息叉号
 ```
 
 ## 5. 手绘场景（3d/scenery.mjs）
@@ -173,6 +174,7 @@ createHoloUI({ renderer, levels, levelId, onAction }):
         - 侧边可折叠全息面板: 四季 4 键、天气 4 键、画质(自动/高/中/低)、时间流动开关、音乐/音效开关、视角复位(V)、简洁 2D 控件开关(C)、切回 2D 版
         - 关卡滑动选择面板: 内置圆角列表凹槽底板 + `PICK_ROWS_VISIBLE + 1` 行缓冲平滑滑动，配合 `uClipRect` 与 6px 渐隐遮罩严格裁剪上下出界格子，命中拾取同步限制在列表可视遮罩内
         - 结算全息浮窗: 自适应宽度与 188px 高度居中弹窗，主副标题排布于上半区（0.25/0.46），两个按钮排布于下半区（y=h/2-48）留出 > 28px 安全间距绝不与文字重叠
+        - 新手引导标语条 `guide-banner`: 无点击拦截（不加入 hitTargets）的金黄描边悬浮提示条，在第 1 关初始前两步或遇到阻挡时显示（如“👆 点击高亮小猪向前移动”），带柔和呼吸缩放并在完成引导/打开弹窗时自动隐藏
     输入: pointerdown/move/up 射线拾取全息按钮、进度条滑块与居中平滑关卡列表（强惯性平滑拖动 `pow(0.24, dt)`，禁用 `pickerBg`/`card` 底板 hover 变色与缩放）；暴露 getButtonScreen(name) 供自动化测试点击
 ```
 

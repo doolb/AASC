@@ -1,6 +1,6 @@
 // 3D 卡通浮动 UI：高饱和圆角描边卡片、3D 浮漂与视差、居中无限滑动关卡选择、精确包围盒拾取。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261123h';
+import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261124a';
 
 const CARTOON_VERT = /* glsl */`
     uniform vec4 uSelfRect;
@@ -88,7 +88,8 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
         statusText: '', statusKind: '', ruleText: '', hintChecked: true, hintDisabled: false,
         hasSteps: true, cursor: 0, totalSteps: 0, canPrev: false, canNext: true, canUndo: false,
         won: false, failed: false, freeMode: false, season: 'spring', weather: 'sunny',
-        quality: 'auto', timeCycle: true, music: true, sfx: true, show2dControls: false
+        quality: 'auto', timeCycle: true, music: true, sfx: true, show2dControls: false,
+        guideText: '', showGuideHand: false
     };
 
     function makeTextCanvas(w, h) {
@@ -290,6 +291,9 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
     const modalBg = createPanel({ name: 'modalBg', w: 308, h: 188, z: 12, theme: 'card', text: '', fontSize: 20 });
     const modalBtn1 = createPanel({ name: 'modal-btn1', w: 112, h: 36, z: 13, theme: 'cream', action: 'reset', text: '再玩一次', fontSize: 14 });
     const modalBtn2 = createPanel({ name: 'modal-btn2', w: 112, h: 36, z: 13, theme: 'coral', action: 'nextLevel', text: '下一关 ›', fontSize: 14 });
+    // 不响应点击的新手引导标语胶囊（棋盘下方提示“点击小猪向前移动”）
+    const guideBanner = createPanel({ name: 'guide-banner', w: 252, h: 34, z: 6, theme: 'gold', action: null, text: '', fontSize: 13 });
+    guideBanner.setVisible(false);
 
     const allSettingsWidgets = [settingsBg, ...seasonBtns, ...weatherBtns, ...qualityBtns, btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d];
     const allPickerWidgets = [pickerBg, pickerTitle, pickerClose, pickerPrev, pickerNext, ...pickerCells];
@@ -404,6 +408,13 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
         modalBtn2.setPos(w / 2 + (mBtnW + mBtnGap) / 2, mBtnY);
         lastModalKey = '';
         if (lastUi.failed || lastUi.won) drawModalCard();
+
+        const gW = Math.min(268, landscape ? Math.max(196, w - rightColW - 44) : w - 28);
+        const gCx = landscape ? Math.max(gW / 2 + 12, (w - rightColW - 12) / 2) : w / 2;
+        const gCy = landscape ? Math.max(30, Math.round(h * 0.12)) : Math.min(topY - topH / 2 - 26, botCy + botH / 2 + 24);
+        guideBanner.setSize(gW, 34);
+        guideBanner.setPos(gCx, gCy);
+        guideBanner.setVisible(Boolean(lastUi.guideText) && !levelPickerOpen && !settingsOpen && !lastUi.won && !lastUi.failed);
     }
 
     let lastPickerBgKey = '';
@@ -578,6 +589,9 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
             modalBtn2.drawText('下一关 ›', '', null, 'coral');
         }
         if (levelPickerOpen) layoutPickerCells();
+        const showGuide = Boolean(lastUi.guideText) && !levelPickerOpen && !settingsOpen && !lastUi.won && !lastUi.failed;
+        guideBanner.setVisible(showGuide);
+        if (showGuide) guideBanner.drawText(lastUi.guideText, '', null, 'gold');
     }
 
     let draggingSlider = false;
@@ -730,7 +744,13 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onQuality
         for (const w of widgets) {
             w.uniforms.uTime.value = safeTime;
             w.uniforms.uReveal.value = revealTime;
-            if (!reduce && w.mesh.userData.action && w.name !== 'pickerBg' && w.theme !== 'card') {
+            if (!reduce && w.name === 'guide-banner' && w.visible) {
+                const gs = 1 + Math.sin(safeTime * 4.2) * 0.035;
+                const sw = w.baseW * gs, sh = w.baseH * gs;
+                w.mesh.scale.set(sw, sh, 1);
+                w.uniforms.uSelfRect.value.z = sw;
+                w.uniforms.uSelfRect.value.w = sh;
+            } else if (!reduce && w.mesh.userData.action && w.name !== 'pickerBg' && w.theme !== 'card') {
                 const s = 1 + w.uniforms.uHover.value * 0.055;
                 const sw = w.baseW * s, sh = w.baseH * s;
                 w.mesh.scale.set(sw, sh, 1);

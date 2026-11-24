@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261123h';
-import { createTextureLibrary } from './textures.mjs?v=20261123h';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261123h';
-import { createScenery } from './scenery.mjs?v=20261123h';
-import { createGrass } from './grass.mjs?v=20261123h';
-import { createParticles } from './particles.mjs?v=20261123h';
-import { createEnvironment } from './environment.mjs?v=20261123h';
-import { createHoloUI } from './holo-ui.mjs?v=20261123h';
-import { createAudioSystem } from './audio.mjs?v=20261123h';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261123h';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124a';
+import { createTextureLibrary } from './textures.mjs?v=20261124a';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124a';
+import { createScenery } from './scenery.mjs?v=20261124a';
+import { createGrass } from './grass.mjs?v=20261124a';
+import { createParticles } from './particles.mjs?v=20261124a';
+import { createEnvironment } from './environment.mjs?v=20261124a';
+import { createHoloUI } from './holo-ui.mjs?v=20261124a';
+import { createAudioSystem } from './audio.mjs?v=20261124a';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124a';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -67,7 +67,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     audio.setEnvironment(season, weather);
 
     const markers = models.createMarkers();
-    scene.add(markers.ring, markers.arrowGroup, markers.crossGroup);
+    scene.add(markers.ring, markers.arrowGroup, markers.crossGroup, markers.handSprite);
 
     const actorMap = new Map();
     const actorPositions = new Map();
@@ -191,7 +191,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         };
 
         const prevPanX = panOffset.x, prevPanY = panOffset.y;
-        let lo = 6, hi = 64, best = null;
+        let lo = 5, hi = 64, best = null;
         for (let iter = 0; iter < 20; iter++) {
             const mid = (lo + hi) / 2;
             const res = evalFit(mid);
@@ -1079,6 +1079,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         const showHint = Boolean(hintActor && latestUi?.hintChecked && !latestState?.failed);
         markers.ring.visible = showHint;
         markers.arrowGroup.visible = showHint;
+        markers.handSprite.visible = showHint && Boolean(latestUi?.showGuideHand);
         if (showHint) {
             const p = hintActor.root.position;
             const pig = hintActor.root.userData.pig;
@@ -1090,6 +1091,13 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             markers.ring.rotation.z = elapsedTotal * 0.65;
             markers.arrowGroup.position.set(p.x, 1.52 + Math.sin(elapsedTotal * 4.4) * 0.14, p.z);
             markers.arrowGroup.rotation.y = elapsedTotal * 1.8;
+            if (markers.handSprite.visible) {
+                // 模拟新手引导白手套手指在猪背右前侧轻按提示
+                const tap = Math.pow(Math.abs(Math.sin(elapsedTotal * 3.8)), 2.2);
+                markers.handSprite.position.set(p.x + 0.36 - tap * 0.1, 1.24 - tap * 0.18, p.z + 0.28 - tap * 0.08);
+                const hs = 0.96 - tap * 0.12;
+                markers.handSprite.scale.set(hs, hs, 1);
+            }
 
             // 将表面贴花投影贴附到选中猪自身的 3D 躯体上
             if (markers.bodyDecal.parent !== hintActor.visual) {
@@ -1134,6 +1142,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         get fps() { return post.getFps(); },
         get preset() { return { season, weather, isCageLevel }; },
         getActorCount: () => actorMap.size,
+        getGuideText: () => latestUi?.guideText || '',
+        hasGuideHand: () => markers.handSprite.visible,
         getDuckExitTweenCount: () => duckExitTweens.length,
         getEyeOffsetY: id => actorMap.get(Number(id))?.eyeMesh?.position?.y ?? null,
         getTimerSeconds: id => actorMap.get(Number(id))?.root?.userData?.pig?.timerSeconds ?? null,

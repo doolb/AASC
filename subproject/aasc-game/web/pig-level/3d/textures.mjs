@@ -1,6 +1,6 @@
 // 程序纹理：全部由 Canvas 与种子化噪声生成，不加载任何外部图片。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261123h';
+import { seededRandom } from './presets.mjs?v=20261124a';
 
 // 二维 value noise（带平滑插值），用于 fbm 与色斑。
 export function createNoise2D(seed = 1) {
@@ -429,6 +429,58 @@ export function createTextureLibrary(tier = 'high') {
                 ctx.stroke();
                 ctx.restore();
             }
+            ctx.restore();
+            return toTexture(canvas);
+        }),
+        // 新手引导卡通白手套点击手势贴图（黑描边白手套，斜向下方指向小猪）
+        handPointer: () => once('handPointer', () => {
+            const size = 128;
+            const [canvas, ctx] = makeCanvas(size, size);
+            ctx.save();
+            ctx.translate(64, 64);
+            ctx.rotate(-0.42);
+            // 柔和投影
+            ctx.fillStyle = 'rgba(72, 42, 22, 0.28)';
+            ctx.beginPath();
+            ctx.ellipse(4, 34, 24, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // 卡通白手套主体轮廓（食指伸向左上-下方点按姿态）
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#4d2b18';
+            ctx.lineWidth = 6;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(-10, -40);
+            ctx.quadraticCurveTo(-10, -50, 0, -50);
+            ctx.quadraticCurveTo(10, -50, 10, -40);
+            ctx.lineTo(10, -14);
+            ctx.lineTo(18, -14);
+            ctx.quadraticCurveTo(26, -14, 26, -4);
+            ctx.lineTo(26, 2);
+            ctx.lineTo(31, 2);
+            ctx.quadraticCurveTo(38, 2, 38, 12);
+            ctx.lineTo(36, 26);
+            ctx.quadraticCurveTo(34, 42, 16, 44);
+            ctx.lineTo(-14, 44);
+            ctx.quadraticCurveTo(-28, 42, -32, 24);
+            ctx.lineTo(-34, 4);
+            ctx.quadraticCurveTo(-34, -6, -24, -6);
+            ctx.quadraticCurveTo(-16, -6, -10, -10);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            // 腕口黄边条与手指纹路
+            ctx.fillStyle = '#ffd24d';
+            ctx.beginPath();
+            ctx.roundRect(-16, 36, 36, 12, 5);
+            ctx.fill();
+            ctx.stroke();
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            ctx.moveTo(10, -14); ctx.lineTo(10, 6);
+            ctx.moveTo(22, 0); ctx.lineTo(22, 12);
+            ctx.stroke();
             ctx.restore();
             return toTexture(canvas);
         }),

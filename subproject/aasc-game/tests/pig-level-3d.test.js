@@ -5,7 +5,7 @@ const { spawn } = require('node:child_process');
 const { existsSync, readdirSync } = require('node:fs');
 const { join } = require('node:path');
 
-const SUPPORTED_LEVELS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 94, 95, 97, 98, 99, 100, 101, 102, 103, 104, 112, 113, 114, 115, 116, 117, 118];
+const SUPPORTED_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 94, 95, 97, 98, 99, 100, 101, 102, 103, 104, 112, 113, 114, 115, 116, 117, 118];
 
 test('环境预设 16 种季节×天气组合与关卡季节映射完整', async () => {
     const presets = await import('../web/pig-level/3d/presets.mjs');
@@ -163,6 +163,23 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         });
 
         await page.setViewport({ width: 1280, height: 720 });
+        // 0. 校验无参数默认打开第 1 关，显示新手引导标语与手势精灵并可按指引点击推进
+        await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => Boolean(window.__pig3d?.ready), { timeout: 45000 });
+        const lv1Info = await page.evaluate(() => ({
+            levelNum: document.querySelector('#levelNumber')?.textContent,
+            actors: window.__pig3d.getActorCount(),
+            guide: window.__pig3d.getGuideText(),
+            hand: window.__pig3d.hasGuideHand(),
+            pt: window.__pig3d.screenOf(1)
+        }));
+        assert.equal(lv1Info.levelNum, '1', '不带参数打开首页应默认进入第 1 关');
+        assert.equal(lv1Info.actors, 6, '第 1 关应包含 6 只小猪');
+        assert.match(lv1Info.guide, /点击高亮小猪/, '第 1 关首步应显示新手引导提示');
+        assert.equal(lv1Info.hand, true, '第 1 关引导目标应显示 3D 手势精灵');
+        await page.mouse.click(lv1Info.pt.x, lv1Info.pt.y);
+        await page.waitForFunction(() => document.querySelector('#progressText').textContent === '1 / 6', { timeout: 15000 });
+
         await page.goto(`http://127.0.0.1:${port}/?level=48`, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => Boolean(window.__pig3d?.ready || document.querySelectorAll('.pig').length > 0), { timeout: 45000 });
 

@@ -1,0 +1,26 @@
+{
+  "id": 1,
+  "columns": 4,
+  "rows": 3,
+  "pigs": [
+    { "id": 1, "x": 3, "y": 0, "length": 2, "direction": "north", "kind": "normal" },
+    { "id": 2, "x": 1, "y": 0, "length": 2, "direction": "west", "kind": "normal" },
+    { "id": 3, "x": 2, "y": 2, "length": 2, "direction": "west", "kind": "normal" },
+    { "id": 4, "x": 1, "y": 1, "length": 2, "direction": "west", "kind": "normal" },
+    { "id": 5, "x": 0, "y": 0, "length": 2, "direction": "north", "kind": "normal" },
+    { "id": 6, "x": 0, "y": 2, "length": 2, "direction": "west", "kind": "normal" }
+  ],
+  "steps": [
+    { "id": 1, "from": [3, 0], "to": null, "exited": true },
+    { "id": 5, "from": [0, 0], "to": null, "exited": true },
+    { "id": 2, "from": [1, 0], "to": null, "exited": true },
+    { "id": 4, "from": [1, 1], "to": null, "exited": true },
+    { "id": 6, "from": [0, 2], "to": null, "exited": true },
+    { "id": 3, "from": [2, 2], "to": null, "exited": true }
+  ],
+  "evidence": {
+    "source": "docs/references/pig-game/level-01-initial.png",
+    "status": "victory_verified",
+    "stepCount": 6
+  }
+}

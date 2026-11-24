@@ -1,8 +1,8 @@
-import { createState, cloneState, movePig, sameAction, verifyPlan } from './engine.mjs?v=20261123h';
+import { createState, cloneState, movePig, sameAction, verifyPlan } from './engine.mjs?v=20261124a';
 
-const SUPPORTED_LEVELS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '70', '71', '72', '73', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '90', '91', '94', '95', '97', '98', '99', '100', '101', '102', '103', '104', '112', '113', '114', '115', '116', '117', '118'];
+const SUPPORTED_LEVELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '70', '71', '72', '73', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '90', '91', '94', '95', '97', '98', '99', '100', '101', '102', '103', '104', '112', '113', '114', '115', '116', '117', '118'];
 const $ = id => document.getElementById(id);
-const ui = { board: $('board'), scene3d: $('scene3d'), remaining: $('remaining'), rope: $('ropeCount'), status: $('status'), slider: $('slider'), previous: $('previous'), next: $('next'), undo: $('undo'), hint: $('hintToggle'), step: $('stepText'), progress: $('progressText'), win: $('win'), failure: $('failure'), prevLevel: $('prevLevelButton'), nextLevel: $('nextLevelButton'), modeBadge: $('modeBadge') };
+const ui = { board: $('board'), scene3d: $('scene3d'), guideBanner: $('guideBanner'), remaining: $('remaining'), rope: $('ropeCount'), status: $('status'), slider: $('slider'), previous: $('previous'), next: $('next'), undo: $('undo'), hint: $('hintToggle'), step: $('stepText'), progress: $('progressText'), win: $('win'), failure: $('failure'), prevLevel: $('prevLevelButton'), nextLevel: $('nextLevelButton'), modeBadge: $('modeBadge') };
 let level;
 let state;
 let cursor = 0;
@@ -248,7 +248,7 @@ function render() {
                         ? `弹簧猪 ${pig.id}`
                         : `${pig.kind === 'elephant' ? '小象' : pig.kind === 'scissors' ? '剪刀猪' : pig.kind === 'rope' ? '绳子猪' : pig.kind === 'lock' ? '锁猪' : '小猪'} ${pig.id}${locked ? `，锁还剩 ${pig.unlockAfter - state.exitCount}` : pig.kind === 'rope' && state.remainingScissors > 0 ? '，绳子未解开' : ''}`;
             button.setAttribute('aria-label', label);
-            button.innerHTML = pigArt(pig) + (hinted ? '<span class="hint-arrow" aria-hidden="true">▼</span>' : '');
+            button.innerHTML = pigArt(pig) + (hinted ? '<span class="hint-arrow" aria-hidden="true">▼</span><span class="hint-hand" aria-hidden="true">👆</span>' : '');
             button.addEventListener('click', () => apply(pig.id));
             fragment.append(button);
         }
@@ -261,13 +261,30 @@ function render() {
         ? (state.exitCount < lock.unlockAfter ? `🔒 还需 ${lock.unlockAfter - state.exitCount} 只` : '🔓 锁已解开')
         : level.id === 40
             ? '🔓 锁已解开'
-            : state.remainingScissors
-                ? `✂ 还需 ${state.remainingScissors} 把剪刀`
-                : '✂ 绳子已全部解开';
+            : level.id === 1
+                ? '🐾 新手引导 · 点击滑出'
+                : state.remainingScissors
+                    ? `✂ 还需 ${state.remainingScissors} 把剪刀`
+                    : '✂ 绳子已全部解开';
     if (level.cages?.length) ui.rope.textContent = level.cages.map(cage => `铁笼 ${Math.max(0, cage.unlockAfter - state.exitCount)}`).join(' · ');
     if (level.pigs.some(pig => pig.kind === 'bomb')) ui.rope.textContent = `💣 剩余 ${state.pigs.filter(pig => pig.kind === 'bomb' && !pig.gone).length} 只`;
     if (level.pigs.some(pig => pig.kind === 'timer_bomb') && !lock && !level.cages?.length && !level.pigs.some(pig => pig.kind === 'bomb')) {
         ui.rope.textContent = `⏱ 计时炸弹 ${state.pigs.filter(pig => pig.kind === 'timer_bomb' && !pig.gone).length} 只`;
+    }
+    const won = !state.failed && remaining === 0 && state.ducks.length === 0;
+    const guideText = !won && !state.failed && level.id === 1
+        ? (noticeKind === 'warn'
+            ? '前面有其他小猪挡住了，先点前方畅通的小猪'
+            : cursor === 0
+                ? '👆 点击高亮小猪向前移动'
+                : cursor === 1
+                    ? '👆 继续点击下一只畅通的小猪'
+                    : '')
+        : '';
+    const showGuideHand = Boolean(hasSteps && ui.hint.checked && expected && !won && !state.failed);
+    if (ui.guideBanner) {
+        ui.guideBanner.hidden = !guideText;
+        ui.guideBanner.textContent = guideText;
     }
     ui.modeBadge.hidden = hasSteps;
     ui.step.textContent = !hasSteps ? '自由试玩（无参考步骤）' : cursor === null ? '自由游玩中' : cursor === level.steps.length ? '步骤已完成' : `下一步 · ${cursor + 1} / ${level.steps.length}`;
@@ -283,7 +300,6 @@ function render() {
     ui.previous.disabled = history.length === 0;
     ui.undo.disabled = history.length === 0;
     ui.next.disabled = !hasSteps || state.failed || cursor === null || cursor >= level.steps.length;
-    const won = !state.failed && remaining === 0 && state.ducks.length === 0;
     ui.win.hidden = !won;
     ui.failure.hidden = !state.failed;
 
@@ -312,7 +328,9 @@ function render() {
                 won,
                 failed: state.failed,
                 freeMode: !hasSteps,
-                show2dControls
+                show2dControls,
+                guideText,
+                showGuideHand
             }
         });
     }
@@ -340,7 +358,7 @@ function toggle2dControls() {
 async function start() {
     try {
         const params = new URLSearchParams(location.search);
-        const id = params.get('level') || '48';
+        const id = params.get('level') || '1';
         if (!SUPPORTED_LEVELS.includes(id)) throw new Error(`暂时只有第 ${SUPPORTED_LEVELS.join('、')} 关`);
         const pos = SUPPORTED_LEVELS.indexOf(id);
         ui.prevLevel.disabled = pos <= 0;
@@ -378,7 +396,7 @@ async function start() {
                 const probe = document.createElement('canvas');
                 const hasGl = Boolean(probe.getContext('webgl2') || probe.getContext('webgl'));
                 if (hasGl) {
-                    const mod = await import('./3d/view.mjs?v=20261123h');
+                    const mod = await import('./3d/view.mjs?v=20261124a');
                     const actionHandlers = {
                         next: () => { if (level.steps.length && cursor !== null && cursor < level.steps.length && !ui.next.disabled) apply(level.steps[cursor].id); },
                         previous: () => { if (!ui.previous.disabled) undo(); },

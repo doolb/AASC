@@ -1,3 +1,9 @@
+- ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124a`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 11 个变更/新增文件（含 `level-1.json`）并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-24] 新增新手第 1 关默认入口并加入 3D/2D 新手点击引导提示（`?v=20261124a`）
+  - `web/pig-level/level-1.json`、`web/pig-level/{index.html,app.mjs,style.css}`：新增依据实机截图记录重建的 `4 × 3` 第 1 关（6 只 2 格小猪，6 步通关顺序 `1→5→2→4→6→3`，`victory_verified`），并将首页默认关卡由第 48 关调整为第 1 关；2D 视图同步新增 `.hint-hand` 与 `.guide-banner` 新手提示条。
+  - `web/pig-level/3d/{textures,models,holo-ui,view,scenery,environment,grass}.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/2026-11-24_新增第一关及新手引导提示.md`：新增 `handPointer()` 卡通白手套点击手势贴图与 `markers.handSprite` 轻按动画，全息 UI 新增棋盘下方不拦截点击的 `guide-banner` 呼吸提示条（第 1 关前两步及受阻引导），版本号统一升至 `?v=20261124a`。
+  - 验证：`npm run test:pig-web`（`119 / 119`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261123h`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 10 个变更文件并核验全量 16 个 HTML/CSS/MJS 文件远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-24] 提高夏季草地、草坪地面与远景丘陵饱和度（`?v=20261123h`）
