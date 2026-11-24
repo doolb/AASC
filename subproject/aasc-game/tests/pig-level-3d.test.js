@@ -7,14 +7,15 @@ const { join } = require('node:path');
 
 const SUPPORTED_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 94, 95, 97, 98, 99, 100, 101, 102, 103, 104, 112, 113, 114, 115, 116, 117, 118];
 
-test('环境预设 16 种季节×天气组合与关卡季节映射完整', async () => {
+test('环境预设 12 种季节×天气组合（含冬雨自动飘雪）与关卡季节映射完整', async () => {
     const presets = await import('../web/pig-level/3d/presets.mjs');
     assert.deepEqual(presets.SEASONS, ['spring', 'summer', 'autumn', 'winter']);
-    assert.deepEqual(presets.WEATHERS, ['sunny', 'cloudy', 'rain', 'snow']);
+    assert.deepEqual(presets.WEATHERS, ['sunny', 'cloudy', 'rain']);
     assert.equal(presets.WEATHER_BASE.cloudy.sunIntensity, 1.4);
     assert.equal(presets.WEATHER_BASE.cloudy.hemiIntensity, 1.06);
     assert.equal(presets.WEATHER_BASE.rain.sunIntensity, 1.08);
     assert.equal(presets.WEATHER_BASE.rain.hemiIntensity, 1.02);
+    assert.equal(presets.buildPreset('winter', 'rain').precip, 'snow', '冬季降水应自动转为飘雪');
 
     for (const season of presets.SEASONS) {
         for (const weather of presets.WEATHERS) {
@@ -86,7 +87,9 @@ test('本地预览服务提供全部 3D 模块与 vendor 资源', async () => {
             '/vendor/three.module.min.js',
             '/3d/presets.mjs', '/3d/textures.mjs', '/3d/geometry.mjs', '/3d/models.mjs',
             '/3d/scenery.mjs', '/3d/grass.mjs', '/3d/particles.mjs', '/3d/environment.mjs',
-            '/3d/holo-ui.mjs', '/3d/audio.mjs', '/3d/post.mjs', '/3d/view.mjs'
+            '/3d/holo-ui.mjs', '/3d/audio.mjs', '/3d/post.mjs', '/3d/view.mjs',
+            '/assets/ui/panel-parchment.svg', '/assets/ui/btn-close.svg',
+            '/assets/ui/dial-pointer.svg', '/assets/ui/center-knob.svg', '/assets/ui/btn-pill.svg'
         ];
         for (const f of files) {
             const res = await fetch(`http://127.0.0.1:${port}${f}`, { method: 'HEAD' });
@@ -136,7 +139,7 @@ async function launchDisplay0Chromium(puppeteer) {
     return { browser, attached: false };
 }
 
-test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与多视口校验', { timeout: 180000 }, async t => {
+test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与多视口校验', { timeout: 300000 }, async t => {
     let puppeteer;
     try { puppeteer = require('puppeteer-core'); } catch (_) { t.skip('需要 puppeteer-core'); return; }
 
@@ -328,32 +331,70 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.mouse.click(undoBtn.x, undoBtn.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '2 / 176', { timeout: 15000 });
 
-        // 打开居中大号环境设置弹窗并操作 3 指针时钟圆盘切换冬雪及 24h 时段（验证主光源方向跟随时间变化）
+        // 打开居中大号 SVG 环境设置弹窗并操作外圈单指针 24h 表盘切换冬雨(雪)及早/晚/夜，校验 UI 随天气换肤及夜间月光方位
         const setBtn = await page.evaluate(() => window.__pig3d.holoButton('settings-toggle'));
         await page.mouse.click(setBtn.x, setBtn.y);
         const setTitlePos = await page.evaluate(() => window.__pig3d.holoButton('settings-title'));
         const setCloseBtn = await page.evaluate(() => window.__pig3d.holoButton('settings-close'));
         const winterBtn = await page.evaluate(() => window.__pig3d.holoButton('season-winter'));
-        const snowBtn = await page.evaluate(() => window.__pig3d.holoButton('weather-snow'));
+        const rainBtn = await page.evaluate(() => window.__pig3d.holoButton('weather-rain'));
         const morningBtn = await page.evaluate(() => window.__pig3d.holoButton('time-morning'));
+        const noonBtn = await page.evaluate(() => window.__pig3d.holoButton('time-noon'));
         const eveningBtn = await page.evaluate(() => window.__pig3d.holoButton('time-evening'));
         const nightBtn = await page.evaluate(() => window.__pig3d.holoButton('time-night'));
         assert.ok(setTitlePos && Math.abs(setTitlePos.x - halfW) < 80, '环境设置弹窗应居中显示');
-        assert.ok(winterBtn && snowBtn && morningBtn && eveningBtn && nightBtn && setCloseBtn, '居中环境弹窗时钟扇区与关闭按钮均应可定位');
-        assert.ok(Math.abs(eveningBtn.y - morningBtn.y) > 160, `居中环境弹窗表盘应放大显示 (${Math.abs(eveningBtn.y - morningBtn.y).toFixed(1)}px)`);
+        assert.ok(winterBtn && rainBtn && morningBtn && noonBtn && eveningBtn && nightBtn && setCloseBtn, '居中环境弹窗时钟扇区与关闭按钮均应可定位');
+        const dialSize = await page.evaluate(() => window.__pig3d.getClockDialSize());
+        assert.deepEqual(dialSize, { w: 462, h: 462 }, `桌面端时钟表盘应放大至 462×462 (实际 ${dialSize?.w}×${dialSize?.h})`);
+        assert.ok(Math.abs(eveningBtn.y - morningBtn.y) > 350, `462px 表盘早晚按钮间距应等比放大 (${Math.abs(eveningBtn.y - morningBtn.y).toFixed(1)}px)`);
+        const parseHexRgb = hex => {
+            const clean = String(hex || '#ffffff').replace('#', '');
+            return [parseInt(clean.slice(0, 2), 16), parseInt(clean.slice(2, 4), 16), parseInt(clean.slice(4, 6), 16)];
+        };
         await page.mouse.click(winterBtn.x, winterBtn.y);
-        await page.mouse.click(snowBtn.x, snowBtn.y);
+        await page.mouse.click(rainBtn.x, rainBtn.y);
         await page.mouse.click(morningBtn.x, morningBtn.y);
-        await new Promise(r => setTimeout(r, 80));
-        const sunMorning = await page.evaluate(() => window.__pig3d.getSunPosition());
+        await page.waitForFunction(() => window.__pig3d.getGrassLightState().nightMix < 0.1 && window.__pig3d.getPigLightState().lightDir.x > 0.3, { timeout: 5000 });
+        const morningLight = await page.evaluate(() => ({
+            sun: window.__pig3d.getSunPosition(),
+            grass: window.__pig3d.getGrassLightState(),
+            pig: window.__pig3d.getPigLightState()
+        }));
+        await page.mouse.click(noonBtn.x, noonBtn.y);
+        await page.waitForFunction(() => window.__pig3d.timeSlot === 'noon' && Math.abs(window.__pig3d.getPigLightState().lightDir.x) < 0.2, { timeout: 5000 });
+        const noonLight = await page.evaluate(() => ({
+            grass: window.__pig3d.getGrassLightState(),
+            pig: window.__pig3d.getPigLightState()
+        }));
         await page.mouse.click(eveningBtn.x, eveningBtn.y);
-        await new Promise(r => setTimeout(r, 80));
-        const sunEvening = await page.evaluate(() => window.__pig3d.getSunPosition());
-        assert.ok(sunMorning.x > 10 && sunEvening.x < -10, `主光源应随早->晚时间变化摆动方向 (${sunMorning.x.toFixed(1)} -> ${sunEvening.x.toFixed(1)})`);
+        await page.waitForFunction(() => window.__pig3d.getSunPosition().x < -10 && window.__pig3d.getPigLightState().lightDir.x < -0.3, { timeout: 5000 });
+        const eveningLight = await page.evaluate(() => ({
+            sun: window.__pig3d.getSunPosition(),
+            grass: window.__pig3d.getGrassLightState(),
+            pig: window.__pig3d.getPigLightState()
+        }));
+        assert.ok(morningLight.sun.x > 10 && eveningLight.sun.x < -10, `主光源应随早->晚时间变化摆动方向 (${morningLight.sun.x.toFixed(1)} -> ${eveningLight.sun.x.toFixed(1)})`);
+        assert.ok(morningLight.pig.lightDir.x > 0.3 && eveningLight.pig.lightDir.x < -0.3, `猪材质主光方向应同步随早->晚光源转动 (${morningLight.pig.lightDir.x.toFixed(2)} -> ${eveningLight.pig.lightDir.x.toFixed(2)})`);
+        const noonRgb = parseHexRgb(noonLight.grass.sunColor);
+        const eveRgb = parseHexRgb(eveningLight.grass.sunColor);
+        assert.ok(noonRgb[2] > 210 && eveRgb[0] - eveRgb[2] > 50, `24h 日光颜色应随正午白(${noonLight.grass.sunColor})到傍晚橘暖(${eveningLight.grass.sunColor})真实变化`);
+        assert.ok(morningLight.grass.nightMix < 0.1, `白天草地 nightMix 应低于 0.1 (${morningLight.grass.nightMix.toFixed(2)})`);
         await page.mouse.click(nightBtn.x, nightBtn.y);
-        const envState = await page.evaluate(() => ({ preset: window.__pig3d.preset, timeSlot: window.__pig3d.timeSlot }));
-        assert.deepEqual(envState.preset, { season: 'winter', weather: 'snow', isCageLevel: false });
+        await page.waitForFunction(() => window.__pig3d.getGrassLightState().nightMix > 0.8 && window.__pig3d.getPigLightState().nightMix > 0.8, { timeout: 5000 });
+        const envState = await page.evaluate(() => ({
+            preset: window.__pig3d.preset,
+            timeSlot: window.__pig3d.timeSlot,
+            sunNight: window.__pig3d.getSunPosition(),
+            uiSkin: window.__pig3d.getUiSkinKey(),
+            grass: window.__pig3d.getGrassLightState(),
+            pig: window.__pig3d.getPigLightState()
+        }));
+        const nightRgb = parseHexRgb(envState.grass.sunColor);
+        assert.deepEqual(envState.preset, { season: 'winter', weather: 'rain', isCageLevel: false });
         assert.equal(envState.timeSlot, 'night', '时钟表盘应切换 24h 时段为夜晚');
+        assert.ok(envState.sunNight.z < -10 && envState.pig.lightDir.z < -0.3, `夜晚主光与猪受光方向均应转向天空月亮方位 z<0 (sunZ=${envState.sunNight.z.toFixed(1)}, pigDirZ=${envState.pig.lightDir.z.toFixed(2)})`);
+        assert.ok(envState.grass.nightMix > 0.8 && nightRgb[2] > nightRgb[0], `夜晚草地与月光应响应深靛冷蓝夜色 (nightMix=${envState.grass.nightMix.toFixed(2)}, moon=${envState.grass.sunColor})`);
+        assert.equal(envState.uiSkin, 'winterRain:night', '全息 UI 配色应跟随冬雨和夜间状态自动切换');
         await page.mouse.click(setCloseBtn.x, setCloseBtn.y);
         assert.equal(await page.evaluate(() => window.__pig3d.holoButton('settings-title')), null, '点击关闭按钮应关闭环境设置弹窗');
 

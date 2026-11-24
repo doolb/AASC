@@ -72,8 +72,10 @@ cancelAnimation():
 格子 (x, y) 中心 → 世界 (x - cols/2 + 0.5, 0, y - rows/2 + 0.5)；1 格 = 1 世界单位，行号朝 +Z（朝向镜头）
 
 SEASON_BASE / WEATHER_BASE / CAGE_DUSK:
-    完全采用外网原版水粉预设（春 #74bf54→#b4e36e / 夏高饱和 #3ea824→#8ee632 / 秋 #c8a85a→#f0cf72 / 冬 #9cb5aa→#f6fafc）
-buildPreset(season, weather, options): 合成基础季节与天气参数（含晴/阴/雨/雪与铁笼黄昏 dusk=1）
+    WEATHERS = ['sunny', 'cloudy', 'rain']（晴 / 阴 / 雨，4 季节 × 3 天气 = 12 组基础预设，搭配 4 时段共 48 种环境状态）
+    春 #74bf54→#b4e36e / 夏高饱和 #3ea824→#8ee632 / 秋 #c8a85a→#f0cf72 / 冬 #9cb5aa→#f6fafc
+buildPreset(season, weather, options):
+    合成基础季节与天气参数（含铁笼黄昏 dusk=1）；当 season === 'winter' 且 weather === 'rain' 时，降水自动转为冬雪飘落（precip='snow', precipCount=3000, snowCover>=0.85, lightning=false）
 ```
 
 ## 3. 程序纹理（3d/textures.mjs）
@@ -102,7 +104,7 @@ shadeGradient(geo, lowColor, highColor, axis): 按局部坐标轴对几何体写
 outlineOf(geometry, thickness): 反面 BackSide 法线外扩描边网格
 
 createModelFactory(textures):
-    共用外网顶点色水粉双阶着色器 toonMat（侧前主受光亮面 + 高光阶梯 + 暖玫瑰可可暗面）
+    共用外网顶点色水粉双阶着色器 toonMat：保留经典 Painted Valley 侧前主受光亮面 + 高光阶梯 + 顶面柔和微辉 `topRim` + 暖玫瑰可可暗面，接入 `setLightState(lightState)` 每帧同步当前太阳/月亮主光方向 `uLightDir`、24h 光色 `uLightColor`、环境色温 `uTimeTint` 与夜晚融合度 `uNightMix`（去掉多余高光点与广域轮廓反光，仅在明暗交界线 `litStep` 附近以高斯衰减精确叠加暖桃粉次表面散射 SSS 透光带）
     接触阴影: 底部半透明软阴影椭圆（shadowMesh）+ 实时太阳阴影贴图
     按 (kind, length, width) 缓存几何体与描边几何体：
         - pig / elephant / duck 与六种机制配件（lock / scissors / rope / spring / bomb / timer_bomb）
@@ -114,10 +116,10 @@ createModelFactory(textures):
 ```
 createScenery(scene, textures, level, tier):
     外网完整手绘地貌与景物:
-        - 修剪草坪平面(y=0.008) + 卵石镶边 + 外部起伏大草地(82×82)，双方通过 onBeforeCompile 注入 uHorizonColor 做远景柔和空气透视雾化（20.0~36.0 低饱和与地平线混合）
-        - 西北石板路、右上高脚木屋（含冬季屋顶积雪）、外围细木栅栏、左后方旋转风车、季节限定树（阔叶/松树）、蘑菇与季节道具（夏向日葵/秋稻草南瓜/冬雪人）
-        - 实例化小花: 保留外网 tier='high' 1800 / 'medium' 900 / 'low' 420 与山丘正弦聚簇分布；high/medium 升级为交叉双面 5 瓣星形花面片（textures.flowerSprite(), alphaTest 0.42, DoubleSide，high 附加轻微风摆），low 保持六边圆片
-    applyPreset(preset, blend, horizonColor): 同步 ground/lawn/crown 颜色、uHorizonColor、雪景 props 与花色
+        - 修剪草坪平面(y=0.008) + 卵石镶边 + 粗段原木棋盘围框（四角立柱帽、长边拼缝端头与散落石块，含冬季厚雪顶盖）+ 外部起伏大草地(82×82)，双方通过 onBeforeCompile 注入 uHorizonColor 做远景柔和空气透视雾化（20.0~36.0 低饱和与地平线混合）
+        - 四向生态布局对齐概念图: 左前开阔豁口让位于荷花小池塘（卵石砌边 + 圆缺荷叶 + 小荷花，冬转冰蓝）、右前补全短段木栅栏，西北石板小径旁置 3 簇圆润灌木丛（冬盖雪帽）及冬季围巾胡萝卜鼻雪人（带黑煤球眼/扣与树枝手臂）；右上角高脚木屋（原木墙肌理 + 人字木顶 + 对称双暖亮方窗 + 中央木门 + 4 级阶梯，冬夜高亮发光）与粗柱木栅栏（冬季/黄昏点亮暖黄串联灯珠）；正后中偏右远景山脊风车剪影、四季四角 10 棵主题树（冬季升级三层叠翠深青松枝+分层白雪盖帽，附绘本细描边）
+        - 实例化小花: 按棋盘左/右两侧通道草带及前后栅栏内缘形成聚簇花丛（high 1800 / medium 900 / low 420），high/medium 采用交叉双面 5 瓣星形花（夜晚随环境压暗调色）
+    applyPreset(preset, blend, horizonColor, lightState): 同步 ground/lawn/crown/pond/flower 颜色、uHorizonColor、雪景 props、冬/暮栅栏串灯与木屋暖窗显隐
 ```
 
 ## 6. 可交互草地（3d/grass.mjs）
@@ -131,8 +133,8 @@ createGrass(scene, textures, level, tier):
     草叶几何: 5 段渐细弯折三角带（uv.y 0→1，基底宽 0.072）
     实例属性: aOffset(x,z), aBaseY(groundHeight 贴合丘陵), aHeight, aAngle, aTint
     交互贴图 DataTexture 256×256 RGBA: R 踩踏衰减 + G 在场动物占格压扁
-    片元着色器: 外网明快水粉渐层（0.28+0.72*smoothstep(0,0.80)）、13% 金色麦草秆（vTint>0.87）、大尺度晴天冷暖斑块、移动云影（0.72~1.12）、5 点 PCF 太阳阴影、踩踏微暗与远景空气透视雾化（smoothstep(20.0,36.0,length(vWorldXZ))*0.36 向 uHorizonColor 柔和过渡）
-    update(dt, time, state, actorPositions, preset, shadowData, horizonColor)
+    片元着色器: 外网明快水粉渐层（0.28+0.72*smoothstep(0,0.80)）、13% 金色麦草秆（vTint>0.87）、大尺度晴天冷暖斑块（入夜自动转月夜冷斑）、移动云影（0.72~1.12）、5 点 PCF 太阳/月亮阴影、踩踏微暗与远景空气透视雾化（smoothstep(20.0,36.0,length(vWorldXZ))*0.36 向 uHorizonColor 柔和过渡），并接入全时段写实光效（`uTimeTint` / `uDirectTint` / `uNightMix` / `uSunDir`）：早晨暖桃金、正午翠绿鲜亮、黄昏琥珀、夜晚彻底压暗收敛为月夜深青绿（根目录沉暗，叶尖沿 `uSunDir` 保留清冷银蓝月辉）
+    update(dt, time, state, actorPositions, preset, shadowData, horizonColor, lightState)
 ```
 
 ## 7. 粒子系统（3d/particles.mjs）
@@ -155,11 +157,11 @@ createParticles(scene, textures, tier):
 ## 8. 动态环境与季节天气（3d/environment.mjs）
 ```
 createEnvironment(scene, textures, tier):
-    天空穹顶: 自定义球面着色器（天顶到地平线渐变、太阳光晕、横向水粉刷痕噪声、黄昏星点）
+    天空穹顶: 自定义球面着色器（天顶到地平线渐变、太阳光晕仅白天可见 sunVis = 1 - smoothstep(0.35, 0.85, uDusk)、横向水粉刷痕噪声、黄昏星点与夜晚银蓝月亮圆盘/月晕）
     一局内时间推进（默认开启，可开关，并受表盘 24h 时段控制）:
         - TIME_SLOTS = ['morning', 'noon', 'evening', 'night']（早/中/晚/夜，对应 dayPhase 0.0 / 0.25 / 0.5 / 0.75）
-        - 周期缩短至 90 秒一圈（默认 `timeCycleEnabled = true`）；主平行光方向(`sunLight.position`)、`uSunDir`、仰角/方位角、天空色温/星月显隐与月光方向随 `dayPhase` 连续弧线变化，无论 `timeCycleEnabled` 开关与否均实时应用当前时段光照
-        - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` 供时钟圆盘手控与同步指针角度
+        - 周期缩短至 90 秒一圈（默认 `timeCycleEnabled = true`）；内置 24 小时真实日光光谱关键帧表 `SOLAR_24H_STOPS` + `sampleSolarCycle(dayPhase)`（0.00 日出桃金 `#ffb36b` → 0.12 晨阳 `#fff1d4` → 0.25 正午纯白 `#fffdf6` → 0.40 午后 `#ffd594` → 0.50 夕照橘红 `#ff7d3e` → 0.58 蓝调暮色 `#6e84cf` → 0.75 午夜银蓝 `#9ec2ff` → 0.90 破晓微曙 `#7285c4`），同步驱动天穹、地平线晚霞、主光色彩与草地/角色色温；白天 `sunLight` 跟随东→正中→西太阳弧线，入夜后平滑转向天空月亮 `uMoonDir` 方位，夜晚大幅下调半球补光至 `~0.44`、月光主强 `~0.66`，使草地与地形真实压暗进入月夜
+        - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` / `getSunPosition()` / `getLightState()` 供时钟圆盘手控与草地/角色着色器每帧同步
     积云: 14~20 朵噪声球簇，顶白底蓝灰，按风速缓慢漂移并环绕回折；阴雨天加厚下压并调暗
     远山: 3 层圆柱剪影带（textures.mountain(0..2)），随季节与雾色过渡
     灯光与雾: 主平行光（high 2048 / medium 1024 软阴影，low 关闭阴影）+ 外网半球光（#fff7e8 天光 / #5a7d3e 地色，随黄昏渐变）+ 月光方向光 + 指数雾
@@ -177,8 +179,9 @@ createHoloUI({ renderer, levels, levelId, onAction }):
     竖屏 / 横屏自适应布局（根据 viewport aspect 动态重排面板锚点，绝不遮挡中心棋盘安全区）:
         - 顶部全息条: 标题、第 N 关、上/下一关、展开式关卡网格/滑动选择、自由试玩徽章（矮按钮自适应双行字距，防止压字）、剩余与机制计数胶囊
         - 底部全息条: 步骤标题、提示开关、状态提示、上一步/下一步、可拖动全息进度条、撤回、重开
-        - 居中环境设置弹窗 (`settingsBg`, `z = 8..9`): 点击 `⚙ 环境` 打开时配合全屏半透明遮罩居中弹出（点击遮罩外缘或右上角 `✕` 关闭按钮 `settings-close` 收起，并阻断穿透点击与滚轮缩放）；竖屏与桌面端采用大号竖排卡片（约 344×448，时钟表盘放大至 232×232），矮横屏自动切换居中双栏排版：
-            * 3 指针同心时钟圆盘 (`clock-dial`): 外环 24h 时段（早/中/晚/夜 · 金橙细长针，天光开启时随 dayPhase 实时转动）、中环天气（晴/阴/雨/雪 · 天蓝中针）、内环季节（春/夏/秋/冬 · 青绿短粗针），统一环形扇区配置表并按 `clockDial.w / DIAL_SIZE` 缩放绘制与极坐标拾取，同时映射 `season-*` / `weather-*` / `time-*` 屏幕坐标供测试点选
+        - 全息 UI 天气/季节/昼夜联动换肤 (`WEATHER_UI_THEMES`): 顶部/底部 HUD、居中弹窗 SVG 羊皮纸底色、木纹按钮、关卡选择器与表盘配色随 `weather`（晴暖阳 / 阴冷雾 / 雨水蓝 / 冬雪霜蓝）与 `timeSlot === 'night'`（柔冷夜韵）自动同步重绘
+        - 居中环境设置弹窗 (`settingsBg`, `z = 8..9`): 点击 `⚙ 环境` 打开时配合全屏半透明遮罩居中弹出（点击遮罩外缘或右上角 `✕` 关闭按钮 `settings-close` 收起，并阻断穿透点击与滚轮缩放）；优先加载 `web/pig-level/assets/ui/*.svg`（`panel-parchment.svg`、`btn-close.svg`、`dial-pointer.svg`、`center-knob.svg`、`btn-pill.svg`）矢量皮肤动态着色绘制，桌面端采用大号居中卡片（约 540×696，时钟表盘放大至 `462×462`），手机竖屏与矮横屏按视口自适应饱满撑开：
+            * 单指针无遮挡同心时钟圆盘 (`clock-dial`): 支持通用 `N` 等分扇区（`step = 2π / ring.items.length`）：外环 24h 时段（4 等分 早/中/晚/夜 位于细刻度外环，仅此 1 根 `dial-pointer.svg` 三角指针绕外圈旋转指示，完全不压汉字）；中环天气（3 等分 120° 晴/阴/雨，无指针，天蓝扇区高亮）；内环季节（4 等分 90° 春/夏/秋/冬，无指针，嫩绿扇区高亮）；圆心 `center-knob.svg` 金扣切换天光流动/锁定，同时映射 `season-*` / `weather-*` / `time-*` 屏幕坐标供测试点选
             * 其余控件: 画质(自动/高/中/低)、天光流动开关(流/定)、音乐/音效开关、视角复位(V)、简洁 2D 控件开关(C)、切回 2D 版
         - 关卡滑动选择面板: 内置圆角列表凹槽底板 + `PICK_ROWS_VISIBLE + 1` 行缓冲平滑滑动，配合 `uClipRect` 与 6px 渐隐遮罩严格裁剪上下出界格子，命中拾取同步限制在列表可视遮罩内
         - 结算全息浮窗: 全屏半透明暖深褐遮罩 `modalBackdrop`（#2b140c, opacity 0.56, renderOrder 111）覆盖底层棋盘与背景 HUD 并拦截穿透点击与滚轮，居中弹窗自适应宽度与 188px 高度，主副标题排布于上半区（0.25/0.46），两个按钮排布于下半区（y=h/2-48）留出 > 28px 安全间距绝不与文字重叠
@@ -196,7 +199,7 @@ createAudio():
         - 夏: D 大调五声 120BPM（明亮跃动）
         - 秋: A 小调五声 90BPM（温润柔和）
         - 冬: E 小调五声 76BPM（空灵稀疏 + 长混响 pad）
-        - 雨天自动降低音符密度并加大滤波暖度
+        - 雨天/冬雪自动降低音符密度并加大滤波暖度（冬季 `rain` 按雪景静谧密度与柔和风声处理）
     环境声场: 粉噪声风声(随 wind 增益)、高通雨声 + 随机雨滴、春夏晴天 FM 鸟鸣、夏日蟋蟀、闪电后延迟低频雷鸣
     完整程序音效 playSfx(name):
         'oink'（点击哼哼）、'slide'（滑行扫频）、'exit'（欢快跑动）、'blocked'（木咚）、'spring'（弹簧嘣）、
@@ -233,5 +236,5 @@ createView3D({ container, level, levels, onPick, onAction }):
     animateExit(id): 蓄力下蹲后沿朝向冲刺跑出棋盘并淡出，沿途写入 grass 踩踏与白金冲刺尾迹，累计帧间隔确保完整播放
     shake(id, message): 前方受阻时前冲撞击喷火花+挤压回弹再左右摇摆；锁定态原地扭动身体；弹出红色叉号 + blocked/spring 音效
     cancelAnimations(): 立即完成或停止进行中补间，确保状态瞬间落位
-    测试钩子 window.__pig3d = { ready, tier, preset, timeSlot, dayPhase, fps, getGrassCount, getBoardScreenBounds, getCameraState, screenOf(id), getGuideHandScreen(), holoButton(name), setSeasonWeather(s, w), setTimeSlot(slot), resetCamera }
+    测试钩子 window.__pig3d = { ready, tier, preset, timeSlot, dayPhase, fps, getGrassCount, getGrassLightState, getPigLightState, getClockDialSize, getBoardScreenBounds, getCameraState, screenOf(id), getGuideHandScreen(), holoButton(name), setSeasonWeather(s, w), setTimeSlot(slot), resetCamera }
 ```

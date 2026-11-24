@@ -1,6 +1,6 @@
 // 角色与棋盘物件程序化建模：猪、小象、小鸭、铁笼、各类机制配件与提示指示器。
 import * as THREE from '../vendor/three.module.min.js';
-import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261124e';
+import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261124j';
 
 export const DIR_ANGLES = { south: 0, north: Math.PI, east: Math.PI / 2, west: -Math.PI / 2 };
 export const DIR_VECTORS = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -169,10 +169,15 @@ function buildDuckGeometry() {
 // 构造小道具工厂：按种类/尺寸缓存几何体，共用卡通材质与描边材质。
 export function createModelFactory(textures) {
     const gradientMap = textures.gradient3();
-    // Painted Valley 手绘水粉双阶明暗着色器：拉大侧前主受光亮面与暖玫瑰可可暗面反差，并叠加高光阶梯
+    // Painted Valley 手绘水粉双阶明暗着色器：保持经典哑光水粉质感与顶面微辉，随太阳/月亮实时转光，并仅在明暗交界线叠加次表面散射 (SSS)
     const toonMat = new THREE.ShaderMaterial({
         vertexColors: true,
-        uniforms: { uLightDir: { value: new THREE.Vector3(-0.74, 0.44, 0.50).normalize() } },
+        uniforms: {
+            uLightDir: { value: new THREE.Vector3(-0.74, 0.44, 0.50).normalize() },
+            uLightColor: { value: new THREE.Color('#fffdf6') },
+            uTimeTint: { value: new THREE.Color('#ffffff') },
+            uNightMix: { value: 0 }
+        },
         vertexShader: /* glsl */`
             varying vec3 vColor;
             varying vec3 vWorldNormal;
@@ -184,17 +189,34 @@ export function createModelFactory(textures) {
         `,
         fragmentShader: /* glsl */`
             uniform vec3 uLightDir;
+            uniform vec3 uLightColor;
+            uniform vec3 uTimeTint;
+            uniform float uNightMix;
             varying vec3 vColor;
             varying vec3 vWorldNormal;
             void main() {
-                float ndl = dot(normalize(vWorldNormal), uLightDir);
+                vec3 N = normalize(vWorldNormal);
+                float ndl = dot(N, normalize(uLightDir));
                 float litStep = smoothstep(0.06, 0.30, ndl);
                 float hiStep = smoothstep(0.56, 0.80, ndl);
                 float wrapGrad = smoothstep(-0.62, 0.72, ndl);
-                float topRim = smoothstep(0.55, 0.94, vWorldNormal.y) * 0.09;
-                vec3 litCol = vColor * mix(vec3(1.06, 0.94, 0.90), vec3(1.18, 1.08, 1.00), wrapGrad) + vec3(0.04, 0.025, 0.015) + hiStep * vec3(0.09, 0.065, 0.04) + topRim;
-                vec3 shadeCol = vColor * mix(vec3(0.42, 0.31, 0.39), vec3(0.56, 0.42, 0.48), wrapGrad);
-                gl_FragColor = vec4(mix(shadeCol, litCol, litStep), 1.0);
+                float topRim = smoothstep(0.55, 0.94, N.y) * 0.09;
+
+                // 还原原版手绘水粉受光与可可暗面，并跟随 24h 日/月光源颜色与夜晚暗度演变
+                vec3 baseCol = vColor * mix(vec3(1.0), uTimeTint, 0.28 + 0.44 * uNightMix);
+                vec3 litCol = baseCol * uLightColor * mix(vec3(1.06, 0.94, 0.90), vec3(1.18, 1.08, 1.00), wrapGrad)
+                    + vec3(0.04, 0.025, 0.015) * (1.0 - uNightMix * 0.6)
+                    + hiStep * uLightColor * 0.08 * (1.0 - uNightMix * 0.45)
+                    + topRim * mix(vec3(1.0), uLightColor, 0.65);
+                vec3 shadeCol = baseCol * mix(vec3(0.42, 0.31, 0.39), vec3(0.56, 0.42, 0.48), wrapGrad)
+                    * mix(vec3(1.0), vec3(0.58, 0.68, 0.96), uNightMix * 0.72);
+
+                // 仅在明暗交界线 (ndl ≈ 0.16 附近) 精准叠加柔和的暖桃粉次表面散射带
+                float termSSS = exp(-pow((ndl - 0.16) / 0.20, 2.0));
+                vec3 sssTint = mix(vec3(1.0, 0.42, 0.34), vec3(0.54, 0.50, 0.84), uNightMix * 0.65);
+                vec3 sssBand = baseCol * sssTint * termSSS * mix(0.28, 0.14, uNightMix);
+
+                gl_FragColor = vec4(mix(shadeCol, litCol, litStep) + sssBand, 1.0);
                 #include <tonemapping_fragment>
                 #include <colorspace_fragment>
             }
@@ -604,12 +626,31 @@ export function createModelFactory(textures) {
         return { ring, bodyDecal, bodyDecalUniforms, arrowGroup, crossGroup, handSprite };
     }
 
+    function setLightState(lightState) {
+        if (!lightState) return;
+        if (lightState.sunDir) toonMat.uniforms.uLightDir.value.copy(lightState.sunDir).normalize();
+        if (lightState.directTint) toonMat.uniforms.uLightColor.value.copy(lightState.directTint);
+        if (lightState.timeTint) toonMat.uniforms.uTimeTint.value.copy(lightState.timeTint);
+        toonMat.uniforms.uNightMix.value = THREE.MathUtils.clamp(lightState.nightBlend ?? 0, 0, 1);
+    }
+
     return {
         createActor,
         updateActorAccessory,
         createDuck,
         createCage,
         createMarkers,
+        setLightState,
+        getLightState: () => ({
+            lightDir: {
+                x: toonMat.uniforms.uLightDir.value.x,
+                y: toonMat.uniforms.uLightDir.value.y,
+                z: toonMat.uniforms.uLightDir.value.z
+            },
+            lightColor: `#${toonMat.uniforms.uLightColor.value.getHexString()}`,
+            timeTint: `#${toonMat.uniforms.uTimeTint.value.getHexString()}`,
+            nightMix: toonMat.uniforms.uNightMix.value
+        }),
         dispose() {
             for (const item of disposables) item?.dispose?.();
         }

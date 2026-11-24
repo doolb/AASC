@@ -2,19 +2,19 @@
 // 所有颜色使用 sRGB 十六进制字符串，由环境模块转换为线性空间后插值。
 
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
-export const WEATHERS = ['sunny', 'cloudy', 'rain', 'snow'];
+export const WEATHERS = ['sunny', 'cloudy', 'rain'];
 
 export const SEASON_LABELS = { spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
-export const WEATHER_LABELS = { sunny: '晴', cloudy: '阴', rain: '雨', snow: '雪' };
+export const WEATHER_LABELS = { sunny: '晴', cloudy: '阴', rain: '雨' };
 
 // 季节基础参数：参考 Painted Valley 的柔和奶油水粉色彩（高明度低荧光感，草叶根部与草坪自然融合）。
 export const SEASON_BASE = {
     spring: {
         grassRoot: '#74bf54', grassTip: '#b4e36e', lawn: '#96d462', ground: '#78c252',
-        foliage: ['#f9c2cf', '#f7b2c6', '#8fe05a', '#b3ec76'], treeType: 'blossom',
+        foliage: ['#f9bac9', '#f5a8bc', '#f8c6d4', '#fbe2e8'], treeType: 'blossom',
         flowers: ['#fffbe8', '#ffe347', '#ffd6e6', '#ffffff', '#ffb8d0'], flowerDensity: 1,
         ambientLife: 'butterfly', seasonParticle: 'petal', props: ['flowerbed'],
-        sunElevation: 36, hillColor: '#7cc458', mountainTint: '#8ebde6'
+        sunElevation: 36, hillColor: '#88c96b', mountainTint: '#a6c4b2'
     },
     summer: {
         grassRoot: '#3ea824', grassTip: '#8ee632', lawn: '#62cb34', ground: '#48ac26',
@@ -31,11 +31,11 @@ export const SEASON_BASE = {
         sunElevation: 32, hillColor: '#cca862', mountainTint: '#b4a8d8'
     },
     winter: {
-        grassRoot: '#9cb5aa', grassTip: '#f6fafc', lawn: '#ebf3f7', ground: '#e2ecf2',
-        foliage: ['#387056', '#458264', '#2f624c', '#4e8c6e'], treeType: 'pine',
+        grassRoot: '#9cb5aa', grassTip: '#f6fafc', lawn: '#dde8f2', ground: '#d5e2ee',
+        foliage: ['#3c6c78', '#467d88', '#335d68', '#4f8892'], treeType: 'pine',
         flowers: ['#ffffff', '#dcecff'], flowerDensity: 0.14,
         ambientLife: 'none', seasonParticle: 'sparkle', props: ['snowman'],
-        sunElevation: 28, hillColor: '#eff5f9', mountainTint: '#bed0eb'
+        sunElevation: 28, hillColor: '#e4ecf6', mountainTint: '#b4bad8'
     }
 };
 
@@ -55,20 +55,22 @@ export const WEATHER_BASE = {
         skyZenith: '#6d88a8', skyHorizon: '#bdccdc', cloudTop: '#dde6f0', cloudBottom: '#889ab0',
         cloudCover: 1, sunIntensity: 1.08, hemiIntensity: 1.02, fogDensity: 0.016,
         wind: 1.45, precip: 'rain', precipCount: 3200, wetness: 1, snowCover: 0, lightning: true, shadowSoft: 0.9
-    },
-    snow: {
-        skyZenith: '#9ec0e0', skyHorizon: '#eef5fc', cloudTop: '#ffffff', cloudBottom: '#c6d4e6',
-        cloudCover: 0.9, sunIntensity: 1.38, hemiIntensity: 1.12, fogDensity: 0.014,
-        wind: 0.4, precip: 'snow', precipCount: 3000, wetness: 0, snowCover: 0.45, lightning: false, shadowSoft: 0.75
     }
 };
 
-// 季节对天气天空的微调（秋暖、冬冷），按 sunny 基础色做混合。
+// 冬季降水天气专属修正（冬雨自动呈现为飘雪，柔粉紫暮蓝童话雪夜天空）
+const WINTER_SNOW_WEATHER = {
+    skyZenith: '#8c8ec4', skyHorizon: '#cdb9dc', cloudTop: '#f8f5fc', cloudBottom: '#b4aed4',
+    cloudCover: 0.72, sunIntensity: 1.48, hemiIntensity: 1.06, fogDensity: 0.013,
+    wind: 0.45, precip: 'snow', precipCount: 3000, wetness: 0, snowCover: 0.75, lightning: false, shadowSoft: 0.75
+};
+
+// 季节对天气天空的微调（春柔晨雾、冬粉紫雪暮、秋暖），按天气基础色做混合。
 const SEASON_SKY_SHIFT = {
-    spring: { horizon: '#e6f3e8', amount: 0.15 },
+    spring: { horizon: '#f2f0de', amount: 0.28 },
     summer: { horizon: '#d6efff', amount: 0.1 },
     autumn: { horizon: '#f2dcc0', amount: 0.32 },
-    winter: { horizon: '#e8f0f8', amount: 0.3 }
+    winter: { horizon: '#c9bddc', amount: 0.42 }
 };
 
 // 原游戏蓝底铁笼关卡：叠加月夜蓝紫色调与紫色云团，保持明亮月光照明。
@@ -77,12 +79,12 @@ export const CAGE_DUSK = {
     sunColor: '#ffe0ba', mountainTint: '#847cc4', amount: 0.72
 };
 
-// 天气随机权重：冬偏雪、夏偏晴/雨、秋偏阴、春均衡。
+// 天气随机权重：冬偏阴雪、夏偏晴/雨、秋偏阴、春均衡。
 export const WEATHER_WEIGHTS = {
-    spring: { sunny: 0.45, cloudy: 0.25, rain: 0.25, snow: 0.05 },
-    summer: { sunny: 0.55, cloudy: 0.15, rain: 0.25, snow: 0.05 },
-    autumn: { sunny: 0.3, cloudy: 0.4, rain: 0.22, snow: 0.08 },
-    winter: { sunny: 0.25, cloudy: 0.15, rain: 0.0, snow: 0.6 }
+    spring: { sunny: 0.48, cloudy: 0.27, rain: 0.25 },
+    summer: { sunny: 0.58, cloudy: 0.17, rain: 0.25 },
+    autumn: { sunny: 0.34, cloudy: 0.42, rain: 0.24 },
+    winter: { sunny: 0.30, cloudy: 0.30, rain: 0.40 }
 };
 
 // 关卡号映射季节：2～30 春、31～60 夏、61～90 秋、91+ 冬。
@@ -128,9 +130,10 @@ export function mixHex(a, b, t) {
 // 合成最终环境参数：季节基础 + 天气修正 + 季节天空微调 + 可选铁笼黄昏。
 export function buildPreset(season, weather, options = {}) {
     const s = SEASON_BASE[season] || SEASON_BASE.spring;
-    const w = WEATHER_BASE[weather] || WEATHER_BASE.sunny;
+    const isWinterSnow = season === 'winter' && weather === 'rain';
+    const w = isWinterSnow ? WINTER_SNOW_WEATHER : (WEATHER_BASE[weather] || WEATHER_BASE.sunny);
     const shift = SEASON_SKY_SHIFT[season] || SEASON_SKY_SHIFT.spring;
-    // 冬季天然积雪；非冬季下雪视为“初雪”，只轻度覆盖。
+    // 冬季天然积雪，冬+雨触发飘雪加厚积雪。
     const snowCover = season === 'winter' ? Math.max(0.78, w.snowCover + 0.4) : w.snowCover;
     const wet = w.wetness;
     const preset = {

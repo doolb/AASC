@@ -128,13 +128,18 @@ export function createAudioSystem() {
         unlocked = true;
     }
 
+    function isSnowing() {
+        return weather === 'snow' || (season === 'winter' && weather === 'rain');
+    }
+
     function applyEnvironmentAudio() {
         if (!ctx) return;
         const now = ctx.currentTime;
-        const windMap = { sunny: 0.08, cloudy: 0.22, rain: 0.34, snow: 0.14 };
+        const snowing = isSnowing();
+        const windMap = { sunny: 0.08, cloudy: 0.22, rain: snowing ? 0.14 : 0.34, snow: 0.14 };
         windGain?.gain.setTargetAtTime(windMap[weather] ?? 0.1, now, 0.5);
-        windFilter?.frequency.setTargetAtTime(weather === 'rain' ? 620 : 380, now, 0.5);
-        rainGain?.gain.setTargetAtTime(weather === 'rain' ? 0.45 : 0, now, 0.6);
+        windFilter?.frequency.setTargetAtTime(weather === 'rain' && !snowing ? 620 : 380, now, 0.5);
+        rainGain?.gain.setTargetAtTime(weather === 'rain' && !snowing ? 0.45 : 0, now, 0.6);
     }
 
     // 钢片琴 FM 合成单音
@@ -164,7 +169,7 @@ export function createAudioSystem() {
     function playPad(time, freqs, dur = 2.4, vol = 0.08) {
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
-        filter.frequency.value = weather === 'rain' ? 620 : 980;
+        filter.frequency.value = weather === 'rain' && !isSnowing() ? 620 : 980;
         const env = ctx.createGain();
         env.gain.setValueAtTime(0.0001, time);
         env.gain.linearRampToValueAtTime(vol, time + 0.45);
@@ -204,7 +209,7 @@ export function createAudioSystem() {
         const cfg = SEASON_MUSIC[season] || SEASON_MUSIC.spring;
         const stepDur = 60 / cfg.bpm / 2; // 八分音符步进
         while (nextNoteTime < ctx.currentTime + 0.14) {
-            const density = weather === 'snow' ? 0.35 : weather === 'rain' ? 0.48 : 0.72;
+            const density = isSnowing() ? 0.35 : weather === 'rain' ? 0.48 : 0.72;
             if (stepIndex % 8 === 0) {
                 const chordIdx = Math.floor(stepIndex / 8) % cfg.chords.length;
                 const chordNotes = cfg.chords[chordIdx].map(idx => midiToFreq(cfg.scale[idx % cfg.scale.length] - 12));

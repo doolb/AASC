@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 460" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff6e0"/>
+      <stop offset="55%" stop-color="#f9ebc8"/>
+      <stop offset="100%" stop-color="#f0d7a9"/>
+    </linearGradient>
+    <linearGradient id="ribbonG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd966"/>
+      <stop offset="100%" stop-color="#e5a624"/>
+    </linearGradient>
+    <linearGradient id="curlG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dfbf8a"/>
+      <stop offset="100%" stop-color="#c49d62"/>
+    </linearGradient>
+  </defs>
+  <!-- 柔和底座阴影 -->
+  <rect x="12" y="28" width="336" height="422" rx="14" fill="rgba(54,28,12,0.22)"/>
+  <!-- 带微小缺口与右下卷角的羊皮纸主体 -->
+  <path d="M16 26 L342 26 Q348 26 348 34 L348 118 L341 124 L348 131 L348 274 L342 280 L348 286 L348 422 L322 444 L22 444 Q12 444 12 434 L12 318 L18 312 L12 306 L12 152 L17 146 L12 140 L12 36 Q12 26 16 26 Z"
+        fill="url(#pg)" stroke="#6b4125" stroke-width="3" stroke-linejoin="round"/>
+  <!-- 羊皮纸内框暖边光泽 -->
+  <path d="M22 36 L338 36 L338 418 L318 434 L22 434 Z" fill="none" stroke="#fff9ec" stroke-opacity="0.65" stroke-width="2"/>
+  <!-- 右下角卷纸折耳 -->
+  <path d="M348 422 Q330 416 318 424 Q326 436 322 444 Z" fill="url(#curlG)" stroke="#6b4125" stroke-width="2.4" stroke-linejoin="round"/>
+  <!-- 顶部丝带左右尾翼 -->
+  <path d="M56 20 L80 20 L80 46 L48 46 L58 33 Z" fill="#d9941f" stroke="#5d341a" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M304 20 L280 20 L280 46 L312 46 L302 33 Z" fill="#d9941f" stroke="#5d341a" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M68 42 L82 48 L82 36 Z" fill="#8f5314" stroke="#5d341a" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M292 42 L278 48 L278 36 Z" fill="#8f5314" stroke="#5d341a" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- 顶部金色丝带主横幅 -->
+  <path d="M72 10 Q180 4 288 10 Q294 12 292 22 L288 42 Q180 37 72 42 L68 22 Q66 12 72 10 Z"
+        fill="url(#ribbonG)" stroke="#5d341a" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M76 14 Q180 9 284 14" fill="none" stroke="#fff4bf" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
+</svg>

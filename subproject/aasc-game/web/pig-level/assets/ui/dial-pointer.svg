@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36">
+  <!-- 指向 12 点正上方的立体金橙三角指针，绘制时绕圆心旋转任意角度 -->
+  <polygon points="18,3 31,32 5,32" fill="#e87417" stroke="#5d2b14" stroke-width="2.6" stroke-linejoin="round"/>
+  <polygon points="18,5 18,30.5 6.8,30.5" fill="#ffba3b"/>
+  <line x1="18" y1="6.5" x2="9.5" y2="27" stroke="#ffe599" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

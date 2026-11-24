@@ -1,12 +1,55 @@
 // 动态环境：手绘天空穹顶、飘动积云、三层远山、太阳与半球光、指数雾、昼夜缓慢流逝与天气闪电。
 import * as THREE from '../vendor/three.module.min.js';
-import { buildPreset, seededRandom } from './presets.mjs?v=20261124e';
-import { blobSphere } from './geometry.mjs?v=20261124e';
+import { buildPreset, seededRandom } from './presets.mjs?v=20261124j';
+import { blobSphere } from './geometry.mjs?v=20261124j';
 
 export const TIME_SLOTS = ['morning', 'noon', 'evening', 'night'];
 export const TIME_LABELS = { morning: '早', noon: '中', evening: '晚', night: '夜' };
 const TIME_SLOT_PHASE = { morning: 0.0, noon: 0.25, evening: 0.5, night: 0.75 };
 const TIME_CYCLE_SECONDS = 90;
+
+// 现实 24 小时日光光谱关键帧（0.00 日出 06:00 -> 0.25 正午 12:00 -> 0.50 日落 18:00 -> 0.75 午夜 00:00）
+const SOLAR_24H_STOPS = [
+    { phase: 0.00, sun: '#ffb36b', horizon: '#f2ead0', zenith: '#7ea4c8', tint: '#ffe8ce', night: 0.05 },
+    { phase: 0.12, sun: '#fff1d4', horizon: '#e8f4ff', zenith: '#6ab4f0', tint: '#fff9ef', night: 0.00 },
+    { phase: 0.25, sun: '#fffdf6', horizon: '#e6f6ff', zenith: '#56aef5', tint: '#ffffff', night: 0.00 },
+    { phase: 0.40, sun: '#ffd594', horizon: '#ffdfbc', zenith: '#5a99db', tint: '#fff1d8', night: 0.00 },
+    { phase: 0.50, sun: '#ff7d3e', horizon: '#ff925c', zenith: '#4a4e96', tint: '#ffbd8a', night: 0.16 },
+    { phase: 0.58, sun: '#7f96d8', horizon: '#4f5d96', zenith: '#2b346b', tint: '#6273ad', night: 0.68 },
+    { phase: 0.75, sun: '#9ec2ff', horizon: '#243875', zenith: '#0f1c47', tint: '#233466', night: 1.00 },
+    { phase: 0.90, sun: '#7285c4', horizon: '#4e598c', zenith: '#2b3366', tint: '#5d6ca3', night: 0.65 },
+    { phase: 1.00, sun: '#ffb36b', horizon: '#f2ead0', zenith: '#7ea4c8', tint: '#ffe8ce', night: 0.05 }
+];
+const solarSample = {
+    sun: new THREE.Color('#fffdf6'),
+    horizon: new THREE.Color('#e6f6ff'),
+    zenith: new THREE.Color('#56aef5'),
+    tint: new THREE.Color('#ffffff'),
+    night: 0
+};
+const sTmp = new THREE.Color();
+
+// 按 dayPhase 查找并插值连续 24 小时日光光谱参数
+function sampleSolarCycle(phase) {
+    const p = ((phase % 1) + 1) % 1;
+    let a = SOLAR_24H_STOPS[0];
+    let b = SOLAR_24H_STOPS[SOLAR_24H_STOPS.length - 1];
+    for (let i = 0; i < SOLAR_24H_STOPS.length - 1; i++) {
+        if (p >= SOLAR_24H_STOPS[i].phase && p <= SOLAR_24H_STOPS[i + 1].phase) {
+            a = SOLAR_24H_STOPS[i];
+            b = SOLAR_24H_STOPS[i + 1];
+            break;
+        }
+    }
+    const span = Math.max(1e-5, b.phase - a.phase);
+    const t = THREE.MathUtils.clamp((p - a.phase) / span, 0, 1);
+    solarSample.sun.set(a.sun).lerp(sTmp.set(b.sun), t);
+    solarSample.horizon.set(a.horizon).lerp(sTmp.set(b.horizon), t);
+    solarSample.zenith.set(a.zenith).lerp(sTmp.set(b.zenith), t);
+    solarSample.tint.set(a.tint).lerp(sTmp.set(b.tint), t);
+    solarSample.night = THREE.MathUtils.lerp(a.night, b.night, t);
+    return solarSample;
+}
 
 function phaseToSlot(phase) {
     const norm = ((phase % 1) + 1) % 1;
@@ -62,9 +105,10 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
                 vec2 brushUv = vec2(atan(dir.z, dir.x) * 0.6, h * 1.8) + vec2(uTime * 0.002, 0.0);
                 float brush = texture2D(uNoiseMap, brushUv).r;
                 col *= 0.96 + brush * 0.08;
-                // 太阳光晕（白天为主）
+                // 太阳光晕（仅白天/晨昏可见，入夜彻底隐藏避免夜空出现太阳光斑）
                 float sunDot = max(dot(dir, normalize(uSunDir)), 0.0);
-                col += uSunColor * (pow(sunDot, 12.0) * 0.25 + pow(sunDot, 140.0) * 0.75) * (1.0 - uDusk * 0.45);
+                float sunVis = clamp(1.0 - smoothstep(0.35, 0.85, uDusk), 0.0, 1.0);
+                col += uSunColor * (pow(sunDot, 12.0) * 0.25 + pow(sunDot, 140.0) * 0.75) * sunVis;
                 // 夜晚/黄昏月亮圆盘、环形山细节与银蓝月光晕
                 if (uDusk > 0.04) {
                     vec3 mDir = normalize(uMoonDir);
@@ -180,6 +224,17 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
 
     const cA = new THREE.Color();
     const cB = new THREE.Color();
+    // 供草叶、角色与外景共享的实时光照与色温快照
+    const lightState = {
+        nightBlend: 0,
+        sunsetBlend: 0,
+        dawnBlend: 0,
+        duskMix: 0,
+        sunColor: new THREE.Color('#fffdf6'),
+        timeTint: new THREE.Color('#ffffff'),
+        directTint: new THREE.Color('#ffffff'),
+        sunDir: new THREE.Vector3(0.4, 0.85, 0.35).normalize()
+    };
     const lerpHex = (a, b, t) => {
         cA.set(a); cB.set(b);
         cA.lerp(cB, t);
@@ -191,43 +246,64 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         const arc = dayPhase * Math.PI * 2;
         const daySin = Math.sin(arc);
         const dayCos = Math.cos(arc);
-        const nightBlend = Math.pow(Math.max(0, -daySin), 1.15);
-        const sunsetBlend = Math.max(0, -dayCos) * (1 - nightBlend * 0.55);
-        const dawnBlend = Math.max(0, dayCos) * 0.38 * (1 - nightBlend);
+        const solar = sampleSolarCycle(dayPhase);
+        const nightBlend = Math.max(solar.night, p.dusk * 0.65);
+        const sunsetBlend = Math.max(0, -dayCos) * (1 - nightBlend * 0.45);
+        const dawnBlend = Math.max(0, dayCos) * (1 - nightBlend);
         const duskMix = Math.min(1, Math.max(p.dusk, (nightBlend * 0.96 + sunsetBlend * 0.45) * (1 - p.dusk) + p.dusk));
 
         skyUniforms.uTime.value = time;
+        const skySolarFade = (1 - p.dusk) * (p.season === 'winter' ? 0.48 : 0.85);
         skyUniforms.uZenith.value.set(p.skyZenith)
-            .lerp(cB.set('#4e60b2'), sunsetBlend * 0.52 * (1 - p.dusk))
-            .lerp(cB.set('#1f2c66'), nightBlend * 0.85);
+            .lerp(solar.zenith, (sunsetBlend * 0.65 + dawnBlend * 0.22) * skySolarFade)
+            .lerp(solar.zenith, nightBlend * 0.92);
         skyUniforms.uHorizon.value.set(p.skyHorizon)
-            .lerp(cB.set('#ffe4cb'), dawnBlend * 0.45 * (1 - p.dusk))
-            .lerp(cB.set('#ffad82'), sunsetBlend * 0.52 * (1 - p.dusk))
-            .lerp(cB.set('#425294'), nightBlend * 0.82);
-        skyUniforms.uSunColor.value.set(p.sunColor)
-            .lerp(cB.set('#ffd9b3'), dawnBlend * 0.45)
-            .lerp(cB.set('#ff9c63'), sunsetBlend * 0.65)
-            .lerp(cB.set('#b8d4ff'), nightBlend * 0.85);
+            .lerp(solar.horizon, (dawnBlend * 0.55 + sunsetBlend * 0.72) * skySolarFade)
+            .lerp(solar.horizon, nightBlend * 0.88);
+        // 主光色彩跟随现实 24h 日光光谱连续演变，阴雨云层仅柔化饱和度而不遮蔽时变方向
+        const solarWeight = 1 - p.cloudCover * 0.38;
+        skyUniforms.uSunColor.value.set(p.sunColor).lerp(solar.sun, solarWeight);
         skyUniforms.uDusk.value = duskMix;
         skyUniforms.uFlash.value = flashVal;
 
-        // 主平行光位置跟随 24h 时间连续摆动与升降（早东偏前 -> 中高正前 -> 晚西偏前 -> 夜月高斜照）
-        const lightX = dayCos * 28 - nightBlend * 10;
-        const lightY = THREE.MathUtils.lerp(13, Math.max(24, Math.tan(THREE.MathUtils.degToRad(p.sunElevation)) * 16), Math.max(0, daySin)) * (1 - nightBlend)
-            + 24 * nightBlend;
-        const lightZ = 16 - nightBlend * 8;
-        sunLight.position.set(lightX, THREE.MathUtils.clamp(lightY, 12, 34), lightZ);
-        skyUniforms.uSunDir.value.copy(sunLight.position).normalize();
-        skyUniforms.uMoonDir.value.set(-0.34 + dayCos * 0.28, 0.26 + nightBlend * 0.22, -0.88).normalize();
+        // 主平行光白天随太阳移动；入夜后平滑转向与天空中月亮一致的方位，照射银蓝轮廓光与统一地面月影
+        const moonPosX = -14 + dayCos * 10;
+        const moonPosY = 22 + nightBlend * 6;
+        const moonPosZ = -24;
+        const sunPosX = dayCos * 28;
+        const sunPosY = THREE.MathUtils.clamp(
+            THREE.MathUtils.lerp(13, Math.max(24, Math.tan(THREE.MathUtils.degToRad(p.sunElevation)) * 16), Math.max(0, daySin)),
+            12, 34
+        );
+        const sunPosZ = 16;
+        sunLight.position.set(
+            THREE.MathUtils.lerp(sunPosX, moonPosX, nightBlend),
+            THREE.MathUtils.lerp(sunPosY, moonPosY, nightBlend),
+            THREE.MathUtils.lerp(sunPosZ, moonPosZ, nightBlend)
+        );
+        skyUniforms.uSunDir.value.set(sunPosX, sunPosY, sunPosZ).normalize();
+        skyUniforms.uMoonDir.value.set(moonPosX, moonPosY, moonPosZ).normalize();
 
-        sunLight.color.copy(skyUniforms.uSunColor.value).lerp(cB.set('#ffdba6'), 0.25 * (1 - nightBlend));
-        sunLight.intensity = p.sunIntensity * (1 - sunsetBlend * 0.14 - nightBlend * 0.42) + flashVal * 3.5;
-        // 夜晚/黄昏开启银蓝月光方向光，搭配可读半球环境光保证夜间动物立体清晰
-        moonLight.position.set(-14 + dayCos * 12, 22 + nightBlend * 8, -26);
-        moonLight.intensity = duskMix * 1.5;
-        hemiLight.intensity = Math.max(0.75, p.hemiIntensity * (1 - nightBlend * 0.22) + duskMix * 0.16);
-        hemiLight.color.set('#fff7e8').lerp(cB.set('#a8c4fa'), duskMix * 0.72);
-        hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#3d4b75'), duskMix * 0.62);
+        sunLight.color.copy(skyUniforms.uSunColor.value);
+        const dayLightInt = p.sunIntensity * (1 - sunsetBlend * 0.16);
+        sunLight.intensity = THREE.MathUtils.lerp(dayLightInt, Math.min(0.76, Math.max(0.62, p.sunIntensity * 0.34)), nightBlend) + flashVal * 3.5;
+        // 夜晚转为柔和前向夜空漫反射补光并明显压低半球环境光，让地面与草叶真正进入月夜暗调
+        moonLight.position.set(14, 15, 20);
+        moonLight.intensity = duskMix * 0.24;
+        hemiLight.intensity = Math.max(0.42, THREE.MathUtils.lerp(p.hemiIntensity + sunsetBlend * 0.08, 0.44, nightBlend));
+        hemiLight.color.set('#fff7e8').lerp(solar.sun, 0.35).lerp(cB.set('#5d7dc2'), duskMix * 0.82);
+        hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#1c2648'), duskMix * 0.82);
+
+        // 同步草地、角色与外景 24h 时变色温与主光方向
+        lightState.nightBlend = nightBlend;
+        lightState.sunsetBlend = sunsetBlend;
+        lightState.dawnBlend = dawnBlend;
+        lightState.duskMix = duskMix;
+        lightState.sunColor.copy(skyUniforms.uSunColor.value);
+        lightState.timeTint.copy(solar.tint);
+        if (p.dusk > 0) lightState.timeTint.lerp(cB.set('#283a70'), p.dusk * 0.65);
+        lightState.directTint.copy(skyUniforms.uSunColor.value);
+        lightState.sunDir.copy(sunLight.position).normalize();
 
         fog.color.copy(skyUniforms.uHorizon.value);
         fog.density = p.fogDensity;
@@ -339,6 +415,7 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         }),
         getCurrent: () => current,
         getHorizonColor: () => fog.color,
+        getLightState: () => lightState,
         update,
         dispose() {
             scene.remove(group, sunLight, hemiLight);

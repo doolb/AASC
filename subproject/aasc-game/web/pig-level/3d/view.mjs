@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124e';
-import { createTextureLibrary } from './textures.mjs?v=20261124e';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124e';
-import { createScenery } from './scenery.mjs?v=20261124e';
-import { createGrass } from './grass.mjs?v=20261124e';
-import { createParticles } from './particles.mjs?v=20261124e';
-import { createEnvironment } from './environment.mjs?v=20261124e';
-import { createHoloUI } from './holo-ui.mjs?v=20261124e';
-import { createAudioSystem } from './audio.mjs?v=20261124e';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124e';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124j';
+import { createTextureLibrary } from './textures.mjs?v=20261124j';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124j';
+import { createScenery } from './scenery.mjs?v=20261124j';
+import { createGrass } from './grass.mjs?v=20261124j';
+import { createParticles } from './particles.mjs?v=20261124j';
+import { createEnvironment } from './environment.mjs?v=20261124j';
+import { createHoloUI } from './holo-ui.mjs?v=20261124j';
+import { createAudioSystem } from './audio.mjs?v=20261124j';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124j';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -1145,9 +1145,11 @@ export async function createView3D({ container, level, levels, onPick, onAction 
 
         const curPreset = environment.update(dt, elapsedTotal);
         const horizonColor = environment.getHorizonColor();
-        scenery.applyPreset(curPreset, Math.min(1, dt * 4), horizonColor);
+        const lightState = environment.getLightState();
+        scenery.applyPreset(curPreset, Math.min(1, dt * 4), horizonColor, lightState);
         scenery.update(dt, elapsedTotal, curPreset.wind);
-        grass.update(dt, elapsedTotal, latestState, actorPositions, curPreset, environment.getShadowData(), horizonColor);
+        grass.update(dt, elapsedTotal, latestState, actorPositions, curPreset, environment.getShadowData(), horizonColor, lightState);
+        models.setLightState(lightState);
         particles.update(dt, elapsedTotal, curPreset, viewH);
         holoUI.update(dt, elapsedTotal, yaw, environment.getDayPhase());
 
@@ -1173,6 +1175,10 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         getActorCount: () => actorMap.size,
         getGuideText: () => latestUi?.guideText || '',
         hasGuideHand: () => markers.handSprite.visible,
+        getUiSkinKey: () => holoUI.getUiSkinKey(),
+        getClockDialSize: () => holoUI.getClockDialSize(),
+        getGrassLightState: () => grass.getLightState(),
+        getPigLightState: () => models.getLightState(),
         getGuideHandScreen() {
             if (!markers.handSprite.visible) return null;
             tmpVec.copy(markers.handSprite.position).project(camera);

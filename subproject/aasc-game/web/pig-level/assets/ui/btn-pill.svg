@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="pillG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f2dab0"/>
+      <stop offset="60%" stop-color="#dfbc85"/>
+      <stop offset="100%" stop-color="#c49557"/>
+    </linearGradient>
+  </defs>
+  <rect x="2.5" y="4.5" width="115" height="33" rx="10" fill="#5d341a"/>
+  <rect x="2.5" y="2" width="115" height="33" rx="10" fill="url(#pillG)" stroke="#5d341a" stroke-width="2.4"/>
+  <path d="M10 6 H110" stroke="#fff7e2" stroke-width="2.2" stroke-linecap="round" opacity="0.65"/>
+</svg>

@@ -1,8 +1,8 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261124e';
-import { groundHeight } from './geometry.mjs?v=20261124e';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261124e';
+import { seededRandom } from './presets.mjs?v=20261124j';
+import { groundHeight } from './geometry.mjs?v=20261124j';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261124j';
 
 const INTERACT_SIZE = 256;
 const WORLD_SPAN = 48; // 交互贴图覆盖 [-24, 24] 世界区间
@@ -119,7 +119,10 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
         uShadowMatrix: { value: new THREE.Matrix4() },
         uShadowTexel: { value: 1 / 1024 },
         uShadowStrength: { value: 0.9 },
-        uHorizonColor: { value: new THREE.Color('#b5dff7') }
+        uHorizonColor: { value: new THREE.Color('#b5dff7') },
+        uTimeTint: { value: new THREE.Color('#ffffff') },
+        uDirectTint: { value: new THREE.Color('#ffffff') },
+        uNightMix: { value: 0 }
     };
 
     const material = new THREE.ShaderMaterial({
@@ -199,6 +202,9 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
             uniform vec3 uTipColor;
             uniform vec3 uSunDir;
             uniform vec3 uHorizonColor;
+            uniform vec3 uTimeTint;
+            uniform vec3 uDirectTint;
+            uniform float uNightMix;
             varying float vY;
             varying float vTint;
             varying float vTrample;
@@ -217,15 +223,17 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                 base = mix(base, base * 0.90 + vec3(0.06, 0.09, 0.11) * vY * vY, uWet * 0.65);
                 base = mix(base, vec3(0.95, 0.97, 1.0), uSnow * smoothstep(0.35, 0.95, vY) * 0.85);
                 vec4 patchN = texture2D(uNoiseMap, vWorldXZ * 0.025);
-                // 大尺度晴天受光亮部与冷润阴影区对比（单根草叶内仍保留亮根底色）
+                // 大尺度晴天受光亮部与冷润阴影区对比（入夜后减弱暖晒亮斑并切换为月色冷斑）
                 float sunPatch = smoothstep(0.38, 0.62, patchN.b);
-                vec3 patchTint = mix(vec3(0.76, 0.82, 0.86), vec3(1.16, 1.14, 1.02), sunPatch);
+                vec3 dayPatchTint = mix(vec3(0.76, 0.82, 0.86), vec3(1.16, 1.14, 1.02), sunPatch);
+                vec3 nightPatchTint = mix(vec3(0.74, 0.82, 0.96), vec3(1.06, 1.12, 1.24), sunPatch);
+                vec3 patchTint = mix(dayPatchTint, nightPatchTint, uNightMix);
                 base *= patchTint * (0.97 + (vTint - 0.5) * 0.08);
                 // 移动云影（拉大晴天云影暗部与阳光区层次）
                 float cloud = texture2D(uNoiseMap, vWorldXZ * 0.015 + vec2(uTime * 0.01, uTime * 0.006)).r;
                 float shadowK = mix(0.72, 1.12, smoothstep(0.36, 0.64, cloud));
                 base *= shadowK;
-                // 采样太阳方向光阴影贴图（5 点 PCF），在线性空间匹配地面的冷青阴影强度，让树影/木屋/栅栏/小猪阴影清晰落到草叶上
+                // 采样太阳/月亮方向光阴影贴图（5 点 PCF），让树影/木屋/栅栏/小猪阴影清晰落到草叶上
                 if (uShadowEnabled > 0.5) {
                     vec3 sc = vShadowCoord.xyz / vShadowCoord.w;
                     if (sc.x >= 0.0 && sc.x <= 1.0 && sc.y >= 0.0 && sc.y <= 1.0 && sc.z <= 1.0) {
@@ -238,6 +246,13 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                         base *= mix(vec3(1.0), vec3(0.22, 0.30, 0.38), (s * 0.2) * uShadowStrength);
                     }
                 }
+                // 24h 昼夜时变染色：白天随真实日光光谱在晨暖桃金/正午翠亮/夕照琥珀间平滑演进；夜晚压暗为深靛月夜草并保留月光叶尖银蓝微辉
+                float dirLift = 0.76 + 0.26 * clamp(uSunDir.y, 0.15, 1.0);
+                vec3 timeLit = base * uTimeTint * mix(vec3(1.0), uDirectTint, 0.48 + 0.44 * vY) * dirLift;
+                vec3 nightRoot = vec3(0.05, 0.09, 0.20) * (0.75 + 0.5 * vTint);
+                vec3 nightBlade = mix(nightRoot, base * vec3(0.16, 0.26, 0.52), 0.35 + 0.65 * vY);
+                base = mix(timeLit, nightBlade, uNightMix * 0.78);
+                base += vec3(0.32, 0.48, 0.86) * (uNightMix * smoothstep(0.45, 1.0, vY) * (0.28 + 0.42 * max(uSunDir.y, 0.0)));
                 // 踩踏微暗
                 base *= 1.0 - vTrample * 0.06;
                 // 远景柔和空气透视雾化，使边缘草叶平滑融入地平线，不与地貌产生硬割裂
@@ -281,10 +296,16 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
         trampleDirty = true;
     }
 
-    // 每帧重绘 G 通道（在场小猪/动物占格压扁下方草叶），衰减 R 通道，并同步实时方向光阴影贴图。
-    function update(dt, time, state, actorPositions, preset, shadowData = null, horizonColor = null) {
+    // 每帧重绘 G 通道（在场小猪/动物占格压扁下方草叶），衰减 R 通道，并同步实时阴影贴图与昼夜时变光色。
+    function update(dt, time, state, actorPositions, preset, shadowData = null, horizonColor = null, lightState = null) {
         uniforms.uTime.value = time;
         if (horizonColor) uniforms.uHorizonColor.value.copy(horizonColor);
+        if (lightState) {
+            uniforms.uNightMix.value = THREE.MathUtils.clamp(lightState.nightBlend ?? 0, 0, 1);
+            if (lightState.timeTint) uniforms.uTimeTint.value.copy(lightState.timeTint);
+            if (lightState.directTint) uniforms.uDirectTint.value.copy(lightState.directTint);
+            if (lightState.sunDir) uniforms.uSunDir.value.copy(lightState.sunDir);
+        }
         if (shadowData && shadowData.enabled && shadowData.map) {
             uniforms.uShadowEnabled.value = 1;
             uniforms.uShadowMap.value = shadowData.map;
@@ -358,6 +379,12 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
             mesh.count = Math.min(maxBlades, grassCountForTier(nextTier, isMobile, isSoftware));
         },
         getCount: () => mesh.count,
+        getLightState: () => ({
+            nightMix: uniforms.uNightMix.value,
+            timeTint: `#${uniforms.uTimeTint.value.getHexString()}`,
+            directTint: `#${uniforms.uDirectTint.value.getHexString()}`,
+            sunColor: `#${uniforms.uDirectTint.value.getHexString()}`
+        }),
         dispose() {
             scene.remove(mesh);
             bladeGeo.dispose();

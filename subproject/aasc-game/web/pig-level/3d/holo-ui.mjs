@@ -1,18 +1,18 @@
 // 3D 卡通浮动 UI：高饱和圆角描边卡片、3D 浮漂与视差、居中无限滑动关卡选择、精确包围盒拾取。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261124e';
-import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261124e';
+import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261124j';
+import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261124j';
 
-// 3 指针时钟圆盘环形配置表：外圈 24h 时段、中圈天气、内圈季节
+// 时钟圆盘环形配置表：外圈 24h 时段（唯一三角指针指示，无遮字）、中环 120° 晴阴雨、内环 90° 四季
 const DIAL_SIZE = 180;
 const DIAL_RINGS = [
     {
         key: 'timeSlot',
         prefix: 'time',
         title: '时段',
-        rIn: 61, rOut: 85, hitMid: 73,
-        handLen: 75, handWidth: 2.8, handColor: '#ff8a1f',
-        fillActive: '#ffe2ad', strokeActive: '#d97706',
+        rIn: 58, rOut: 89, hitMid: 78,
+        hasHand: true,
+        fillActive: 'rgba(255, 224, 150, 0.42)', strokeActive: '#d97706',
         items: TIME_SLOTS,
         labels: TIME_LABELS
     },
@@ -20,9 +20,9 @@ const DIAL_RINGS = [
         key: 'weather',
         prefix: 'weather',
         title: '天气',
-        rIn: 37, rOut: 61, hitMid: 49,
-        handLen: 53, handWidth: 3.6, handColor: '#2589d8',
-        fillActive: '#bfe4ff', strokeActive: '#2563eb',
+        rIn: 36, rOut: 58, hitMid: 47,
+        hasHand: false,
+        fillActive: '#9bd8ff', strokeActive: '#2563eb',
         items: WEATHERS,
         labels: WEATHER_LABELS
     },
@@ -30,9 +30,9 @@ const DIAL_RINGS = [
         key: 'season',
         prefix: 'season',
         title: '季节',
-        rIn: 14, rOut: 37, hitMid: 25.5,
-        handLen: 31, handWidth: 4.5, handColor: '#43a035',
-        fillActive: '#cdf2ba', strokeActive: '#2e7d32',
+        rIn: 14, rOut: 36, hitMid: 25,
+        hasHand: false,
+        fillActive: '#a7ec8c', strokeActive: '#2e7d32',
         items: SEASONS,
         labels: SEASON_LABELS
     }
@@ -44,6 +44,32 @@ DIAL_RINGS.forEach(ring => {
         DIAL_SECTOR_MAP.set(`${ring.prefix}-${val}`, { ring, val, idx });
     });
 });
+
+// UI 背景与按钮随天气（晴/阴/雨）、冬季及昼夜联动换肤配置表
+const WEATHER_UI_THEMES = {
+    sunny: {
+        cardFill: '#fff6e0', cardMid: '#f9ebc8', cardShade: '#f0d7a9', cardCurl: '#c49d62', cardStroke: '#6b4125',
+        btnFill: '#f2dab0', btnMid: '#dfbc85', btnShade: '#c49557', btnStroke: '#5d341a', btnFg: '#4a2b1a',
+        dialBg: '#fffaf0', dialRingBg: '#fff6e4', dialAltBg: '#f7ead0'
+    },
+    cloudy: {
+        cardFill: '#f2f6fb', cardMid: '#e3ebf4', cardShade: '#cfdbe8', cardCurl: '#9fb2c7', cardStroke: '#44576d',
+        btnFill: '#e1ebf5', btnMid: '#c6d6e8', btnShade: '#9db4cc', btnStroke: '#3b4e63', btnFg: '#28384a',
+        dialBg: '#f6f9fd', dialRingBg: '#eef4fa', dialAltBg: '#e2ebf5'
+    },
+    rain: {
+        cardFill: '#e8f5fc', cardMid: '#d5eaf6', cardShade: '#b8d7eb', cardCurl: '#7fa8c4', cardStroke: '#2b516b',
+        btnFill: '#cde8f6', btnMid: '#a5cfe8', btnShade: '#78accf', btnStroke: '#234a66', btnFg: '#1a384f',
+        dialBg: '#f0f8fd', dialRingBg: '#e4f2fa', dialAltBg: '#d4e9f7'
+    },
+    winterRain: {
+        cardFill: '#f2f8ff', cardMid: '#e2effc', cardShade: '#c7dff5', cardCurl: '#8eb1d1', cardStroke: '#355678',
+        btnFill: '#dcecfc', btnMid: '#b8d5f0', btnShade: '#8eb6db', btnStroke: '#2d4e6e', btnFg: '#1f3954',
+        dialBg: '#f6faff', dialRingBg: '#ebf4fe', dialAltBg: '#ddebfa'
+    }
+};
+
+const SVG_UI_NAMES = ['panel-parchment', 'btn-close', 'dial-pointer', 'center-knob', 'btn-pill'];
 
 const CARTOON_VERT = /* glsl */`
     uniform vec4 uSelfRect;
@@ -136,6 +162,90 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         guideText: '', showGuideHand: false
     };
     let lastDialDrawKey = '';
+    let lastSyncedSkinKey = '';
+    const svgImgCache = new Map();
+    const tintCanvas = document.createElement('canvas');
+    const tintCtx = tintCanvas.getContext('2d');
+
+    function getUiSkinKey() {
+        const wKey = lastUi.season === 'winter' && lastUi.weather === 'rain' ? 'winterRain' : (WEATHER_UI_THEMES[lastUi.weather] ? lastUi.weather : 'sunny');
+        return `${wKey}:${lastUi.timeSlot === 'night' ? 'night' : 'day'}`;
+    }
+
+    function getUiPalette() {
+        const wKey = lastUi.season === 'winter' && lastUi.weather === 'rain' ? 'winterRain' : (WEATHER_UI_THEMES[lastUi.weather] ? lastUi.weather : 'sunny');
+        const base = WEATHER_UI_THEMES[wKey];
+        if (lastUi.timeSlot !== 'night') return base;
+        return {
+            ...base,
+            cardStroke: '#304370',
+            btnStroke: '#2b3e68',
+            dialRingBg: wKey === 'sunny' ? '#f5efe6' : base.dialRingBg,
+            dialAltBg: wKey === 'sunny' ? '#e6ded2' : base.dialAltBg
+        };
+    }
+
+    function resolveTheme(themeKey) {
+        const base = THEMES[themeKey] || THEMES.cream;
+        const pal = getUiPalette();
+        if (themeKey === 'card') {
+            return { ...base, fill: pal.cardFill, shade: pal.cardShade, stroke: pal.cardStroke, fg: pal.btnFg, textStroke: pal.cardFill };
+        }
+        if (themeKey === 'cream') {
+            return { ...base, fill: pal.btnFill, shade: pal.btnShade, stroke: pal.btnStroke, fg: pal.btnFg, textStroke: pal.cardFill };
+        }
+        return base;
+    }
+
+    function getSvgImage(name) {
+        const img = svgImgCache.get(name);
+        return img && img.complete && img.naturalWidth > 0 ? img : null;
+    }
+
+    function drawTintedSvg(ctx, img, w, h, tintColor, alpha = 0.45) {
+        const wKey = lastUi.season === 'winter' && lastUi.weather === 'rain' ? 'winterRain' : lastUi.weather;
+        if (wKey === 'sunny' && lastUi.timeSlot !== 'night') {
+            ctx.drawImage(img, 0, 0, w, h);
+            return;
+        }
+        const tw = Math.max(32, Math.round(w * 2));
+        const th = Math.max(24, Math.round(h * 2));
+        if (tintCanvas.width !== tw || tintCanvas.height !== th) {
+            tintCanvas.width = tw; tintCanvas.height = th;
+        }
+        tintCtx.clearRect(0, 0, tw, th);
+        tintCtx.globalCompositeOperation = 'source-over';
+        tintCtx.drawImage(img, 0, 0, tw, th);
+        tintCtx.globalCompositeOperation = 'multiply';
+        tintCtx.fillStyle = tintColor;
+        tintCtx.fillRect(0, 0, tw, th);
+        tintCtx.globalCompositeOperation = 'destination-in';
+        tintCtx.drawImage(img, 0, 0, tw, th);
+        tintCtx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(img, 0, 0, w, h);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(tintCanvas, 0, 0, w, h);
+        ctx.restore();
+    }
+
+    // 启动时仅一次性并行预加载 5 个静态 SVG 矢量皮肤（切换天气或首次打开弹窗时零异步重建）
+    Promise.all(SVG_UI_NAMES.map(name => new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = `./assets/ui/${name}.svg?v=20261124j`;
+        svgImgCache.set(name, img);
+    }))).then(results => {
+        if (!results.some(Boolean)) return;
+        lastDialDrawKey = '';
+        for (const wg of allSettingsWidgets) wg.lastKey = '';
+        if (settingsOpen) {
+            lastSyncedSkinKey = '';
+            layout();
+            sync(lastUi);
+        }
+    });
 
     function makeTextCanvas(w, h) {
         const scale = Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 2)));
@@ -152,8 +262,30 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         return { canvas, ctx, tex, scale };
     }
 
-    function drawCartoonBox(ctx, w, h, themeKey) {
-        const t = THEMES[themeKey] || THEMES.cream;
+    function drawCartoonBox(ctx, w, h, themeKey, widgetName = '') {
+        const t = resolveTheme(themeKey);
+        if (widgetName === 'clock-dial' || widgetName === 'settings-title') return t;
+        if (widgetName === 'settingsBg') {
+            const svgCard = getSvgImage('panel-parchment');
+            if (svgCard) {
+                drawTintedSvg(ctx, svgCard, w, h, t.fill, lastUi.timeSlot === 'night' ? 0.55 : 0.45);
+                return t;
+            }
+        }
+        if (widgetName === 'settings-close') {
+            const svgClose = getSvgImage('btn-close');
+            if (svgClose) {
+                ctx.drawImage(svgClose, 0, 0, w, h);
+                return t;
+            }
+        }
+        if (themeKey === 'cream' && (widgetName.startsWith('quality-') || ['music', 'sfx', 'time-cycle', 'cam-reset', 'toggle-2d-controls', 'view-2d'].includes(widgetName))) {
+            const svgPill = getSvgImage('btn-pill');
+            if (svgPill) {
+                drawTintedSvg(ctx, svgPill, w, h, t.fill, lastUi.timeSlot === 'night' ? 0.62 : 0.52);
+                return t;
+            }
+        }
         const pad = 2.5;
         const r = Math.min(18, Math.min(w, h) * 0.42);
         const bw = w - pad * 2, bh = h - pad * 2;
@@ -239,7 +371,8 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
             drawText(nextText, nextSub = '', extraDraw = null, forceTheme = null) {
                 const useTheme = forceTheme || this.theme;
                 const isAct = uniforms.uActive.value > 0.5 ? 1 : 0;
-                const key = `${nextText}|${nextSub}|${this.w}x${this.h}|${useTheme}|${isAct}`;
+                const skin = getUiSkinKey();
+                const key = `${nextText}|${nextSub}|${this.w}x${this.h}|${useTheme}|${isAct}|${skin}`;
                 if (key === this.lastKey && !extraDraw) return;
                 this.lastKey = key;
                 const { canvas, ctx, tex, scale } = this.textObj;
@@ -251,7 +384,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
                 ctx.clearRect(0, 0, tw, th);
                 ctx.save();
                 ctx.scale(scale, scale);
-                const t = drawCartoonBox(ctx, this.w, this.h, useTheme);
+                const t = drawCartoonBox(ctx, this.w, this.h, useTheme, this.name);
                 if (extraDraw) {
                     extraDraw(ctx, this.w, this.h, t);
                 } else {
@@ -366,87 +499,129 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
     function drawClockDial(livePhase = null) {
         const phase = Number.isFinite(livePhase) ? livePhase : (Number.isFinite(lastUi.dayPhase) ? lastUi.dayPhase : 0.16);
         const phaseStep = Math.round(((phase % 1 + 1) % 1) * 180);
-        const key = `${clockDial.w}|${lastUi.season}|${lastUi.weather}|${lastUi.timeSlot}|${phaseStep}|${lastUi.timeCycle}`;
+        const skin = getUiSkinKey();
+        const key = `${clockDial.w}|${skin}|${lastUi.season}|${lastUi.weather}|${lastUi.timeSlot}|${phaseStep}|${lastUi.timeCycle}`;
         if (key === lastDialDrawKey) return;
         lastDialDrawKey = key;
+
+        const pal = getUiPalette();
+        const svgPtr = getSvgImage('dial-pointer');
+        const svgKnob = getSvgImage('center-knob');
 
         clockDial.drawText('', '', (ctx, cw, ch) => {
             ctx.save();
             ctx.scale(cw / DIAL_SIZE, ch / DIAL_SIZE);
             const cx = DIAL_SIZE / 2, cy = DIAL_SIZE / 2;
-            // 外表壳与表盘底面
+
+            // 内/中两环底圆与细密外圈刻度盘框（参考 env_modal_one_hand_dial_concept）
             ctx.beginPath();
-            ctx.arc(cx, cy, 86.5, 0, Math.PI * 2);
-            ctx.fillStyle = '#fffaf0';
+            ctx.arc(cx, cy, 67, 0, Math.PI * 2);
+            ctx.fillStyle = pal.dialBg;
             ctx.fill();
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = '#623a22';
+            ctx.lineWidth = 2.4;
+            ctx.strokeStyle = pal.cardStroke;
             ctx.stroke();
 
-            // 逐环绘制 4 个扇区（12点=0, 3点=1, 6点=2, 9点=3）
+            // 先绘制内环（季节 90° 四等分）与中环（天气 120° 三等分），无指针遮挡
             for (const ring of DIAL_RINGS) {
+                if (ring.key === 'timeSlot') continue;
+                const n = ring.items.length;
+                const step = (Math.PI * 2) / n;
                 const curVal = lastUi[ring.key];
                 ring.items.forEach((val, idx) => {
-                    const cwA = idx * Math.PI * 0.5;
-                    const a0 = cwA - Math.PI * 0.75;
-                    const a1 = cwA - Math.PI * 0.25;
+                    const cwA = idx * step;
+                    const a0 = cwA - Math.PI * 0.5 - step * 0.5;
+                    const a1 = cwA - Math.PI * 0.5 + step * 0.5;
                     const act = val === curVal;
                     ctx.beginPath();
                     ctx.arc(cx, cy, ring.rOut, a0, a1);
                     ctx.arc(cx, cy, ring.rIn, a1, a0, true);
                     ctx.closePath();
-                    ctx.fillStyle = act ? ring.fillActive : (idx % 2 === 0 ? '#fff6e4' : '#f7ead0');
+                    ctx.fillStyle = act ? ring.fillActive : (idx % 2 === 0 ? pal.dialRingBg : pal.dialAltBg);
                     ctx.fill();
-                    ctx.lineWidth = act ? 1.8 : 1;
-                    ctx.strokeStyle = act ? ring.strokeActive : 'rgba(130, 88, 52, 0.35)';
+                    ctx.lineWidth = act ? 1.8 : 1.1;
+                    ctx.strokeStyle = act ? ring.strokeActive : pal.cardStroke;
                     ctx.stroke();
 
                     const lx = cx + Math.sin(cwA) * ring.hitMid;
                     const ly = cy - Math.cos(cwA) * ring.hitMid;
-                    ctx.font = `800 ${ring.rOut - ring.rIn >= 23 ? 12 : 11}px system-ui, "Noto Sans SC", sans-serif`;
+                    ctx.font = `800 ${ring.key === 'weather' ? 12.5 : 11.5}px system-ui, "Noto Sans SC", sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillStyle = act ? '#2c1709' : '#5e3c24';
+                    ctx.fillStyle = act ? '#1f140c' : pal.btnFg;
                     ctx.fillText(ring.labels[val] || val, lx, ly + 0.5);
                 });
             }
 
-            // 按最外层细长到最内层短粗叠加绘制 3 根表盘指针，确保同角度也能清晰分辨
-            for (const ring of DIAL_RINGS) {
-                const idx = Math.max(0, ring.items.indexOf(lastUi[ring.key]));
-                const cwA = ring.key === 'timeSlot' ? phase * Math.PI * 2 : idx * Math.PI * 0.5;
-                const ex = cx + Math.sin(cwA) * ring.handLen;
-                const ey = cy - Math.cos(cwA) * ring.handLen;
-                ctx.lineCap = 'round';
+            // 绘制细密表圈刻度线（r = 59..66.5）
+            ctx.save();
+            ctx.strokeStyle = pal.cardStroke;
+            for (let tIdx = 0; tIdx < 48; tIdx++) {
+                const a = (tIdx / 48) * Math.PI * 2;
+                const major = tIdx % 12 === 0;
+                const mid = tIdx % 4 === 0;
+                const r0 = major ? 58.5 : mid ? 60.5 : 62;
+                ctx.lineWidth = major ? 1.8 : 1;
                 ctx.beginPath();
-                ctx.moveTo(cx, cy);
-                ctx.lineTo(ex, ey);
-                ctx.lineWidth = ring.handWidth + 2.4;
-                ctx.strokeStyle = 'rgba(255, 252, 244, 0.92)';
+                ctx.moveTo(cx + Math.sin(a) * r0, cy - Math.cos(a) * r0);
+                ctx.lineTo(cx + Math.sin(a) * 66.5, cy - Math.cos(a) * 66.5);
                 ctx.stroke();
-
-                ctx.beginPath();
-                ctx.moveTo(cx, cy);
-                ctx.lineTo(ex, ey);
-                ctx.lineWidth = ring.handWidth;
-                ctx.strokeStyle = ring.handColor;
-                ctx.stroke();
-
-                ctx.beginPath();
-                ctx.arc(ex, ey, Math.max(2.2, ring.handWidth * 0.68), 0, Math.PI * 2);
-                ctx.fillStyle = ring.handColor;
-                ctx.fill();
             }
+            ctx.restore();
 
-            // 中心表冠轴帽（点击切换天光流动/锁定）
-            ctx.beginPath();
-            ctx.arc(cx, cy, 13, 0, Math.PI * 2);
-            ctx.fillStyle = lastUi.timeCycle ? '#ffd04d' : '#e5d4b7';
-            ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#623a22';
-            ctx.stroke();
-            ctx.font = '800 10px system-ui, "Noto Sans SC", sans-serif';
+            // 外圈 24h 时段标签（早/中/晚/夜 位于刻度环外侧 r=78，完全不被指针与扇区边框压字）
+            const timeRing = DIAL_RINGS[0];
+            timeRing.items.forEach((val, idx) => {
+                const cwA = idx * Math.PI * 0.5;
+                const lx = cx + Math.sin(cwA) * timeRing.hitMid;
+                const ly = cy - Math.cos(cwA) * timeRing.hitMid;
+                const act = val === lastUi.timeSlot;
+                ctx.font = `800 ${act ? 14 : 13}px system-ui, "Noto Sans SC", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                if (act) {
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = pal.cardFill;
+                    ctx.strokeText(timeRing.labels[val] || val, lx, ly + 0.5);
+                }
+                ctx.fillStyle = act ? '#d97706' : pal.btnFg;
+                ctx.fillText(timeRing.labels[val] || val, lx, ly + 0.5);
+            });
+
+            // 外圈唯一 24h 金橙三角指针（沿刻度带 r=57..71 绕圆心旋转，指向当前时段，绝不遮挡任何汉字）
+            const ptrAngle = phase * Math.PI * 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(ptrAngle);
+            if (svgPtr) {
+                ctx.drawImage(svgPtr, -9, -71, 18, 17);
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(0, -70);
+                ctx.lineTo(8, -56);
+                ctx.lineTo(-8, -56);
+                ctx.closePath();
+                ctx.fillStyle = '#ff9d2e';
+                ctx.fill();
+                ctx.lineWidth = 1.8;
+                ctx.strokeStyle = '#5d2b14';
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 圆心金色纽扣底托（优先使用 center-knob.svg）+ 动态“流/定”字
+            if (svgKnob) {
+                ctx.drawImage(svgKnob, cx - 15, cy - 15, 30, 30);
+            } else {
+                ctx.beginPath();
+                ctx.arc(cx, cy, 13.5, 0, Math.PI * 2);
+                ctx.fillStyle = lastUi.timeCycle ? '#ffd04d' : '#d8ccb8';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = pal.cardStroke;
+                ctx.stroke();
+            }
+            ctx.font = '800 10.5px system-ui, "Noto Sans SC", sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#4a2b1a';
@@ -466,7 +641,8 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         const ring = DIAL_RINGS.find(r => dist >= r.rIn && dist <= r.rOut + 4);
         if (!ring) return null;
         const cwAngle = (Math.atan2(dx, dy) + Math.PI * 2) % (Math.PI * 2);
-        const idx = Math.floor(((cwAngle + Math.PI * 0.25) % (Math.PI * 2)) / (Math.PI * 0.5)) % 4;
+        const step = (Math.PI * 2) / ring.items.length;
+        const idx = Math.floor(((cwAngle + step * 0.5) % (Math.PI * 2)) / step) % ring.items.length;
         return { kind: 'sector', ring, val: ring.items[idx] };
     }
 
@@ -525,25 +701,35 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         lblProgress.setSize(Math.max(80, botW - sideBtnW * 2 - 28), 24); lblProgress.setPos(botCx, bRow3);
         btnReset.setSize(sideBtnW, 24); btnReset.setPos(botCx + botW / 2 - 10 - sideBtnW / 2, bRow3);
 
-        // 居中自适应环境弹窗：标准竖排（大圆盘在上方） / 矮横屏双栏（左表盘右按钮）
+        // 居中自适应环境弹窗：桌面端竖排使用 462×462 大号表盘，移动端与矮横屏等比缩放不溢出
         const shortWide = w >= 540 && h < 480;
-        const setW = shortWide ? Math.min(510, w - 28) : Math.min(348, w - 20);
-        const setH = shortWide ? Math.min(312, h - 20) : Math.min(454, h - 24);
+        const setW = shortWide ? Math.min(760, w - 20) : Math.min(540, w - 16);
+        const setH = shortWide ? Math.min(366, h - 16) : Math.min(696, h - 20);
         const setCx = w / 2, setCy = h / 2;
         settingsBg.setSize(setW, setH);
         settingsBg.setPos(setCx, setCy);
         settingsBg.drawText('', '');
-        settingsTitle.setSize(setW - 76, 30);
-        settingsTitle.setPos(setCx - 20, setCy + setH / 2 - 23);
-        settingsClose.setPos(setCx + setW / 2 - 28, setCy + setH / 2 - 23);
+        settingsTitle.setSize(setW - 120, 28);
+        settingsTitle.setPos(setCx, setCy + setH / 2 - 24);
+        settingsTitle.drawText('⚙ 环境与时间设置', '', (ctx, tw, th) => {
+            if (!getSvgImage('panel-parchment')) drawCartoonBox(ctx, tw, th, 'gold');
+            ctx.font = '800 14px system-ui, "Noto Sans SC", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#4f2c08';
+            ctx.fillText('⚙ 环境与时间设置', tw / 2, th / 2);
+        });
+        settingsClose.setSize(34, 34);
+        settingsClose.setPos(setCx + setW / 2 - 24, setCy + setH / 2 - 24);
+        settingsClose.drawText('✕', '');
         if (shortWide) {
-            const dialSize = Math.min(212, setH - 64);
-            const colX = setCx + setW * 0.23;
-            const colW = setW * 0.45;
+            const dialSize = Math.min(462, setH - 54, Math.floor(setW * 0.45));
+            const colX = setCx + setW * 0.24;
+            const colW = setW * 0.44;
             const qW = Math.floor((colW - 12) / 4);
             const pairW = Math.floor((colW - 8) / 2);
             clockDial.setSize(dialSize, dialSize);
-            clockDial.setPos(setCx - setW * 0.23, setCy - 18);
+            clockDial.setPos(setCx - setW * 0.24, setCy - 18);
             qualityBtns.forEach((b, i) => {
                 b.setSize(qW, 28);
                 b.setPos(colX + (i - 1.5) * (qW + 4), setCy + 64);
@@ -557,25 +743,25 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
             btnToggle2d.setPos(colX - halfGap, setCy - 68);
             btnView2d.setPos(colX + halfGap, setCy - 68);
         } else {
-            const dialSize = Math.min(232, setW - 44, Math.max(180, setH - 210));
-            const dialCy = setCy + setH / 2 - 44 - dialSize / 2;
+            const dialSize = Math.min(462, setW - 24, setH - 216);
+            const dialCy = setCy + setH / 2 - 46 - dialSize / 2;
             const dialBot = dialCy - dialSize / 2;
             const qW = Math.floor((setW - 44) / 4);
             const pairW = Math.floor((setW - 34) / 2);
             clockDial.setSize(dialSize, dialSize);
             clockDial.setPos(setCx, dialCy);
             qualityBtns.forEach((b, i) => {
-                b.setSize(qW, 32);
-                b.setPos(setCx + (i - 1.5) * (qW + 4), dialBot - 24);
+                b.setSize(qW, 30);
+                b.setPos(setCx + (i - 1.5) * (qW + 4), dialBot - 22);
             });
-            [btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d].forEach(b => b.setSize(pairW, 32));
+            [btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d].forEach(b => b.setSize(pairW, 30));
             const halfGap = (pairW + 10) / 2;
-            btnMusic.setPos(setCx - halfGap, dialBot - 62);
-            btnSfx.setPos(setCx + halfGap, dialBot - 62);
-            btnTime.setPos(setCx - halfGap, dialBot - 100);
-            btnCamReset.setPos(setCx + halfGap, dialBot - 100);
-            btnToggle2d.setPos(setCx - halfGap, dialBot - 138);
-            btnView2d.setPos(setCx + halfGap, dialBot - 138);
+            btnMusic.setPos(setCx - halfGap, dialBot - 58);
+            btnSfx.setPos(setCx + halfGap, dialBot - 58);
+            btnTime.setPos(setCx - halfGap, dialBot - 94);
+            btnCamReset.setPos(setCx + halfGap, dialBot - 94);
+            btnToggle2d.setPos(setCx - halfGap, dialBot - 130);
+            btnView2d.setPos(setCx + halfGap, dialBot - 130);
         }
         lastDialDrawKey = '';
         drawClockDial();
@@ -748,6 +934,28 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
 
     function sync(uiData) {
         Object.assign(lastUi, uiData);
+        const skinNow = getUiSkinKey();
+        if (skinNow !== lastSyncedSkinKey) {
+            lastSyncedSkinKey = skinNow;
+            for (const wg of [topBg, bottomBg, btnPrevLevel, btnNextLevel, btnSettings, btnPrevStep, btnNextStep, btnUndo, btnReset, settingsBg, settingsTitle, settingsClose, btnCamReset, btnView2d, pickerBg]) {
+                if (wg === settingsTitle) {
+                    wg.drawText('⚙ 环境与时间设置', '', (ctx, tw, th) => {
+                        if (!getSvgImage('panel-parchment')) drawCartoonBox(ctx, tw, th, 'gold');
+                        ctx.font = '800 14px system-ui, "Noto Sans SC", sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#4f2c08';
+                        ctx.fillText('⚙ 环境与时间设置', tw / 2, th / 2);
+                    });
+                } else if (wg === pickerBg) {
+                    lastPickerBgKey = '';
+                    drawPickerCard(pickerBg.w, pickerBg.h);
+                } else {
+                    wg.drawText(wg.text, wg.subtext);
+                }
+            }
+            if (levelPickerOpen) layoutPickerCells();
+        }
         const pos = levels.indexOf(String(lastUi.levelId));
         btnPrevLevel.uniforms.uDisabled.value = pos <= 0 ? 1 : 0;
         btnNextLevel.uniforms.uDisabled.value = pos >= levels.length - 1 ? 1 : 0;
@@ -996,7 +1204,8 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         if (dialSector) {
             if (!clockDial.mesh.visible) return null;
             const s = clockDial.w / DIAL_SIZE;
-            const cwA = dialSector.idx * Math.PI * 0.5;
+            const step = (Math.PI * 2) / dialSector.ring.items.length;
+            const cwA = dialSector.idx * step;
             const ux = clockDial.mesh.position.x + Math.sin(cwA) * dialSector.ring.hitMid * s;
             const uy = clockDial.mesh.position.y + Math.cos(cwA) * dialSector.ring.hitMid * s;
             return { x: ux, y: viewH - uy };
@@ -1031,9 +1240,12 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         handleWheel,
         getButtonScreen,
         getSafeMargins,
+        getUiSkinKey,
+        getClockDialSize: () => ({ w: clockDial.w, h: clockDial.h }),
         hasModalBackdrop: () => modalBackdrop.visible,
         setVisible(v) { root.visible = Boolean(v); },
         dispose() {
+            svgImgCache.clear();
             for (const d of disposables) d?.dispose?.();
         }
     };

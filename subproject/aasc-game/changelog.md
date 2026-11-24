@@ -1,3 +1,20 @@
+- ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124j`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 与新增 `assets/ui/*.svg` 共 19 个更新文件，并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
+- ✅ [2026-11-24] 严格对齐概念图的物件细节、布局与氛围色彩（`?v=20261124j`）
+  - `web/pig-level/3d/scenery.mjs`：重构棋盘分段粗圆木围框（四角立柱帽+冬季雪顶+散落卵石）、粗柱木栅栏（右前短段围合、左前保留开阔池塘豁口，冬季/黄昏点亮下垂暖黄灯串与顶部积雪）、圆木垒墙人字顶对称双暖窗高脚木屋、中偏右山脊风车、左前扩大带缺口荷叶荷花池塘、西北角三簇灌木与条纹围巾笑脸雪人、四角三层深青叠雪松与樱花树（统一添加绘本深色 `outlineOf` 描边）及走廊化聚簇花丛。
+  - `web/pig-level/3d/presets.mjs`、`web/pig-level/3d/environment.mjs`：升级春季纯樱粉花冠与柔和乳白晨雾天际、冬季粉紫暮雪天空（`#8c8ec4` / `#cdb9dc`）及深夜星月深靛夜空（`#0f1c47` / `#243875`）。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/{design,spec}/pig-game-3d.md`、`docs/task/20261124_场景丰富草地时变与462表盘.md`：统一升级 `?v=20261124j`，完整验证通过（`test:pig-web` `119 / 119`、`test:pig-animation` `1 / 1`、`test:pig-3d` `5 / 5`）。
+- ✅ [2026-11-24] 丰富概念图场景细节、写实 24h 日光光谱、草地/小猪昼夜追光与 `462×462` 环境时钟表盘（`?v=20261124i`）
+  - `web/pig-level/3d/scenery.mjs`：新增棋盘原木围边与冬季顶雪条、左前荷花池塘（卵石池沿、荷叶与荷花，冬转冰蓝、夜转深蓝）、路旁绿篱灌木丛与雪帽、冬季/夜晚栅栏暖黄串灯珠与高脚木屋双面暖黄发光窗户，并让未受光照的 `flowerMat` 同步随夜色与夕照压暗过渡。
+  - `web/pig-level/3d/environment.mjs`、`web/pig-level/3d/grass.mjs`：新增 24 小时日光光谱关键帧表 `SOLAR_24H_STOPS` / `sampleSolarCycle(dayPhase)`（日出桃金 `#ffb36b` → 正午纯白 `#fffdf6` → 夕照橘红 `#ff7d3e` → 午夜银蓝月光 `#9ec2ff`），大幅收敛夜晚漫反射补光（`hemiLight ~0.44`、`moonLight ~0.24`），并由草叶着色器接入 `uTimeTint` / `uDirectTint` / `uNightMix` / `uSunDir`，使草地随早/中/晚/夜真实演变并在月夜呈现深靛暗调与叶尖清冷银辉。
+  - `web/pig-level/3d/models.mjs`、`web/pig-level/3d/view.mjs`：通过 `models.setLightState(lightState)` 每帧将太阳/月亮实时方向 `uLightDir`、24h 光色 `uLightColor` 与 `uNightMix` 传入角色水粉着色器 `toonMat`，保持经典水粉双阶哑光与 `topRim` 柔和表现，仅在明暗交界线（`ndl ≈ 0.16` 附近）叠加高斯衰减暖桃粉次表面散射带（SSS）。
+  - `web/pig-level/3d/holo-ui.mjs`：桌面端居中环境设置弹窗扩大至 `540×696`，中心外圈单指针 24h 时钟表盘放大至 `462×462`，手机竖屏与矮横屏同步自适应缩放。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/{design,spec}/pig-game-3d.md`、`docs/task/20261124_场景丰富草地时变与462表盘.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261124i` 并通过完整验证（`test:pig-web` `119 / 119`、`test:pig-animation` `1 / 1`、`test:pig-3d` `5 / 5`）。
+- ✅ [2026-11-24] 精简天气为晴阴雨三档、落地 SVG 矢量 UI 皮肤与天气换肤并修复夜间月光照明（`?v=20261124f`）
+  - `web/pig-level/3d/presets.mjs`、`web/pig-level/3d/audio.mjs`：将 `WEATHERS` 精简为 `['sunny', 'cloudy', 'rain']`（晴/阴/雨，消除“雪”与冬季重叠）；`season === 'winter' && weather === 'rain'` 时降水自动呈现为冬雪飘落（`precip: 'snow'`、`snowCover >= 0.85`、无雷电），音频同步按冬季雪景氛围调度。
+  - `web/pig-level/assets/ui/{panel-parchment,btn-close,dial-pointer,center-knob,btn-pill}.svg`、`scripts/serve-pig-level.js`、`web/pig-level/3d/holo-ui.mjs`：落地 5 个纯矢量 SVG 皮肤并开放 `image/svg+xml` 路由；居中环境弹窗改用羊皮纸 SVG 皮肤，时钟圆盘采用通用 `N` 等分公式（外圈 24h 时段仅保留 1 根沿刻度外环旋转的 `dial-pointer.svg` 三角指针、中环 120° 晴阴雨无指针、内环 90° 四季无指针，完全不压汉字），并新增 `WEATHER_UI_THEMES` + 同步着色让全息 UI 卡片与按钮随天气/冬雪/夜晚自动换肤。
+  - `web/pig-level/3d/environment.mjs`：修复夜晚主平行光方向平滑转向天空月亮 `uMoonDir` 方位、压暗夜晚双光对冲过曝并保留柔和冷蓝夜空漫反射补光；天空着色器增加 `sunVis` 在夜晚彻底隐藏白天太阳光斑。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/20261124_SVG皮肤表盘精简天气与月光修复.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261124f`、更新规格/任务文档与全部自测断言（`test:pig-web` 119/119、`test:pig-animation` 1/1、`test:pig-3d` 5/5 全部通过）。
 - ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124e`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-24] 将环境设置面板升级为居中弹出的大号全息弹窗（`?v=20261124e`）
