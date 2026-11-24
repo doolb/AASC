@@ -1,7 +1,7 @@
 // 3D 卡通浮动 UI：高饱和圆角描边卡片、3D 浮漂与视差、居中无限滑动关卡选择、精确包围盒拾取。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261124d';
-import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261124d';
+import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261124e';
+import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261124e';
 
 // 3 指针时钟圆盘环形配置表：外圈 24h 时段、中圈天气、内圈季节
 const DIAL_SIZE = 180;
@@ -310,17 +310,20 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
     const lblProgress = createPanel({ name: 'progress', w: 96, h: 24, z: 1, theme: 'cream', text: '0 / 0', fontSize: 12 });
     const btnReset = createPanel({ name: 'reset', w: 74, h: 24, z: 1, theme: 'cream', action: 'reset', text: '↻ 重开', fontSize: 12 });
 
-    const settingsBg = createPanel({ name: 'settingsBg', w: 244, h: 326, z: 4, theme: 'card' });
-    const clockDial = createPanel({ name: 'clock-dial', w: DIAL_SIZE, h: DIAL_SIZE, z: 5, theme: 'cream', action: 'clockDial', text: '' });
+    // 居中弹出式环境与时间设置弹窗（放大表盘与按钮并带全屏遮罩）
+    const settingsBg = createPanel({ name: 'settingsBg', w: 348, h: 454, z: 8, theme: 'card', action: 'settingsModal', text: '' });
+    const settingsTitle = createPanel({ name: 'settings-title', w: 260, h: 30, z: 9, theme: 'gold', text: '⚙ 环境与时间设置', fontSize: 14 });
+    const settingsClose = createPanel({ name: 'settings-close', w: 36, h: 30, z: 9, theme: 'danger', action: 'toggleSettings', text: '✕', fontSize: 15 });
+    const clockDial = createPanel({ name: 'clock-dial', w: 232, h: 232, z: 9, theme: 'cream', action: 'clockDial', text: '' });
     const qualityBtns = [
         { q: 'auto', t: '自动' }, { q: 'high', t: '高' }, { q: 'medium', t: '中' }, { q: 'low', t: '低' }
-    ].map(it => createPanel({ name: `quality-${it.q}`, w: 50, h: 26, z: 5, theme: 'cream', action: 'quality', payload: it.q, text: it.t, fontSize: 12 }));
-    const btnMusic = createPanel({ name: 'music', w: 102, h: 26, z: 5, theme: 'green', action: 'music', text: '♪ 音乐:开', fontSize: 12 });
-    const btnSfx = createPanel({ name: 'sfx', w: 102, h: 26, z: 5, theme: 'green', action: 'sfx', text: '🔊 音效:开', fontSize: 12 });
-    const btnTime = createPanel({ name: 'time-cycle', w: 102, h: 26, z: 5, theme: 'sky', action: 'timeCycle', text: '☀ 天光:流', fontSize: 12 });
-    const btnCamReset = createPanel({ name: 'cam-reset', w: 102, h: 26, z: 5, theme: 'cream', action: 'camReset', text: '⌖ 复位视角', fontSize: 12 });
-    const btnToggle2d = createPanel({ name: 'toggle-2d-controls', w: 102, h: 26, z: 5, theme: 'cream', action: 'toggle2dControls', text: '☰ 2D控件', fontSize: 12 });
-    const btnView2d = createPanel({ name: 'view-2d', w: 102, h: 26, z: 5, theme: 'cream', action: 'view2d', text: '回2D原版', fontSize: 12 });
+    ].map(it => createPanel({ name: `quality-${it.q}`, w: 74, h: 32, z: 9, theme: 'cream', action: 'quality', payload: it.q, text: it.t, fontSize: 13 }));
+    const btnMusic = createPanel({ name: 'music', w: 152, h: 32, z: 9, theme: 'green', action: 'music', text: '♪ 音乐:开', fontSize: 13 });
+    const btnSfx = createPanel({ name: 'sfx', w: 152, h: 32, z: 9, theme: 'green', action: 'sfx', text: '🔊 音效:开', fontSize: 13 });
+    const btnTime = createPanel({ name: 'time-cycle', w: 152, h: 32, z: 9, theme: 'sky', action: 'timeCycle', text: '☀ 天光:流', fontSize: 13 });
+    const btnCamReset = createPanel({ name: 'cam-reset', w: 152, h: 32, z: 9, theme: 'cream', action: 'camReset', text: '⌖ 复位视角', fontSize: 13 });
+    const btnToggle2d = createPanel({ name: 'toggle-2d-controls', w: 152, h: 32, z: 9, theme: 'cream', action: 'toggle2dControls', text: '☰ 2D控件', fontSize: 13 });
+    const btnView2d = createPanel({ name: 'view-2d', w: 152, h: 32, z: 9, theme: 'cream', action: 'view2d', text: '回2D原版', fontSize: 13 });
 
     // 居中平滑滑动关卡选择器（有边界不循环）
     const pickerBg = createPanel({ name: 'pickerBg', w: 300, h: 256, z: 8, theme: 'card', action: 'pickerScroll', text: '' });
@@ -353,7 +356,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
     const guideBanner = createPanel({ name: 'guide-banner', w: 252, h: 34, z: 6, theme: 'gold', action: null, text: '', fontSize: 13 });
     guideBanner.setVisible(false);
 
-    const allSettingsWidgets = [settingsBg, clockDial, ...qualityBtns, btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d];
+    const allSettingsWidgets = [settingsBg, settingsTitle, settingsClose, clockDial, ...qualityBtns, btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d];
     const allPickerWidgets = [pickerBg, pickerTitle, pickerClose, pickerPrev, pickerNext, ...pickerCells];
     const allModalWidgets = [modalBg, modalBtn1, modalBtn2];
 
@@ -363,12 +366,14 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
     function drawClockDial(livePhase = null) {
         const phase = Number.isFinite(livePhase) ? livePhase : (Number.isFinite(lastUi.dayPhase) ? lastUi.dayPhase : 0.16);
         const phaseStep = Math.round(((phase % 1 + 1) % 1) * 180);
-        const key = `${lastUi.season}|${lastUi.weather}|${lastUi.timeSlot}|${phaseStep}|${lastUi.timeCycle}`;
+        const key = `${clockDial.w}|${lastUi.season}|${lastUi.weather}|${lastUi.timeSlot}|${phaseStep}|${lastUi.timeCycle}`;
         if (key === lastDialDrawKey) return;
         lastDialDrawKey = key;
 
         clockDial.drawText('', '', (ctx, cw, ch) => {
-            const cx = cw / 2, cy = ch / 2;
+            ctx.save();
+            ctx.scale(cw / DIAL_SIZE, ch / DIAL_SIZE);
+            const cx = DIAL_SIZE / 2, cy = DIAL_SIZE / 2;
             // 外表壳与表盘底面
             ctx.beginPath();
             ctx.arc(cx, cy, 86.5, 0, Math.PI * 2);
@@ -446,14 +451,16 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#4a2b1a';
             ctx.fillText(lastUi.timeCycle ? '流' : '定', cx, cy + 0.5);
+            ctx.restore();
         });
     }
 
     function resolveClockSector(clientX, clientY) {
+        const s = clockDial.w / DIAL_SIZE;
         const ux = clientX;
         const uy = viewH - clientY;
-        const dx = ux - clockDial.mesh.position.x;
-        const dy = uy - clockDial.mesh.position.y;
+        const dx = (ux - clockDial.mesh.position.x) / s;
+        const dy = (uy - clockDial.mesh.position.y) / s;
         const dist = Math.hypot(dx, dy);
         if (dist <= 13.5) return { kind: 'center' };
         const ring = DIAL_RINGS.find(r => dist >= r.rIn && dist <= r.rOut + 4);
@@ -518,22 +525,60 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         lblProgress.setSize(Math.max(80, botW - sideBtnW * 2 - 28), 24); lblProgress.setPos(botCx, bRow3);
         btnReset.setSize(sideBtnW, 24); btnReset.setPos(botCx + botW / 2 - 10 - sideBtnW / 2, bRow3);
 
-        const setW = 244, setH = 326;
-        const setCx = Math.min(w - setW / 2 - 10, topCx + topW / 2 - setW / 2);
-        const setCy = Math.max(setH / 2 + 10, Math.min(h - setH / 2 - 10, topY - topH / 2 - 8 - setH / 2));
+        // 居中自适应环境弹窗：标准竖排（大圆盘在上方） / 矮横屏双栏（左表盘右按钮）
+        const shortWide = w >= 540 && h < 480;
+        const setW = shortWide ? Math.min(510, w - 28) : Math.min(348, w - 20);
+        const setH = shortWide ? Math.min(312, h - 20) : Math.min(454, h - 24);
+        const setCx = w / 2, setCy = h / 2;
         settingsBg.setSize(setW, setH);
         settingsBg.setPos(setCx, setCy);
         settingsBg.drawText('', '');
-        clockDial.setPos(setCx, setCy + 64);
+        settingsTitle.setSize(setW - 76, 30);
+        settingsTitle.setPos(setCx - 20, setCy + setH / 2 - 23);
+        settingsClose.setPos(setCx + setW / 2 - 28, setCy + setH / 2 - 23);
+        if (shortWide) {
+            const dialSize = Math.min(212, setH - 64);
+            const colX = setCx + setW * 0.23;
+            const colW = setW * 0.45;
+            const qW = Math.floor((colW - 12) / 4);
+            const pairW = Math.floor((colW - 8) / 2);
+            clockDial.setSize(dialSize, dialSize);
+            clockDial.setPos(setCx - setW * 0.23, setCy - 18);
+            qualityBtns.forEach((b, i) => {
+                b.setSize(qW, 28);
+                b.setPos(colX + (i - 1.5) * (qW + 4), setCy + 64);
+            });
+            [btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d].forEach(b => b.setSize(pairW, 28));
+            const halfGap = (pairW + 8) / 2;
+            btnMusic.setPos(colX - halfGap, setCy + 20);
+            btnSfx.setPos(colX + halfGap, setCy + 20);
+            btnTime.setPos(colX - halfGap, setCy - 24);
+            btnCamReset.setPos(colX + halfGap, setCy - 24);
+            btnToggle2d.setPos(colX - halfGap, setCy - 68);
+            btnView2d.setPos(colX + halfGap, setCy - 68);
+        } else {
+            const dialSize = Math.min(232, setW - 44, Math.max(180, setH - 210));
+            const dialCy = setCy + setH / 2 - 44 - dialSize / 2;
+            const dialBot = dialCy - dialSize / 2;
+            const qW = Math.floor((setW - 44) / 4);
+            const pairW = Math.floor((setW - 34) / 2);
+            clockDial.setSize(dialSize, dialSize);
+            clockDial.setPos(setCx, dialCy);
+            qualityBtns.forEach((b, i) => {
+                b.setSize(qW, 32);
+                b.setPos(setCx + (i - 1.5) * (qW + 4), dialBot - 24);
+            });
+            [btnMusic, btnSfx, btnTime, btnCamReset, btnToggle2d, btnView2d].forEach(b => b.setSize(pairW, 32));
+            const halfGap = (pairW + 10) / 2;
+            btnMusic.setPos(setCx - halfGap, dialBot - 62);
+            btnSfx.setPos(setCx + halfGap, dialBot - 62);
+            btnTime.setPos(setCx - halfGap, dialBot - 100);
+            btnCamReset.setPos(setCx + halfGap, dialBot - 100);
+            btnToggle2d.setPos(setCx - halfGap, dialBot - 138);
+            btnView2d.setPos(setCx + halfGap, dialBot - 138);
+        }
         lastDialDrawKey = '';
         drawClockDial();
-        qualityBtns.forEach((b, i) => b.setPos(setCx - 81 + i * 54, setCy - 44));
-        btnMusic.setPos(setCx - 54, setCy - 76);
-        btnSfx.setPos(setCx + 54, setCy - 76);
-        btnTime.setPos(setCx - 54, setCy - 108);
-        btnCamReset.setPos(setCx + 54, setCy - 108);
-        btnToggle2d.setPos(setCx - 54, setCy - 140);
-        btnView2d.setPos(setCx + 54, setCy - 140);
         allSettingsWidgets.forEach(wg => wg.setVisible(settingsOpen));
 
         // 居中滑动关卡选择器 + 带像素裁剪遮罩的内凹列表视口
@@ -562,9 +607,11 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         const mBtnH = 36;
         const mBtnGap = 12;
         const mBtnY = h / 2 - Math.round(mH * 0.25);
+        const modalOpen = Boolean(lastUi.won || lastUi.failed);
         modalBackdrop.scale.set(w, h, 1);
-        modalBackdrop.position.set(w / 2, h / 2, 11);
-        modalBackdrop.visible = Boolean(lastUi.won || lastUi.failed);
+        modalBackdrop.position.set(w / 2, h / 2, modalOpen ? 11 : 7);
+        modalBackdrop.renderOrder = modalOpen ? 111 : 107;
+        modalBackdrop.visible = modalOpen || settingsOpen;
         modalBg.setSize(mW, mH);
         modalBg.setPos(w / 2, h / 2);
         modalBtn1.setSize(mBtnW, mBtnH);
@@ -729,7 +776,9 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         btnToggle2d.drawText('☰ 2D控件', '', null, lastUi.show2dControls ? 'coral' : 'cream');
 
         const showModal = Boolean(lastUi.won || lastUi.failed);
-        modalBackdrop.visible = showModal;
+        modalBackdrop.position.z = showModal ? 11 : 7;
+        modalBackdrop.renderOrder = showModal ? 111 : 107;
+        modalBackdrop.visible = showModal || settingsOpen;
         allModalWidgets.forEach(wg => wg.setVisible(showModal));
         if (lastUi.failed) {
             drawModalCard();
@@ -760,6 +809,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         for (const m of hitTargets) {
             if (!m.visible) continue;
             if (modalOnly && m !== modalBtn1.mesh && m !== modalBtn2.mesh) continue;
+            if (!modalOnly && settingsOpen && m.userData.z < 8) continue;
             if (m.userData.action === 'pickLevel') {
                 if (ux < pickerMaskBounds.left || ux > pickerMaskBounds.right || uy < pickerMaskBounds.bottom || uy > pickerMaskBounds.top) {
                     continue;
@@ -875,12 +925,12 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
             camReset() { onCamReset(); }
         };
         if (actionMap[action]) actionMap[action]();
-        else if (action && action !== 'pickerScroll') onAction(action, payload);
+        else if (action && action !== 'pickerScroll' && action !== 'settingsModal') onAction(action, payload);
         return true;
     }
 
     function handleWheel(deltaY, clientX, clientY) {
-        if (isModalOpen()) return true;
+        if (isModalOpen() || settingsOpen) return true;
         if (!levelPickerOpen) return false;
         const ux = clientX, uy = viewH - clientY;
         const m = pickerBg.mesh;
@@ -926,7 +976,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
                 w.mesh.scale.set(sw, sh, 1);
                 w.uniforms.uSelfRect.value.z = sw;
                 w.uniforms.uSelfRect.value.w = sh;
-            } else if (!reduce && w.mesh.userData.action && w.name !== 'pickerBg' && w.name !== 'clock-dial' && w.theme !== 'card') {
+            } else if (!reduce && w.mesh.userData.action && w.name !== 'pickerBg' && w.name !== 'settingsBg' && w.name !== 'clock-dial' && w.theme !== 'card') {
                 const s = 1 + w.uniforms.uHover.value * 0.055;
                 const sw = w.baseW * s, sh = w.baseH * s;
                 w.mesh.scale.set(sw, sh, 1);
@@ -945,9 +995,10 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         const dialSector = DIAL_SECTOR_MAP.get(name);
         if (dialSector) {
             if (!clockDial.mesh.visible) return null;
+            const s = clockDial.w / DIAL_SIZE;
             const cwA = dialSector.idx * Math.PI * 0.5;
-            const ux = clockDial.mesh.position.x + Math.sin(cwA) * dialSector.ring.hitMid;
-            const uy = clockDial.mesh.position.y + Math.cos(cwA) * dialSector.ring.hitMid;
+            const ux = clockDial.mesh.position.x + Math.sin(cwA) * dialSector.ring.hitMid * s;
+            const uy = clockDial.mesh.position.y + Math.cos(cwA) * dialSector.ring.hitMid * s;
             return { x: ux, y: viewH - uy };
         }
         const wg = byName.get(name);

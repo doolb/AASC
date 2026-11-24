@@ -328,15 +328,19 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.mouse.click(undoBtn.x, undoBtn.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '2 / 176', { timeout: 15000 });
 
-        // 打开环境设置抽屉并操作 3 指针时钟圆盘切换冬雪及 24h 时段（验证主光源方向跟随时间变化）
+        // 打开居中大号环境设置弹窗并操作 3 指针时钟圆盘切换冬雪及 24h 时段（验证主光源方向跟随时间变化）
         const setBtn = await page.evaluate(() => window.__pig3d.holoButton('settings-toggle'));
         await page.mouse.click(setBtn.x, setBtn.y);
+        const setTitlePos = await page.evaluate(() => window.__pig3d.holoButton('settings-title'));
+        const setCloseBtn = await page.evaluate(() => window.__pig3d.holoButton('settings-close'));
         const winterBtn = await page.evaluate(() => window.__pig3d.holoButton('season-winter'));
         const snowBtn = await page.evaluate(() => window.__pig3d.holoButton('weather-snow'));
         const morningBtn = await page.evaluate(() => window.__pig3d.holoButton('time-morning'));
         const eveningBtn = await page.evaluate(() => window.__pig3d.holoButton('time-evening'));
         const nightBtn = await page.evaluate(() => window.__pig3d.holoButton('time-night'));
-        assert.ok(winterBtn && snowBtn && morningBtn && eveningBtn && nightBtn, '3 指针时钟圆盘四季/天气/时段扇区均应可定位');
+        assert.ok(setTitlePos && Math.abs(setTitlePos.x - halfW) < 80, '环境设置弹窗应居中显示');
+        assert.ok(winterBtn && snowBtn && morningBtn && eveningBtn && nightBtn && setCloseBtn, '居中环境弹窗时钟扇区与关闭按钮均应可定位');
+        assert.ok(Math.abs(eveningBtn.y - morningBtn.y) > 160, `居中环境弹窗表盘应放大显示 (${Math.abs(eveningBtn.y - morningBtn.y).toFixed(1)}px)`);
         await page.mouse.click(winterBtn.x, winterBtn.y);
         await page.mouse.click(snowBtn.x, snowBtn.y);
         await page.mouse.click(morningBtn.x, morningBtn.y);
@@ -350,6 +354,8 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         const envState = await page.evaluate(() => ({ preset: window.__pig3d.preset, timeSlot: window.__pig3d.timeSlot }));
         assert.deepEqual(envState.preset, { season: 'winter', weather: 'snow', isCageLevel: false });
         assert.equal(envState.timeSlot, 'night', '时钟表盘应切换 24h 时段为夜晚');
+        await page.mouse.click(setCloseBtn.x, setCloseBtn.y);
+        assert.equal(await page.evaluate(() => window.__pig3d.holoButton('settings-title')), null, '点击关闭按钮应关闭环境设置弹窗');
 
         // 3. 验证四种视口下全屏一屏无滚动且棋盘存在（并用独立标签页验证移动端 2x HiDPI 清晰度，避免 setViewport 变更 DPR 触发重载超时）
         for (const vp of [{ width: 390, height: 844 }, { width: 360, height: 640 }, { width: 844, height: 390 }, { width: 960, height: 720 }]) {

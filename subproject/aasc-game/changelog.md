@@ -1,3 +1,9 @@
+- ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124e`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-24] 将环境设置面板升级为居中弹出的大号全息弹窗（`?v=20261124e`）
+  - `web/pig-level/3d/holo-ui.mjs`：将 `settingsBg` 与控件提升至弹窗层（`z = 8..9`），点击 `⚙ 环境` 时配合全屏半透明遮罩 `modalBackdrop` 居中弹出（点击遮罩外缘或右上角 `settings-close` 按钮关闭，打开期间阻断底层棋盘点击穿透与滚轮缩放）；竖屏与桌面端卡片放大至 `348×454`（时钟圆盘放大至 `232×232`、按钮行高 `32px`），矮横屏自动切换居中双栏排版；`drawClockDial()`、`resolveClockSector()` 与 `getButtonScreen()` 统一按 `clockDial.w / DIAL_SIZE` 矢量缩放。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/20261124_环境设置居中大弹窗.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261124e`、更新规格/任务记录，并校验环境弹窗居中、放大表盘点选与 `settings-close` 关闭交互。
+  - 验证：`npm run test:pig-web`（`119 / 119`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124d`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-24] 恢复在小猪身上拖动平移相机，并修复旋转视角后 3D 新手引导手指偏斜问题（`?v=20261124d`）

@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124d';
-import { createTextureLibrary } from './textures.mjs?v=20261124d';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124d';
-import { createScenery } from './scenery.mjs?v=20261124d';
-import { createGrass } from './grass.mjs?v=20261124d';
-import { createParticles } from './particles.mjs?v=20261124d';
-import { createEnvironment } from './environment.mjs?v=20261124d';
-import { createHoloUI } from './holo-ui.mjs?v=20261124d';
-import { createAudioSystem } from './audio.mjs?v=20261124d';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124d';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124e';
+import { createTextureLibrary } from './textures.mjs?v=20261124e';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124e';
+import { createScenery } from './scenery.mjs?v=20261124e';
+import { createGrass } from './grass.mjs?v=20261124e';
+import { createParticles } from './particles.mjs?v=20261124e';
+import { createEnvironment } from './environment.mjs?v=20261124e';
+import { createHoloUI } from './holo-ui.mjs?v=20261124e';
+import { createAudioSystem } from './audio.mjs?v=20261124e';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124e';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
