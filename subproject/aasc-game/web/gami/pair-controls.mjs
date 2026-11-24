@@ -1,3 +1,4 @@
+import {hudRects,freeHandlePosition} from './hud.mjs';
 import * as scene from './scene.mjs';
 import {pointOnFace,paperThickness,LAYER_SPACING_VERSION,validPaperTopology} from './paper-topology.mjs';
 import {separationPick,separationPair,orbitPoint,closestOrbitAngle} from './separate.mjs';
@@ -30,16 +31,13 @@ export function createPairControls({getItem,onPreview,onCommit,onCancel,onStatus
     if(root.hidden)return;
     const points=drag?[drag.first,drag.second]:candidates(item);
     handles=points;
-    const fragment=document.createDocumentFragment(),occupied=[];
+    const fragment=document.createDocumentFragment(),occupied=[],rects=hudRects();
     points.forEach((p,i)=>{
       const physical=drag?scene.projectedMaterialPoint(item,p.uv):p.screen;
       if(!physical)return;
-      let x=physical.x,y=physical.y;
-      // 先左右分开同位置的柄，再避开屏幕边缘；线段始终指向真实角点。
-      for(let attempt=0;attempt<20&&occupied.some(q=>Math.hypot(x-q.x,y-q.y)<38);attempt++){
-        x=physical.x+(attempt%2?1:-1)*(Math.floor(attempt/2)+1)*40;
-      }
-      x=Math.max(20,Math.min(innerWidth-20,x));y=Math.max(125,Math.min(innerHeight-190,y));occupied.push({x,y});
+      const position=freeHandlePosition(physical,occupied,rects,innerWidth,innerHeight);
+      if(!position)return;
+      const {x,y}=position;occupied.push(position);
       const line=document.createElement('span');line.className='pairLine';line.style.left=physical.x+'px';line.style.top=physical.y+'px';line.style.width=Math.hypot(x-physical.x,y-physical.y)+'px';line.style.transform=`rotate(${Math.atan2(y-physical.y,x-physical.x)}rad)`;
       const button=document.createElement('button');button.type='button';button.dataset.index=i;button.dataset.uv=p.uv.join(',');button.dataset.face=p.face;button.textContent=String(i+1);button.style.left=x+'px';button.style.top=y+'px';
       button.setAttribute('aria-label',`纸层 ${p.face+1} 的角点 ${i+1}`);button.classList.toggle('pinned',!!pin&&key(pin)===key(p));
@@ -63,7 +61,7 @@ export function createPairControls({getItem,onPreview,onCommit,onCancel,onStatus
     }
     const pointer={pid:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY};
     drag={source,...pair,first:pin,second,projects:[projectFor(pin),projectFor(second)],pointers:[hold?{...hold,startX:hold.x,startY:hold.y}:null,pointer],angles:[0,0],relative:0,min,max,result:null};
-    root.setPointerCapture(e.pointerId);onStatus('两侧角点已抓住，向两边拉开；松手保持，取消弯折可放弃本次拖动');refresh();
+    root.setPointerCapture(e.pointerId);onStatus('双角已抓住 · 向两边拉开 · 松手保持');refresh();
   }
   root.onpointerdown=e=>{
     const button=e.target.closest('button');if(!button||button.disabled||drag)return;
@@ -71,7 +69,7 @@ export function createPairControls({getItem,onPreview,onCommit,onCancel,onStatus
     if(!pin||key(pin)===key(p)){
       pin=p;
       if(e.pointerType==='touch'){hold={pid:e.pointerId,x:e.clientX,y:e.clientY};root.setPointerCapture(e.pointerId)}
-      onStatus('已固定此角，请抓另一纸层的编号角点；触屏可保持第一指再放第二指');refresh();return;
+      onStatus('已固定一角 · 抓另一层编号，双指可对向拉开');refresh();return;
     }
     try{start(p,e)}catch(error){reset();onStatus(error.message)}
   };

@@ -284,7 +284,7 @@ test('浏览器厚度设置、手工角点吸附、松手保持、刷新、继�
   };
   assert.equal(await page.$eval('#thicknessValue',e=>e.value),'0.4','旧存档显示默认厚度');
   await numberThickness(0);assert.equal((await saved()).thickness,undefined);assert.equal(await page.$eval('#undo',e=>e.disabled),true);
-  await page.focus('#thickness');await page.keyboard.press('End');await page.keyboard.press('Tab');
+  await page.click('#settingsToggle');await page.focus('#thickness');await page.keyboard.press('End');await page.keyboard.press('Tab');await page.click('#settingsClose');
   assert.equal((await saved()).thickness,.02);assert.equal(await page.$eval('#thicknessValue',e=>e.value),'1');
   await numberThickness(.333);assert.equal((await saved()).thickness,.333/50);assert.equal(await page.$eval('#thickness',e=>e.value),'0.333');
   await page.click('#undo');assert.equal((await saved()).thickness,.02);
@@ -653,14 +653,14 @@ test('浏览器预折痕双模式、弯折角球、整轮取消与双角鼠标�
   const heldPoint=await point([0,0]);await page.mouse.move(heldPoint.x,heldPoint.y);await page.mouse.down();await page.mouse.move(heldPoint.x+20,heldPoint.y-12,{steps:3});
   await page.$eval('#cancelFold',e=>e.click());await page.mouse.up();assert.deepEqual(await saved(),blank,'取消整轮弯折并防止迟到松手重新提交');
   await page.click('#undo');assert.ok((await saved()).heldFold,'取消弯折可撤销');await page.click('#cancelFold');
-  await page.select('#foldMode','precrease');await dragFold();await page.mouse.up();
+  await page.click('[data-mode=precrease]');await dragFold();await page.mouse.up();
   assert.equal((await saved()).heldFold.mode,'precrease');await page.reload({waitUntil:'domcontentloaded'});await page.click('#resume');
   assert.equal(await page.$eval('#foldMode',e=>e.value),'precrease');assert.equal(await page.$eval('#flatten',e=>e.textContent),'生成折痕并还原');
   await page.click('#flatten');const pre=await saved();assert.equal(pre.heldFold,undefined);assert.equal(pre.folded,false);assert.ok(pre.creases.length);
   assert.ok(pre.faces.flat().every(p=>Math.abs(p[0]-(p[3]*2-1))<1e-12&&Math.abs(p[1]-(p[4]*2-1))<1e-12&&p[2]===0));
   assert.equal(await page.$eval('#cancelFold',e=>e.hidden),true);await page.screenshot({path:'/tmp/aasc-gami-precrease.png'});
   await page.click('#undo');assert.ok((await saved()).heldFold);await page.click('#cancelFold');assert.deepEqual(await saved(),blank);
-  await page.select('#foldMode','fold');await dragFold();await page.mouse.up();await page.click('#flatten');assert.equal((await saved()).folded,true);
+  await page.click('[data-mode=fold]');await dragFold();await page.mouse.up();await page.click('#flatten');assert.equal((await saved()).folded,true);
   // 采用现有导入入口换成对折样纸，以独立验证编号选层而不是复用待测求角代码生成断言。
   await load(fixture);await page.click('[data-tool=separate]');await page.click('#pairMode');
   const button=async(face,uv)=>page.$eval(`#pairHandles button[data-face="${face}"][data-uv="${uv.join(',')}"]`,e=>{const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}});
@@ -688,6 +688,7 @@ test('浏览器预折痕双模式、弯折角球、整轮取消与双角鼠标�
   await page.$eval('#cancelFold',e=>e.click());await page.mouse.up();assert.deepEqual(await saved(),JSON.parse(JSON.stringify(fixture)),'双角取消后迟到松手不得提交');
   await page.setViewport({width:390,height:844});
   const cdp=await page.createCDPSession();await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await page.waitForFunction(()=>[...document.querySelectorAll('#pairHandles button')].every(e=>{const r=e.getBoundingClientRect();return r.x>=0&&r.right<=innerWidth&&r.y>=0&&r.bottom<=innerHeight}));
   const ta=await button(0,[1,0]),tb=await button(1,[0,0]),pathTouch=await pairPath(first,second,100,50);
   const touch=async(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points.map((p,i)=>({x:p.x,y:p.y,id:i,radiusX:3,radiusY:3}))});
   await touch('touchStart',[ta]);await touch('touchStart',[ta,tb]);
@@ -697,4 +698,36 @@ test('浏览器预折痕双模式、弯折角球、整轮取消与双角鼠标�
   await page.screenshot({path:'/tmp/aasc-gami-dual-touch.png'});
   await page.reload({waitUntil:'domcontentloaded'});await page.click('#resume');assert.deepEqual(await saved(),dual);
   assert.deepEqual(errors,[]);t.diagnostic('预折痕还原、取消、防迟到提交、模式刷新、鼠标选层固定及双指两侧转动通过');
+});
+
+test('游戏 HUD 设置键盘操作、模式按钮及横竖屏编号避让', {timeout:600000},async(t)=>{
+  if(!process.env.DISPLAY){t.skip('需要指定图形会话 DISPLAY');return}
+  const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
+  const root=path.resolve(__dirname,'../web/gami'),server=http.createServer((req,res)=>{
+    const file=path.resolve(root,new URL(req.url,'http://local').pathname.slice(1)||'index.html');
+    if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return}
+    fs.readFile(file,(error,data)=>{if(error){res.writeHead(404).end();return}res.writeHead(200,{'Content-Type':file.endsWith('.mjs')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}).end(data)});
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve)}));
+  const xauth=process.env.XAUTHORITY||fs.readdirSync('/tmp').filter(n=>n.startsWith('xauth_')).map(n=>path.join('/tmp',n)).find(f=>fs.existsSync(f));
+  const browser=await require('puppeteer-core').launch({executablePath:'/usr/bin/chromium',headless:false,timeout:120000,env:{...process.env,...(xauth?{XAUTHORITY:xauth}:{})},args:['--no-sandbox','--disable-dev-shm-usage','--no-proxy-server']});
+  t.after(()=>browser.close());const page=await browser.newPage(),errors=[];page.setDefaultNavigationTimeout(120000);page.on('pageerror',e=>errors.push(e.message));
+  const {sheet,fold}=await import('../web/gami/fold.mjs'),{foldCreases}=await import('../web/gami/paper-topology.mjs');
+  const item={id:'paper',front:'#668f99',back:'#f5ead3',seed:91,thickness:.008,x:0,y:0,rot:0,placed:false,folded:true,faces:fold(sheet(),[[-1,0]],[1,0],180),creases:foldCreases(sheet(),[[-1,0]],[1,0])};
+  await page.evaluateOnNewDocument(item=>localStorage.setItem('gami.desks.v1',JSON.stringify([{version:1,id:'desk',name:'HUD',items:[item],active:item.id}])),item);
+  await page.setViewport({width:1000,height:760});await page.goto(process.env.GAMI_TEST_URL||'http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});await page.click('#resume');
+  const before=await page.evaluate(()=>localStorage.getItem('gami.desks.v1'));
+  await page.click('[data-mode=precrease]');assert.equal(await page.$eval('#foldMode',e=>e.value),'precrease');assert.equal(await page.$eval('[data-mode=precrease]',e=>e.getAttribute('aria-pressed')),'true');
+  for(const [width,height,name] of [[1000,760,'desktop'],[390,844,'portrait'],[844,390,'landscape']]){
+    await page.setViewport({width,height});await page.click('#settingsToggle');assert.equal(await page.$eval('#settingsPanel',e=>e.hidden),false);
+    await page.focus('#settingsClose');await page.keyboard.press('Escape');assert.equal(await page.$eval('#settingsPanel',e=>e.hidden),true);assert.equal(await page.evaluate(()=>document.activeElement.id),'settingsToggle');
+    await page.click('[data-tool=fold]');await page.screenshot({path:'/tmp/gami-hud-'+name+'.png'});
+    const buttons=await page.$$eval('.tabs button,[data-mode],#settingsToggle',els=>els.map(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}}));
+    assert.ok(buttons.every(r=>r.w>=44&&r.h>=44&&r.x>=0&&r.y>=0&&r.x+r.w<=width&&r.y+r.h<=height),'主要按钮至少44px且位于视口内');
+    await page.click('[data-tool=separate]');await page.click('#pairMode');
+    const visible=await page.$$eval('#pairHandles button:not(:disabled)',els=>els.map(el=>{const r=el.getBoundingClientRect();return {visible:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===el,w:r.width,h:r.height}}));
+    assert.ok(visible.length>=2&&visible.every(p=>p.visible&&p.w>=44&&p.h>=44),'编号柄必须避开真实 HUD 并可直接触摸');
+    await page.click('#settingsToggle');assert.ok(await page.$$eval('#pairHandles button:not(:disabled)',els=>els.every(el=>{const r=el.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===el})),'设置展开后编号继续避让');await page.click('#settingsClose');
+  }
+  assert.equal(await page.evaluate(()=>localStorage.getItem('gami.desks.v1')),before,'UI切换不改变纸形存档');assert.deepEqual(errors,[]);
 });

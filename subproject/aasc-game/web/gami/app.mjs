@@ -1,3 +1,4 @@
+import {initHUD,syncHUD} from './hud.mjs';
 import * as scene from './scene.mjs';
 import {sheet,bounds,corners,fold,cut,snapIndex} from './fold.mjs';
 import {adjustedCurl,heldFaces,validHeldFold,flattenHeldFold,precreaseFold,cancelHeldFold} from './held-fold.mjs';
@@ -8,7 +9,7 @@ import {createPairControls} from './pair-controls.mjs';
 import {sound,unlock,paperSound} from './sound.mjs';
 const $=id=>document.getElementById(id),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
 const storageKey='gami.desks.v1';
-let pairControls=null;
+let pairControls=null,hud=null;
 let saves=JSON.parse(localStorage.getItem(storageKey)||'[]'),desk,id,tool='fold',selected=[],target=null,preview=null,previewLayers=null,candidate=null,gesture=null,history=[],timer,err='';
 const current=()=>desk?.items.find(p=>p.id===id);
 const safe=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -50,18 +51,21 @@ function render(){
   $('center').disabled=!selected.length||item?.placed;
   $('slice').disabled=!g||item?.placed||item?.folded||!!item?.creases?.length||!!item?.heldFold;$('place').disabled=!item||item.placed||!!item.heldFold;
   $('rotate').disabled=!item?.placed;
-  for(const k of ['center','commit'])$(k).hidden=isHand();
-  $('flatten').hidden=!isHand()||!item?.heldFold;$('flatten').disabled=!item?.heldFold;
-  const hints={fold:{hand:item?.heldFold?'拖动纸上的点或边继续调整，点「压平」留下折痕。拖空白处环视。':'拖动点或边折纸；拖动已有折痕可展开。松手保持形状，拖空白处环视。',corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
-    separate:item?.heldFold?'请先在「折叠」中压平，留下折痕后再分开。':item?.creases?.length?'抓住角点或边拉开纸瓣，回拖可收回，松手保持角度。拖空白处环视。':'这张纸还没有折痕，请先折叠并压平。',
+  $('center').hidden=isHand();$('commit').hidden=isHand()||tool!=='fold'||!preview;
+  $('flatten').hidden=!isHand()||!item?.heldFold||tool!=='fold';$('flatten').disabled=!item?.heldFold;
+  const hints={fold:{hand:item?.heldFold?'继续拖动调整 · 压平留下折痕':'捏住角点或边折纸 · 拖空白环视',corner:'拖动角点指定目标，或点角后选「折向中心」。',multi:'依次点选多个角，再点纸面目标或选「折向中心」。',edge:'从一条边拖向目标位置，整边将沿平行折线翻折。'}[$('foldType').value],
+    separate:item?.heldFold?'请先在「折叠」中压平，留下折痕后再分开。':item?.creases?.length?'抓住点或边展开 · 回拖收拢 · 松手保持':'这张纸还没有折痕，请先折叠并压平。',
     cut:item?.folded||item?.creases?.length?'请选择尚未折叠或预折痕的原纸。':g?'预览 '+g[0]+' × '+g[1]+'，共 '+g[0]*g[1]+' 片。':'请输入正整数，共 2 至 64 片。',
     place:'选中纸片后加入陈列；拖动成品可调整位置。拖空白处环视。'};
   if(tool==='fold'&&isPrecrease())hints.fold=item?.heldFold?'确认生成折痕并还原；取消弯折则不留痕。':'拖动点或边对齐，确认后留痕并还原起折前纸形。';
   $('hint').textContent=err||(item?.placed&&tool!=='place'?'已摆放的作品，可切换摆放工具移动或旋转。':hints[tool]);
   if(snappedIndex>=0&&!err)$('hint').textContent='已吸附角点 · 拖远可解除';
+  $('hint').title=$('hint').textContent;
+  syncHUD({tool,busy:!!gesture||!!pairControls?.busy,held:!!item?.heldFold});
   scene.show(desk,id,preview,selected,g,tool,snappedIndex>=0?(snapAnchor||{point:target}):null,previewLayers,separateAxis,gesture?.separating?gesture.side:null);
 }
 function enter(d){
+  hud?.close();
   pairControls?.setEnabled(false);$('foldMode').value='fold';
   desk=structuredClone(d);id=desk.active||desk.items[0].id;history=[];reset();separateAxis=null;tool='fold';
   let migrated=false,warning='';
@@ -73,9 +77,10 @@ function enter(d){
   if(migrated)save();if(warning)say(warning);
 }
 function home(){
+  hud?.close();
   pairControls?.setEnabled(false);
   if(gesture)finishGesture({type:'pointercancel',pointerId:gesture.pid});
-  $('studio').hidden=true;$('home').hidden=false;scene.mode(true);$('resume').disabled=!saves.length;
+  $('studio').hidden=true;$('paperTools').hidden=true;$('home').hidden=false;scene.mode(true);$('resume').disabled=!saves.length;
   $('last').textContent=saves.length?saves[0].name:'暂无存档';
   $('new').classList.toggle('lead',!saves.length);$('resume').classList.toggle('lead',!!saves.length);
 }
@@ -431,6 +436,7 @@ pairControls=createPairControls({
     save();reset();render();
   },
   onCancel:()=>{reset();render()},
-  onStatus:message=>{err=message;$('hint').textContent=message;for(const key of ['thickness','thicknessValue'])$(key).disabled=!!gesture||!!pairControls?.busy;$('cancelFold').hidden=!current()?.heldFold&&!preview&&!pairControls?.hasPreview}
+  onStatus:message=>{err=message;$('hint').textContent=message;$('hint').title=message;for(const key of ['thickness','thicknessValue'])$(key).disabled=!!gesture||!!pairControls?.busy;$('cancelFold').hidden=!current()?.heldFold&&!preview&&!pairControls?.hasPreview;syncHUD({tool,busy:!!gesture||!!pairControls?.busy,held:!!current()?.heldFold});pairControls?.refresh()}
 });
+hud=initHUD(()=>pairControls?.refresh());
 document.addEventListener('pointerdown',unlock,{once:true});document.addEventListener('keydown',unlock,{once:true});home();
