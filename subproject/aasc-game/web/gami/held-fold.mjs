@@ -10,10 +10,10 @@ export function heldFaces(item){
 // 继续拖动时从已保存的弯曲量起算，向回拖也能减小弯曲，避免每次松手后只增不减。
 export function adjustedCurl(held,target){
   // 从吸附形状重新拖开时，以目标的相对位移抬起纸瓣，而非继续保持零弯曲。
-  if(held.snapped)return Math.min(.42,Math.hypot(target[0]-held.dest[0],target[1]-held.dest[1])*.45);
+  if(held.snapped)return Math.min(.14,Math.hypot(target[0]-held.dest[0],target[1]-held.dest[1])*.16);
   const [start]=held.starts;
   const distance=p=>Math.hypot(p[0]-start[0],p[1]-start[1]);
-  return Math.max(0,Math.min(.42,held.curl+(distance(target)-distance(held.dest))*.45));
+  return Math.max(0,Math.min(held.curl>.14?.42:.14,held.curl+(distance(target)-distance(held.dest))*.16));
 }
 
 export function validHeldFold(item){

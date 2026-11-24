@@ -1,3 +1,4 @@
+import {solveDragTarget} from './drag-projection.mjs';
 import {initHUD,syncHUD} from './hud.mjs';
 import * as scene from './scene.mjs';
 import {sheet,bounds,corners,fold,cut,snapIndex} from './fold.mjs';
@@ -308,7 +309,7 @@ $('view').onpointerdown=e=>{
       const h=item.heldFold,hit=hitPaperControl(item,e,heldFaces(item));
       if(!hit.point&&!hit.edge){gesture.action='orbit';return}
       reset();selected=[h.index];target=h.dest.slice();
-      Object.assign(gesture,{action:'fold',kind:h.kind,angle:h.angle,baseTarget:h.dest.slice(),baseScreen:h.material?scene.projectedMaterialPoint(item,h.material):null,pick:h.pick,other:h.other,material:h.material,controls:h.material?hit.controls:undefined});
+      Object.assign(gesture,{action:'fold',kind:h.kind,angle:h.angle,baseTarget:h.dest.slice(),baseScreen:hit.point?.screen||(h.material?scene.projectedMaterialPoint(item,h.material):null),grabMaterial:hit.point?.uv||h.material,pick:h.pick,other:h.other,material:h.material,controls:h.material?hit.controls:undefined});
       gesture.dragHeight=(gesture.baseScreen||hit.point?.screen||hit.edge?.midScreen)?.world[1]||0;
       gesture.start=scene.pointer(e,gesture.dragHeight).world;
       if(h.snapTarget&&gesture.controls){
@@ -324,6 +325,7 @@ $('view').onpointerdown=e=>{
       reset();
       if(point){
         gesture.kind='corner';gesture.pick=point.point.slice(0,2);gesture.material=point.uv;gesture.controls=controls;
+        gesture.baseScreen=point.screen;
         gesture.dragHeight=point.screen.world[1];gesture.start=scene.pointer(e,gesture.dragHeight).world;
         selected=[0];gesture.action='fold';
       }else if(edge){
@@ -401,9 +403,14 @@ $('view').onpointermove=e=>{
       snapAnchor=snappedIndex>=0?(controls?{uv:controls[snappedIndex].uv}:{point:pts[snappedIndex]}):null;
       if(snappedIndex>=0)target=pts[snappedIndex];
     }
-    g.curl=isHand()?(g.baseTarget?adjustedCurl(item.heldFold,target):Math.min(.42,Math.hypot(w[0]-g.start[0],w[1]-g.start[1])*.45)):0;
+    g.curl=isHand()?(g.baseTarget?adjustedCurl(item.heldFold,target):Math.min(.14,Math.hypot(w[0]-g.start[0],w[1]-g.start[1])*.16)):0;
     // 圆弧会让纸尖偏离折叠目标；锁定角点时先收平预览，确保松手保存的纸尖实际贴合目标。
     if(isHand()&&snappedIndex>=0)g.curl=0;
+    // 使用按下位置的材料角点偏移，鼠标与触控抓取均不会突然跳到球心。
+    if(isHand()&&g.kind==='corner'&&g.material&&g.baseScreen&&snappedIndex<0){
+      const screen={x:g.baseScreen.x+e.clientX-g.x,y:g.baseScreen.y+e.clientY-g.y};
+      target=solveDragTarget(target,screen,dest=>scene.projectedMaterialPoint(item,g.grabMaterial||g.material,fold(item.faces,[g.pick||item.heldFold?.starts[0]],dest,g.angle||180*scene.facingSign(),g.curl)));
+    }
     makePreview(g.curl);paperSound('drag');
   }
   render();

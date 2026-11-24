@@ -731,3 +731,70 @@ test('游戏 HUD 设置键盘操作、模式按钮及横竖屏编号避让', {ti
   }
   assert.equal(await page.evaluate(()=>localStorage.getItem('gami.desks.v1')),before,'UI切换不改变纸形存档');assert.deepEqual(errors,[]);
 });
+
+test('角点投影逆解兼容透视、退化和非法候选',async()=>{
+  const {solveDragTarget}=await import('../web/gami/drag-projection.mjs');
+  const project=([x,y])=>({x:300+(140*x+25*y)/(1+.1*y),y:300+(20*x+100*y)/(1+.1*y)});
+  const desired=project([.65,.4]),result=project(solveDragTarget([.3,.1],desired,project));
+  assert.ok(Math.hypot(result.x-desired.x,result.y-desired.y)<.5);
+  assert.deepEqual(solveDragTarget([1,2],{x:20,y:30},()=>({x:0,y:0})),[1,2]);
+  assert.deepEqual(solveDragTarget([1,2],desired,()=>{throw Error('不可达')}),[1,2]);
+});
+test('浏览器角点连续跟手、抓取偏移、斜视及低抬高', {timeout:600000},async(t)=>{
+  const fs=require('node:fs'),http=require('node:http'),path=require('node:path');
+  const chromium=process.env.PUPPETEER_EXECUTABLE_PATH||'/usr/bin/chromium';
+  if(!process.env.DISPLAY){t.skip('需要指定图形会话 DISPLAY');return}
+  if(!fs.existsSync(chromium)){t.skip('未安装 Chromium');return}
+  const puppeteer=require('puppeteer-core'),root=path.resolve(__dirname,'../web/gami');
+  const server=http.createServer((req,res)=>{
+    const name=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\/+/, '')||'index.html';
+    const file=path.resolve(root,name);
+    if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return}
+    const type={'.html':'text/html','.mjs':'text/javascript','.css':'text/css'}[path.extname(file)]||'application/octet-stream';
+    fs.readFile(file,(error,data)=>{if(error){res.writeHead(404).end();return}res.writeHead(200,{'Content-Type':type}).end(data)});
+  });
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)});
+  t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve)}));
+  const display=process.env.DISPLAY||':0';
+  const xauth=process.env.XAUTHORITY||fs.readdirSync('/tmp').filter(name=>name.startsWith('xauth_')).map(name=>path.join('/tmp',name)).find(file=>fs.existsSync(file))||path.join(process.env.HOME||'/home/as','.Xauthority');
+  const browser=await puppeteer.launch({executablePath:chromium,headless:false,timeout:120000,env:{...process.env,DISPLAY:display,XAUTHORITY:xauth},args:['--no-sandbox','--disable-dev-shm-usage','--no-first-run','--no-default-browser-check','--no-proxy-server']});
+  t.after(()=>browser.close());
+  const page=await browser.newPage();await page.setViewport({width:1000,height:720});
+  page.setDefaultNavigationTimeout(120000);
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  const {sheet}=await import('../web/gami/fold.mjs');
+  const item={id:'paper',front:'#668f99',back:'#f5ead3',seed:1,faces:sheet(),x:0,y:0,rot:0,placed:false,folded:false};
+  const desk={version:1,id:'desk',name:'测试桌',items:[item],active:item.id};
+  await page.evaluateOnNewDocument(d=>{if(!localStorage.getItem('gami.desks.v1'))localStorage.setItem('gami.desks.v1',JSON.stringify([d]))},desk);
+  await page.goto(process.env.GAMI_TEST_URL||`http://127.0.0.1:${server.address().port}/`,{waitUntil:'domcontentloaded'});
+  await page.click('#resume');
+  const point=async p=>page.evaluate(async([item,p])=>{
+    const scene=await import('./scene.mjs');return scene.projectedCorner(item,p);
+  },[item,p]);
+  const saved=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('gami.desks.v1'))[0].items[0]);
+
+  const project=()=>page.evaluate(async item=>(await import('./scene.mjs')).projectedMaterialPoint(item,[0,0]),item);
+  for(const oblique of [false,true]){
+    if(oblique){
+      await page.click('#cancelFold');
+      await page.mouse.move(850,220);await page.mouse.down();await page.mouse.move(920,280,{steps:3});await page.mouse.up();
+    }
+    const a=await project(),center=await point([0,0]),offset={x:4,y:3};
+    await page.mouse.move(a.x+offset.x,a.y+offset.y);await page.mouse.down();
+    for(const fraction of [.25,.4,.55]){
+      const cursor={x:a.x+(center.x-a.x)*fraction+offset.x,y:a.y+(center.y-a.y)*fraction+offset.y};
+      await page.mouse.move(cursor.x,cursor.y,{steps:2});
+      const actual=await project();
+      assert.ok(Math.hypot(actual.x-cursor.x+offset.x,actual.y-cursor.y+offset.y)<2,'实际纸角跟随指针并保留抓取偏移');
+    }
+    await page.mouse.up();
+    const held=await saved();assert.ok(held.heldFold);assert.ok(held.heldFold.curl<=.14);
+    const {heldFaces}=await import('../web/gami/held-fold.mjs');
+    assert.ok(Math.max(...heldFaces(held).flat().map(p=>Math.abs(p[2])))<=.09,'新折形抬高不超过纸边长的 4.5%');
+    const grab=await project();await page.mouse.move(grab.x,grab.y);await page.mouse.down();
+    await page.mouse.move(grab.x+18,grab.y+10,{steps:3});
+    const moved=await project();assert.ok(Math.hypot(moved.x-grab.x-18,moved.y-grab.y-10)<2,'继续拖动仍跟手');
+    await page.mouse.up();
+  }
+  assert.deepEqual(errors,[]);
+});
