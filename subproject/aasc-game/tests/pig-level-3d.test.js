@@ -63,14 +63,14 @@ test('FPS 自动降档需连续两个周期低于阈值且切换窗口可重置'
     post.dispose();
 });
 
-test('手机端草叶数量每档较桌面端降一档', async () => {
+test('手机端草叶数量三档调整为 8000 / 4000 / 2000', async () => {
     const { grassCountForTier } = await import('../web/pig-level/3d/grass.mjs');
     assert.equal(grassCountForTier('high', false, false), 140000);
     assert.equal(grassCountForTier('medium', false, false), 36000);
     assert.equal(grassCountForTier('low', false, false), 22000);
-    assert.equal(grassCountForTier('high', true, false), 36000);
-    assert.equal(grassCountForTier('medium', true, false), 22000);
-    assert.equal(grassCountForTier('low', true, false), 12000);
+    assert.equal(grassCountForTier('high', true, false), 8000);
+    assert.equal(grassCountForTier('medium', true, false), 4000);
+    assert.equal(grassCountForTier('low', true, false), 2000);
     assert.equal(grassCountForTier('high', true, true), 1500);
 });
 
@@ -171,12 +171,18 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
             actors: window.__pig3d.getActorCount(),
             guide: window.__pig3d.getGuideText(),
             hand: window.__pig3d.hasGuideHand(),
-            pt: window.__pig3d.screenOf(1)
+            pt: window.__pig3d.screenOf(1),
+            otherPt: window.__pig3d.screenOf(6)
         }));
         assert.equal(lv1Info.levelNum, '1', '不带参数打开首页应默认进入第 1 关');
         assert.equal(lv1Info.actors, 6, '第 1 关应包含 6 只小猪');
         assert.match(lv1Info.guide, /点击高亮小猪/, '第 1 关首步应显示新手引导提示');
         assert.equal(lv1Info.hand, true, '第 1 关引导目标应显示 3D 手势精灵');
+        // 引导期点击非目标猪（6号）应被拦截，不能出局或推进步骤
+        await page.mouse.click(lv1Info.otherPt.x, lv1Info.otherPt.y);
+        await new Promise(r => setTimeout(r, 120));
+        assert.equal(await page.evaluate(() => document.querySelector('#progressText').textContent), '0 / 6', '引导期点击其它小猪不应触发离场');
+        assert.match(await page.evaluate(() => window.__pig3d.getGuideText()), /手势指引/, '引导期误点其它猪应提示先点击手势指引的高亮小猪');
         await page.mouse.click(lv1Info.pt.x, lv1Info.pt.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '1 / 6', { timeout: 15000 });
 
@@ -220,14 +226,25 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.mouse.click(pt2.x, pt2.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '2 / 176', { timeout: 15000 });
 
-        // 1b. 验证左键拖拽平移、右键拖拽旋转（抑制浏览器右键弹窗且不触发点击）
-        const camBefore = await page.evaluate(() => window.__pig3d.getCameraState());
-        await page.mouse.move(600, 360);
+        // 1b. 验证在猪身上左键拖动不平移相机、空白地面左键拖拽平移、右键拖拽旋转（抑制浏览器右键弹窗且不触发点击）
+        const camOnPigBefore = await page.evaluate(() => window.__pig3d.getCameraState());
+        const dragPigPt = await page.evaluate(id => window.__pig3d.screenOf(id), 1);
+        await page.mouse.move(dragPigPt.x, dragPigPt.y);
         await page.mouse.down({ button: 'left' });
-        await page.mouse.move(680, 390, { steps: 4 });
+        await page.mouse.move(dragPigPt.x + 80, dragPigPt.y + 35, { steps: 4 });
+        await page.mouse.up({ button: 'left' });
+        const camOnPigAfter = await page.evaluate(() => window.__pig3d.getCameraState());
+        assert.ok(Math.hypot(camOnPigAfter.panX - camOnPigBefore.panX, camOnPigAfter.panZ - camOnPigBefore.panZ) < 1e-4,
+            '鼠标在小猪身上按下拖动不应平移相机');
+        assert.equal(await page.evaluate(() => document.querySelector('#progressText').textContent), '2 / 176', '小猪身上拖动不应触发离场点击');
+
+        const camBefore = await page.evaluate(() => window.__pig3d.getCameraState());
+        await page.mouse.move(120, 620);
+        await page.mouse.down({ button: 'left' });
+        await page.mouse.move(200, 650, { steps: 4 });
         await page.mouse.up({ button: 'left' });
         const camAfterPan = await page.evaluate(() => window.__pig3d.getCameraState());
-        assert.ok(Math.hypot(camAfterPan.panX - camBefore.panX, camAfterPan.panZ - camBefore.panZ) > 0.05, '左键拖拽应平移视角');
+        assert.ok(Math.hypot(camAfterPan.panX - camBefore.panX, camAfterPan.panZ - camBefore.panZ) > 0.05, '空白地面左键拖拽应平移视角');
         assert.ok(Math.abs(camAfterPan.yaw - camBefore.yaw) < 1e-4, '左键平移不应改变偏航角');
 
         await page.mouse.move(650, 390);
@@ -297,16 +314,28 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         await page.mouse.click(undoBtn.x, undoBtn.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '2 / 176', { timeout: 15000 });
 
-        // 打开环境设置抽屉并切换冬雪
+        // 打开环境设置抽屉并操作 3 指针时钟圆盘切换冬雪及 24h 时段（验证主光源方向跟随时间变化）
         const setBtn = await page.evaluate(() => window.__pig3d.holoButton('settings-toggle'));
         await page.mouse.click(setBtn.x, setBtn.y);
         const winterBtn = await page.evaluate(() => window.__pig3d.holoButton('season-winter'));
         const snowBtn = await page.evaluate(() => window.__pig3d.holoButton('weather-snow'));
-        assert.ok(winterBtn && snowBtn, '全息季节天气按钮应可见');
+        const morningBtn = await page.evaluate(() => window.__pig3d.holoButton('time-morning'));
+        const eveningBtn = await page.evaluate(() => window.__pig3d.holoButton('time-evening'));
+        const nightBtn = await page.evaluate(() => window.__pig3d.holoButton('time-night'));
+        assert.ok(winterBtn && snowBtn && morningBtn && eveningBtn && nightBtn, '3 指针时钟圆盘四季/天气/时段扇区均应可定位');
         await page.mouse.click(winterBtn.x, winterBtn.y);
         await page.mouse.click(snowBtn.x, snowBtn.y);
-        const preset = await page.evaluate(() => window.__pig3d.preset);
-        assert.deepEqual(preset, { season: 'winter', weather: 'snow', isCageLevel: false });
+        await page.mouse.click(morningBtn.x, morningBtn.y);
+        await new Promise(r => setTimeout(r, 80));
+        const sunMorning = await page.evaluate(() => window.__pig3d.getSunPosition());
+        await page.mouse.click(eveningBtn.x, eveningBtn.y);
+        await new Promise(r => setTimeout(r, 80));
+        const sunEvening = await page.evaluate(() => window.__pig3d.getSunPosition());
+        assert.ok(sunMorning.x > 10 && sunEvening.x < -10, `主光源应随早->晚时间变化摆动方向 (${sunMorning.x.toFixed(1)} -> ${sunEvening.x.toFixed(1)})`);
+        await page.mouse.click(nightBtn.x, nightBtn.y);
+        const envState = await page.evaluate(() => ({ preset: window.__pig3d.preset, timeSlot: window.__pig3d.timeSlot }));
+        assert.deepEqual(envState.preset, { season: 'winter', weather: 'snow', isCageLevel: false });
+        assert.equal(envState.timeSlot, 'night', '时钟表盘应切换 24h 时段为夜晚');
 
         // 3. 验证四种视口下全屏一屏无滚动且棋盘存在（并用独立标签页验证移动端 2x HiDPI 清晰度，避免 setViewport 变更 DPR 触发重载超时）
         for (const vp of [{ width: 390, height: 844 }, { width: 360, height: 640 }, { width: 844, height: 390 }, { width: 960, height: 720 }]) {
@@ -344,7 +373,7 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
             });
             assert.ok(['high', 'medium'].includes(mobMetrics.tier), `高分手机端不应被像素数降档为 low，当前: ${mobMetrics.tier}`);
             assert.ok(mobMetrics.cw >= mobMetrics.iw * 1.75, `移动端 2x HiDPI 渲染画布应保持高分辨率 (${mobMetrics.cw} vs ${mobMetrics.iw}×${mobMetrics.dpr})`);
-            assert.equal(mobMetrics.grass, mobMetrics.tier === 'high' ? 36000 : 22000, `手机端草叶数应每档降一档 (当前 tier=${mobMetrics.tier}, grass=${mobMetrics.grass})`);
+            assert.equal(mobMetrics.grass, mobMetrics.tier === 'high' ? 8000 : mobMetrics.tier === 'medium' ? 4000 : 2000, `手机端草叶数应为 8000 / 4000 / 2000 (当前 tier=${mobMetrics.tier}, grass=${mobMetrics.grass})`);
             assert.ok(mobMetrics.fit.widthRatio >= 0.88 && mobMetrics.fit.heightRatio <= 0.99, `竖屏默认镜头应贴紧宽边填满 (${JSON.stringify(mobMetrics.fit)})`);
 
             // 验证移动端单指平移、双指无极 Z 轴旋转（不手动改俯仰 + 惯性滑行）及高度自动计算俯仰
@@ -358,9 +387,15 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
                     pointerId: id, clientX: x, clientY: y, button: 0, buttons: 1, bubbles: true, cancelable: true
                 }));
                 const c0 = window.__pig3d.getCameraState();
-                fire('pointerdown', 101, 180, 400);
-                fire('pointermove', 101, 240, 430);
-                fire('pointerup', 101, 240, 430);
+                const mobPig = window.__pig3d.screenOf(1);
+                fire('pointerdown', 100, mobPig.x, mobPig.y);
+                fire('pointermove', 100, mobPig.x + 55, mobPig.y + 30);
+                fire('pointerup', 100, mobPig.x + 55, mobPig.y + 30);
+                const cOnPig = window.__pig3d.getCameraState();
+
+                fire('pointerdown', 101, 90, 200);
+                fire('pointermove', 101, 150, 230);
+                fire('pointerup', 101, 150, 230);
                 const c1 = window.__pig3d.getCameraState();
 
                 // 双指同距同角纯粹上下平移：pitch 不应被竖向拖拽改变
@@ -379,9 +414,10 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
                 await new Promise(r => setTimeout(r, 150));
                 await waitFrames(3);
                 const cInertia = window.__pig3d.getCameraState();
-                return { c0, c1, cVert, cRelease, cInertia };
+                return { c0, cOnPig, c1, cVert, cRelease, cInertia };
             });
-            assert.ok(Math.hypot(mobGesture.c1.panX - mobGesture.c0.panX, mobGesture.c1.panZ - mobGesture.c0.panZ) > 0.05, '移动端单指拖拽应平移视角');
+            assert.ok(Math.hypot(mobGesture.cOnPig.panX - mobGesture.c0.panX, mobGesture.cOnPig.panZ - mobGesture.c0.panZ) < 1e-4, '移动端单指在小猪身上拖动不应平移相机');
+            assert.ok(Math.hypot(mobGesture.c1.panX - mobGesture.c0.panX, mobGesture.c1.panZ - mobGesture.c0.panZ) > 0.05, '移动端空白地面单指拖拽应平移视角');
             assert.ok(Math.abs(mobGesture.cVert.pitch - mobGesture.c1.pitch) < 1e-4, `双指纯纵向平移不应直接改动俯仰角 (${mobGesture.c1.pitch} -> ${mobGesture.cVert.pitch})`);
             assert.ok(mobGesture.cRelease.yaw > 0.75, `双指应支持突破 ±0.62 弧度的无极旋转 (yaw=${mobGesture.cRelease.yaw})`);
             assert.ok(mobGesture.cRelease.zoom < mobGesture.c1.zoom && mobGesture.cRelease.pitch < mobGesture.c1.pitch,
@@ -472,15 +508,21 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         }
         await page.waitForFunction(() => Boolean(window.__pig3d.holoButton('modal-btn1')), { timeout: 10000 });
         const modalCheck = await page.evaluate(() => ({
+            backdrop: window.__pig3d.hasModalBackdrop(),
             bg: window.__pig3d.holoButton('modalBg'),
             b1: window.__pig3d.holoButton('modal-btn1'),
             b2: window.__pig3d.holoButton('modal-btn2')
         }));
+        assert.equal(modalCheck.backdrop, true, '胜利弹窗显示时应同步开启全屏暗色遮罩');
         assert.ok(modalCheck.bg && modalCheck.b1 && modalCheck.b2, '胜利弹窗与双按钮应可见');
         assert.ok(modalCheck.b1.y - modalCheck.bg.y >= 36 && Math.abs(modalCheck.b2.x - modalCheck.b1.x) >= 100,
             `弹窗按钮应位于下半区且左右分开 (${JSON.stringify(modalCheck)})`);
+        // 点击遮罩空白区不应穿透关闭弹窗或误触底层按钮
+        await page.mouse.click(40, 40);
+        assert.equal(await page.evaluate(() => window.__pig3d.hasModalBackdrop()), true, '点击结算遮罩空白区不应穿透关闭弹窗');
         await page.mouse.click(modalCheck.b1.x, modalCheck.b1.y);
         await page.waitForFunction(() => document.querySelector('#progressText').textContent === '0 / 5', { timeout: 10000 });
+        assert.equal(await page.evaluate(() => window.__pig3d.hasModalBackdrop()), false, '重开后结算全屏遮罩应关闭');
 
         assert.deepEqual(errors, [], `不应有页面或控制台错误: ${errors.join('; ')}`);
     } finally {

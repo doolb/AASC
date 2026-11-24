@@ -1,15 +1,15 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261124a';
-import { groundHeight } from './geometry.mjs?v=20261124a';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261124a';
+import { seededRandom } from './presets.mjs?v=20261124c';
+import { groundHeight } from './geometry.mjs?v=20261124c';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261124c';
 
 const INTERACT_SIZE = 256;
 const WORLD_SPAN = 48; // 交互贴图覆盖 [-24, 24] 世界区间
 const DESKTOP_GRASS_COUNTS = { high: 140000, medium: 36000, low: 22000 };
-const MOBILE_GRASS_COUNTS = { high: 36000, medium: 22000, low: 12000 };
+const MOBILE_GRASS_COUNTS = { high: 8000, medium: 4000, low: 2000 };
 
-// 按设备类型、性能档位与软光栅标记计算草叶数量（手机端每档较桌面端往下降一档）
+// 按设备类型、性能档位与软光栅标记计算草叶数量（手机端三档固定为 8000 / 4000 / 2000）
 export function grassCountForTier(tier = 'high', isMobile = false, isSoftware = false) {
     if (isSoftware) return 1500;
     const table = isMobile ? MOBILE_GRASS_COUNTS : DESKTOP_GRASS_COUNTS;

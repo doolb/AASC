@@ -1,3 +1,17 @@
+- ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124c`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 9 个变更文件并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
+- ✅ [2026-11-24] 环境面板升级为 3 指针时钟圆盘（季节/天气/24h）、主光源随时间联动并缩短周期、限制第 1 关引导误点与猪身拖动平移，同时下调移动端草叶数量（`?v=20261124c`）
+  - `web/pig-level/3d/environment.mjs`：新增 24h 时段 `TIME_SLOTS`（`morning`/`noon`/`evening`/`night`，对应 早/中/晚/夜），昼夜自动循环周期由 600 秒缩短至 90 秒；主平行光位置 `sunLight.position`、`uSunDir`、仰角/色温、月光与星空随 `dayPhase` 连续变化；新增 `setTimeSlot` / `getTimeSlot` / `getDayPhase` / `getSunPosition`（点击时段同步即时刷新光照）。
+  - `web/pig-level/3d/holo-ui.mjs`：使用统一 `DIAL_RINGS` / `DIAL_SECTOR_MAP` 配置表将设置面板中的季节、天气与 24h 时段重绘为 3 指针同心时钟圆盘 `clock-dial`（外圈 24h 时段金橙细长针可随天光流动实时转动、中圈天气天蓝中针、内圈季节青绿短粗针，中心表冠切换天光流动/锁定），极坐标拾取同步兼容 `season-*` / `weather-*` / `time-*` 坐标定位。
+  - `web/pig-level/3d/view.mjs`：新增 `downOnPig` 按下命中检测，左键/单指在小猪身上按下拖动时不触发相机平移（空白地面拖拽平移与右键/双指旋转缩放保持不变）；接入 `onTimeSlot` 与 `dayPhase` 实时驱动表盘指针，并在 `window.__pig3d` 暴露 `timeSlot` / `dayPhase` / `getSunPosition()` / `setTimeSlot()`。
+  - `web/pig-level/app.mjs`：在第 1 关新手引导前两步期间拦截对非引导目标小猪的点击，保持当前步骤并提示“请先点击手势指引的高亮小猪”与触发轻摇提醒；统一升级资源版本号 `?v=20261124c`。
+  - `web/pig-level/3d/grass.mjs`：将手机端 `MOBILE_GRASS_COUNTS` 三档草叶数量由 `36000 / 22000 / 12000` 调整为 `8000 / 4000 / 2000`。
+  - `docs/spec/pig-game-3d.md`、`docs/task/20261124_时钟圆盘与引导限制及草叶调整.md`、`tests/pig-level-3d.test.js`：同步更新伪代码规格、任务文档、测试用例（验证第 1 关引导拦截、PC/移动端猪身拖动不平移、3 指针时钟圆盘冬雪及早/晚/夜主光源方向联动与移动端草叶数）。
+  - 验证：`npm run test:pig-web`（`119 / 119`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
+- ✅ [2026-11-24] 为 3D 结算弹窗补充全屏暗色遮罩与模态点击拦截（`?v=20261124b`）
+  - `web/pig-level/3d/holo-ui.mjs`、`web/pig-level/3d/view.mjs`：新增全屏半透明遮罩 `modalBackdrop`（`#2b140c`、`opacity: 0.56`、`renderOrder: 111`）覆盖背景 HUD 与棋盘，弹窗打开时拦截底层误触及滚轮缩放并随重开/切换自动关闭；暴露 `hasModalBackdrop()`。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/2026-11-24_结算弹窗遮罩.md`、`tests/pig-level-3d.test.js`：同步升级 `?v=20261124b`、更新规格/任务记录并校验遮罩显隐与穿透拦截。
+  - 验证：`npm run test:pig-web`（`119 / 119`）、`npm run test:pig-animation`（`1 / 1`）、`npm run test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124a`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 11 个变更/新增文件（含 `level-1.json`）并核验全量 17 个 HTML/CSS/MJS 及 `level-1.json` 远端与公网 HTTPS SHA-256 与本地逐字节一致，HTTP 状态码 `200`。
 - ✅ [2026-11-24] 新增新手第 1 关默认入口并加入 3D/2D 新手点击引导提示（`?v=20261124a`）

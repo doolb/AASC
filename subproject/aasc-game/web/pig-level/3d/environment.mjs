@@ -1,7 +1,18 @@
 // 动态环境：手绘天空穹顶、飘动积云、三层远山、太阳与半球光、指数雾、昼夜缓慢流逝与天气闪电。
 import * as THREE from '../vendor/three.module.min.js';
-import { buildPreset, seededRandom } from './presets.mjs?v=20261124a';
-import { blobSphere } from './geometry.mjs?v=20261124a';
+import { buildPreset, seededRandom } from './presets.mjs?v=20261124c';
+import { blobSphere } from './geometry.mjs?v=20261124c';
+
+export const TIME_SLOTS = ['morning', 'noon', 'evening', 'night'];
+export const TIME_LABELS = { morning: '早', noon: '中', evening: '晚', night: '夜' };
+const TIME_SLOT_PHASE = { morning: 0.0, noon: 0.25, evening: 0.5, night: 0.75 };
+const TIME_CYCLE_SECONDS = 90;
+
+function phaseToSlot(phase) {
+    const norm = ((phase % 1) + 1) % 1;
+    const idx = Math.floor(((norm + 0.125) % 1) * 4) % 4;
+    return TIME_SLOTS[idx];
+}
 
 export function createEnvironment(scene, textures, tier = 'high', onThunder = null) {
     const group = new THREE.Group();
@@ -162,7 +173,8 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
     let target = buildPreset('spring', 'sunny');
     let transProgress = 1;
     let timeCycleEnabled = true;
-    let dayPhase = 0.25; // 从清爽上午起步，约 600 秒循环到黄昏再回晨曦
+    let dayPhase = 0.16; // 从清晨偏上午起步，90 秒完整流转 早 -> 中 -> 晚 -> 夜
+    let lastTime = 0;
     let lightningTimer = 9;
     let flashVal = 0;
 
@@ -175,37 +187,53 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
     };
 
     function applyColors(p, time) {
-        // 一局内昼夜缓慢弧线（上午 -> 午后 -> 黄昏月升 -> 柔和晨光）
-        const duskCycle = timeCycleEnabled ? Math.max(0, Math.sin(dayPhase * Math.PI * 2 - 0.5) * 0.55) : 0;
-        const duskMix = Math.min(1, p.dusk + duskCycle * (1 - p.dusk));
+        // 24h 昼夜连续弧线（早 0.0 东侧晨光 -> 中 0.25 顶正高光 -> 晚 0.5 西侧夕照 -> 夜 0.75 月夜星辰）
+        const arc = dayPhase * Math.PI * 2;
+        const daySin = Math.sin(arc);
+        const dayCos = Math.cos(arc);
+        const nightBlend = Math.pow(Math.max(0, -daySin), 1.15);
+        const sunsetBlend = Math.max(0, -dayCos) * (1 - nightBlend * 0.55);
+        const dawnBlend = Math.max(0, dayCos) * 0.38 * (1 - nightBlend);
+        const duskMix = Math.min(1, Math.max(p.dusk, (nightBlend * 0.96 + sunsetBlend * 0.45) * (1 - p.dusk) + p.dusk));
 
         skyUniforms.uTime.value = time;
-        skyUniforms.uZenith.value.set(p.skyZenith).lerp(cB.set('#4c5eb5'), duskMix * 0.52);
-        skyUniforms.uHorizon.value.set(p.skyHorizon).lerp(cB.set('#d2b2e8'), duskMix * 0.42);
-        skyUniforms.uSunColor.value.set(p.sunColor).lerp(cB.set('#ffb884'), duskMix * 0.45);
+        skyUniforms.uZenith.value.set(p.skyZenith)
+            .lerp(cB.set('#4e60b2'), sunsetBlend * 0.52 * (1 - p.dusk))
+            .lerp(cB.set('#1f2c66'), nightBlend * 0.85);
+        skyUniforms.uHorizon.value.set(p.skyHorizon)
+            .lerp(cB.set('#ffe4cb'), dawnBlend * 0.45 * (1 - p.dusk))
+            .lerp(cB.set('#ffad82'), sunsetBlend * 0.52 * (1 - p.dusk))
+            .lerp(cB.set('#425294'), nightBlend * 0.82);
+        skyUniforms.uSunColor.value.set(p.sunColor)
+            .lerp(cB.set('#ffd9b3'), dawnBlend * 0.45)
+            .lerp(cB.set('#ff9c63'), sunsetBlend * 0.65)
+            .lerp(cB.set('#b8d4ff'), nightBlend * 0.85);
         skyUniforms.uDusk.value = duskMix;
         skyUniforms.uFlash.value = flashVal;
 
-        const elevDeg = THREE.MathUtils.lerp(p.sunElevation, 20, duskMix * 0.55);
-        const elev = THREE.MathUtils.degToRad(elevDeg);
-        // 偏侧前方斜射光，拉出明显亮面与暗面对比
-        const azim = 0.88 + (timeCycleEnabled ? dayPhase * 0.65 : 0);
-        sunLight.position.set(Math.cos(elev) * Math.sin(azim) * 32, Math.sin(elev) * 32, Math.cos(elev) * Math.cos(azim) * 32);
+        // 主平行光位置跟随 24h 时间连续摆动与升降（早东偏前 -> 中高正前 -> 晚西偏前 -> 夜月高斜照）
+        const lightX = dayCos * 28 - nightBlend * 10;
+        const lightY = THREE.MathUtils.lerp(13, Math.max(24, Math.tan(THREE.MathUtils.degToRad(p.sunElevation)) * 16), Math.max(0, daySin)) * (1 - nightBlend)
+            + 24 * nightBlend;
+        const lightZ = 16 - nightBlend * 8;
+        sunLight.position.set(lightX, THREE.MathUtils.clamp(lightY, 12, 34), lightZ);
         skyUniforms.uSunDir.value.copy(sunLight.position).normalize();
+        skyUniforms.uMoonDir.value.set(-0.34 + dayCos * 0.28, 0.26 + nightBlend * 0.22, -0.88).normalize();
 
-        sunLight.color.copy(skyUniforms.uSunColor.value).lerp(cB.set('#ffdba6'), 0.35);
-        sunLight.intensity = p.sunIntensity * (1 - duskMix * 0.35) + flashVal * 3.5;
-        // 夜晚/黄昏开启银蓝月光方向光，搭配明亮暖色半球环境光保证画面温馨立体不发黑
+        sunLight.color.copy(skyUniforms.uSunColor.value).lerp(cB.set('#ffdba6'), 0.25 * (1 - nightBlend));
+        sunLight.intensity = p.sunIntensity * (1 - sunsetBlend * 0.14 - nightBlend * 0.42) + flashVal * 3.5;
+        // 夜晚/黄昏开启银蓝月光方向光，搭配可读半球环境光保证夜间动物立体清晰
+        moonLight.position.set(-14 + dayCos * 12, 22 + nightBlend * 8, -26);
         moonLight.intensity = duskMix * 1.5;
-        hemiLight.intensity = p.hemiIntensity + duskMix * 0.18;
-        hemiLight.color.set('#fff7e8').lerp(cB.set('#c4daff'), duskMix * 0.7);
-        hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#434e78'), duskMix * 0.6);
+        hemiLight.intensity = Math.max(0.75, p.hemiIntensity * (1 - nightBlend * 0.22) + duskMix * 0.16);
+        hemiLight.color.set('#fff7e8').lerp(cB.set('#a8c4fa'), duskMix * 0.72);
+        hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#3d4b75'), duskMix * 0.62);
 
         fog.color.copy(skyUniforms.uHorizon.value);
         fog.density = p.fogDensity;
 
-        cloudMat.color.set(p.cloudTop).lerp(cB.set('#e2d6ff'), duskMix * 0.35);
-        cloudBottomMat.color.set(p.cloudBottom).lerp(cB.set('#847ac4'), duskMix * 0.35);
+        cloudMat.color.set(p.cloudTop).lerp(cB.set('#ffd1b8'), sunsetBlend * 0.32).lerp(cB.set('#b9c6f0'), nightBlend * 0.58);
+        cloudBottomMat.color.set(p.cloudBottom).lerp(cB.set('#756eb8'), duskMix * 0.45);
 
         mountainMeshes.forEach(m => {
             cA.set(p.mountainTint);
@@ -234,8 +262,9 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
     }
 
     function update(dt, time) {
+        lastTime = time;
         if (timeCycleEnabled) {
-            dayPhase = (dayPhase + dt / 600) % 1;
+            dayPhase = (dayPhase + dt / TIME_CYCLE_SECONDS) % 1;
         }
         if (transProgress < 1) {
             transProgress = Math.min(1, transProgress + dt / 2.0);
@@ -291,6 +320,15 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         setPreset,
         setTimeCycle(enabled) { timeCycleEnabled = Boolean(enabled); },
         isTimeCycleEnabled: () => timeCycleEnabled,
+        setTimeSlot(slot) {
+            if (Object.prototype.hasOwnProperty.call(TIME_SLOT_PHASE, slot)) {
+                dayPhase = TIME_SLOT_PHASE[slot];
+                applyColors(current, lastTime);
+            }
+        },
+        getTimeSlot: () => phaseToSlot(dayPhase),
+        getDayPhase: () => dayPhase,
+        getSunPosition: () => ({ x: sunLight.position.x, y: sunLight.position.y, z: sunLight.position.z }),
         setShadowTier,
         getShadowData: () => ({
             enabled: sunLight.castShadow && Boolean(sunLight.shadow.map),

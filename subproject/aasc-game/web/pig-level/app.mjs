@@ -1,4 +1,4 @@
-import { createState, cloneState, movePig, sameAction, verifyPlan } from './engine.mjs?v=20261124a';
+import { createState, cloneState, movePig, sameAction, verifyPlan } from './engine.mjs?v=20261124c';
 
 const SUPPORTED_LEVELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '70', '71', '72', '73', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '90', '91', '94', '95', '97', '98', '99', '100', '101', '102', '103', '104', '112', '113', '114', '115', '116', '117', '118'];
 const $ = id => document.getElementById(id);
@@ -53,24 +53,38 @@ function cancelAnimation() {
     view3d?.cancelAnimations();
 }
 
+function shakeBlockedPig(id, message) {
+    if (view3d) {
+        view3d.shake(id, message);
+        return;
+    }
+    const el = ui.board.querySelector(`[data-pig-id="${id}"]`);
+    if (el) {
+        el.classList.remove('shake');
+        void el.offsetWidth;
+        el.classList.add('shake');
+    }
+}
+
 // 同一套可逆状态用于自由操作、回放和撤回，动画期间不重复提交动作。
 async function apply(id) {
     if (moving) return;
+    const hasSteps = level.steps.length > 0;
+    const expected = !hasSteps || cursor === null ? null : level.steps[cursor];
+    // 第 1 关新手引导前两步期间禁止点击引导目标之外的其它小猪，保持引导流程清晰
+    if (level.id === 1 && !state.failed && hasSteps && (cursor === 0 || cursor === 1) && expected && id !== expected.id) {
+        notice = '请先点击手势指引的高亮小猪';
+        noticeKind = 'warn';
+        render();
+        shakeBlockedPig(id, notice);
+        return;
+    }
     const result = movePig(level, state, id);
     if (!result.ok) {
         notice = result.message;
         noticeKind = 'warn';
         render();
-        if (view3d) {
-            view3d.shake(id, result.message);
-            return;
-        }
-        const el = ui.board.querySelector(`[data-pig-id="${id}"]`);
-        if (el) {
-            el.classList.remove('shake');
-            void el.offsetWidth;
-            el.classList.add('shake');
-        }
+        shakeBlockedPig(id, result.message);
         return;
     }
     const version = ++animationVersion;
@@ -94,8 +108,6 @@ async function apply(id) {
         }
     }
     history.push({ state: cloneState(state), cursor });
-    const hasSteps = level.steps.length > 0;
-    const expected = !hasSteps || cursor === null ? null : level.steps[cursor];
     cursor = expected && sameAction(result.action, expected) ? cursor + 1 : null;
     state = result.state;
     notice = !hasSteps ? '自由试玩中（本关未附带参考步骤）。' : cursor === null ? '已偏离参考步骤，可以自由操作或撤回。' : '';
@@ -273,13 +285,15 @@ function render() {
     }
     const won = !state.failed && remaining === 0 && state.ducks.length === 0;
     const guideText = !won && !state.failed && level.id === 1
-        ? (noticeKind === 'warn'
-            ? '前面有其他小猪挡住了，先点前方畅通的小猪'
-            : cursor === 0
-                ? '👆 点击高亮小猪向前移动'
-                : cursor === 1
-                    ? '👆 继续点击下一只畅通的小猪'
-                    : '')
+        ? (cursor === 0 || cursor === 1
+            ? (noticeKind === 'warn'
+                ? '👆 请先点击手势指引的高亮小猪'
+                : cursor === 0
+                    ? '👆 点击高亮小猪向前移动'
+                    : '👆 继续点击下一只畅通的小猪')
+            : noticeKind === 'warn'
+                ? '前面有其他小猪挡住了，先点前方畅通的小猪'
+                : '')
         : '';
     const showGuideHand = Boolean(hasSteps && ui.hint.checked && expected && !won && !state.failed);
     if (ui.guideBanner) {
@@ -396,7 +410,7 @@ async function start() {
                 const probe = document.createElement('canvas');
                 const hasGl = Boolean(probe.getContext('webgl2') || probe.getContext('webgl'));
                 if (hasGl) {
-                    const mod = await import('./3d/view.mjs?v=20261124a');
+                    const mod = await import('./3d/view.mjs?v=20261124c');
                     const actionHandlers = {
                         next: () => { if (level.steps.length && cursor !== null && cursor < level.steps.length && !ui.next.disabled) apply(level.steps[cursor].id); },
                         previous: () => { if (!ui.previous.disabled) undo(); },

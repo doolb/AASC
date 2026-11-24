@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124a';
-import { createTextureLibrary } from './textures.mjs?v=20261124a';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124a';
-import { createScenery } from './scenery.mjs?v=20261124a';
-import { createGrass } from './grass.mjs?v=20261124a';
-import { createParticles } from './particles.mjs?v=20261124a';
-import { createEnvironment } from './environment.mjs?v=20261124a';
-import { createHoloUI } from './holo-ui.mjs?v=20261124a';
-import { createAudioSystem } from './audio.mjs?v=20261124a';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124a';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124c';
+import { createTextureLibrary } from './textures.mjs?v=20261124c';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124c';
+import { createScenery } from './scenery.mjs?v=20261124c';
+import { createGrass } from './grass.mjs?v=20261124c';
+import { createParticles } from './particles.mjs?v=20261124c';
+import { createEnvironment } from './environment.mjs?v=20261124c';
+import { createHoloUI } from './holo-ui.mjs?v=20261124c';
+import { createAudioSystem } from './audio.mjs?v=20261124c';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124c';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -239,7 +239,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         if (persist) {
             try { localStorage.setItem(SEASON_STORE_KEY, JSON.stringify({ levelId: String(level.id), season, weather })); } catch (_) {}
         }
-        if (latestUi) holoUI.sync({ ...latestUi, season, weather });
+        if (latestUi) holoUI.sync({ ...latestUi, season, weather, timeSlot: environment.getTimeSlot(), dayPhase: environment.getDayPhase() });
     }
 
     const holoUI = createHoloUI({
@@ -252,6 +252,19 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         onEnvChange: (kind, val) => {
             audio.playSfx('holo');
             applySeasonWeather(kind === 'season' ? val : season, kind === 'weather' ? val : weather);
+        },
+        onTimeSlot: slot => {
+            audio.playSfx('holo');
+            environment.setTimeSlot(slot);
+            if (latestUi) {
+                holoUI.sync({
+                    ...latestUi,
+                    season,
+                    weather,
+                    timeSlot: environment.getTimeSlot(),
+                    dayPhase: environment.getDayPhase()
+                });
+            }
         },
         onQualityChange: mode => {
             audio.playSfx('holo');
@@ -267,7 +280,12 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         onTimeToggle: () => {
             audio.playSfx('holo');
             environment.setTimeCycle(!environment.isTimeCycleEnabled());
-            if (latestUi) holoUI.sync({ ...latestUi, timeCycle: environment.isTimeCycleEnabled() });
+            if (latestUi) holoUI.sync({
+                ...latestUi,
+                timeCycle: environment.isTimeCycleEnabled(),
+                timeSlot: environment.getTimeSlot(),
+                dayPhase: environment.getDayPhase()
+            });
         },
         onCamReset: () => {
             audio.playSfx('holo');
@@ -458,6 +476,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             ...ui,
             season,
             weather,
+            timeSlot: environment.getTimeSlot(),
+            dayPhase: environment.getDayPhase(),
             quality: post.getQualityMode(),
             timeCycle: environment.isTimeCycleEnabled(),
             music: audio.isMusicEnabled(),
@@ -553,6 +573,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     const activePointers = new Map();
     let pointerConsumedByUi = false;
     let rightRotating = false;
+    let downOnPig = false;
     let downX = 0, downY = 0, lastX = 0, lastY = 0, dragged = false;
     let prevPinch = null;
     let pinchTransition = false;
@@ -685,6 +706,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             pickGroundTarget(ndcMid.x, ndcMid.y, pivotWorld);
             pivotMode = 'spin';
             dragged = true;
+            downOnPig = false;
             pointerConsumedByUi = false;
             return;
         }
@@ -702,10 +724,13 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             pivotMode = 'none';
         }
         if (!rightRotating && holoUI.handlePointerDown(x, y)) {
+            downOnPig = false;
             pointerConsumedByUi = true;
             return;
         }
         pointerConsumedByUi = false;
+        // 若左键/单指按下时落点在小猪身上，后续拖动不触发相机平移
+        downOnPig = !rightRotating && pickActor(e.clientX, e.clientY) !== null;
     };
 
     const onPointerMove = e => {
@@ -767,7 +792,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
                     applySpin(-dx * 0.0075);
                     targetPitch = THREE.MathUtils.clamp(targetPitch + dy * 0.0055, 0.35, 1.38);
                     lockPivotToScreen(pivotWorld, pivotNdcX, pivotNdcY);
-                } else {
+                } else if (!downOnPig) {
                     applyPan(dx, dy);
                 }
                 return;
@@ -791,6 +816,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             downX = lastX = rem.x;
             downY = lastY = rem.y;
             pinchTransition = true;
+            downOnPig = false;
             dragged = true;
             return;
         }
@@ -799,12 +825,17 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         if (pointerConsumedByUi) {
             holoUI.handlePointerUp(x, y);
             pointerConsumedByUi = false;
+            downOnPig = false;
             return;
         }
         if (!dragged && !rightRotating) {
-            if (holoUI.handlePointerUp(x, y)) return;
+            if (holoUI.handlePointerUp(x, y)) {
+                downOnPig = false;
+                return;
+            }
             const pigId = pickActor(e.clientX, e.clientY);
             if (pigId !== null) {
+                downOnPig = false;
                 audio.playSfx('oink');
                 onPick?.(pigId);
                 return;
@@ -816,6 +847,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
                 audio.playSfx('rustle');
             }
         }
+        downOnPig = false;
         rightRotating = false;
     };
 
@@ -1127,7 +1159,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         scenery.update(dt, elapsedTotal, curPreset.wind);
         grass.update(dt, elapsedTotal, latestState, actorPositions, curPreset, environment.getShadowData(), horizonColor);
         particles.update(dt, elapsedTotal, curPreset, viewH);
-        holoUI.update(dt, elapsedTotal, yaw);
+        holoUI.update(dt, elapsedTotal, yaw, environment.getDayPhase());
 
         post.renderScene(scene, camera);
         holoUI.render(renderer);
@@ -1141,6 +1173,13 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         get tier() { return post.getTier(); },
         get fps() { return post.getFps(); },
         get preset() { return { season, weather, isCageLevel }; },
+        get timeSlot() { return environment.getTimeSlot(); },
+        get dayPhase() { return environment.getDayPhase(); },
+        getSunPosition: () => environment.getSunPosition(),
+        setTimeSlot: slot => {
+            environment.setTimeSlot(slot);
+            if (latestUi) holoUI.sync({ ...latestUi, season, weather, timeSlot: environment.getTimeSlot(), dayPhase: environment.getDayPhase() });
+        },
         getActorCount: () => actorMap.size,
         getGuideText: () => latestUi?.guideText || '',
         hasGuideHand: () => markers.handSprite.visible,
@@ -1163,6 +1202,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             const rect = domEl.getBoundingClientRect();
             return { x: rect.left + pos.x, y: rect.top + pos.y };
         },
+        hasModalBackdrop: () => holoUI.hasModalBackdrop(),
         setSeasonWeather(s, w) {
             if (SEASONS.includes(s) && WEATHERS.includes(w)) applySeasonWeather(s, w, false);
         },

@@ -54,10 +54,13 @@ animateExit(id):
     若 view3d: 异步触发 view3d.animateExit(id)（不阻塞后续点击，离场猪独立冲刺淡出，玩家可连续点击下一只猪）
     否则: 原阻塞式 WAAPI 离场动画
 
-apply(id) 受阻 / 炸弹爆炸 / 解锁 / 剪绳 / 开笼 / 胜利:
-    若 view3d:
-        受阻 -> view3d.shake(id)
-        事件通知 -> view3d.notifyEvent(type, payload)（触发粒子与程序音效）
+apply(id) 引导锁定与动作校验:
+    第 1 关新手引导期（`level.id === 1 && !state.failed && hasSteps && (cursor === 0 || cursor === 1)`）:
+        若 `id !== expected.id` -> 拦截不提交，保留原步骤并提示“请先点击手势指引的高亮小猪”，触发 view3d.shake(id, notice) 或 2D 晃动反馈
+    受阻 / 炸弹爆炸 / 解锁 / 剪绳 / 开笼 / 胜利:
+        若 view3d:
+            受阻 -> view3d.shake(id)
+            事件通知 -> view3d.notifyEvent(type, payload)（触发粒子与程序音效）
 
 cancelAnimation():
     view3d?.cancelAnimations()
@@ -122,7 +125,7 @@ createScenery(scene, textures, level, tier):
 grassCountForTier(tier, isMobile, isSoftware):
     软光栅返回 1500
     桌面端: high 140000 / medium 36000 / low 22000
-    手机端(isMobile): 每档降一档 -> high 36000 / medium 22000 / low 12000
+    手机端(isMobile): high 8000 / medium 4000 / low 2000
 createGrass(scene, textures, level, tier):
     实例数: 由 grassCountForTier(tier, isMobile, isSoftware) 决定（棋盘内占 28%，其余集中分布于外围可见草坪）；动态降档 setTierCount 共用同一映射，getCount 返回当前可见数量
     草叶几何: 5 段渐细弯折三角带（uv.y 0→1，基底宽 0.072）
@@ -153,7 +156,10 @@ createParticles(scene, textures, tier):
 ```
 createEnvironment(scene, textures, tier):
     天空穹顶: 自定义球面着色器（天顶到地平线渐变、太阳光晕、横向水粉刷痕噪声、黄昏星点）
-    一局内时间推进（默认开启，可开关）: 约 600 秒一个昼夜/日照弧线循环，轻微偏移太阳高度与天空暖度
+    一局内时间推进（默认开启，可开关，并受表盘 24h 时段控制）:
+        - TIME_SLOTS = ['morning', 'noon', 'evening', 'night']（早/中/晚/夜，对应 dayPhase 0.0 / 0.25 / 0.5 / 0.75）
+        - 周期缩短至 90 秒一圈（默认 `timeCycleEnabled = true`）；主平行光方向(`sunLight.position`)、`uSunDir`、仰角/方位角、天空色温/星月显隐与月光方向随 `dayPhase` 连续弧线变化，无论 `timeCycleEnabled` 开关与否均实时应用当前时段光照
+        - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` 供时钟圆盘手控与同步指针角度
     积云: 14~20 朵噪声球簇，顶白底蓝灰，按风速缓慢漂移并环绕回折；阴雨天加厚下压并调暗
     远山: 3 层圆柱剪影带（textures.mountain(0..2)），随季节与雾色过渡
     灯光与雾: 主平行光（high 2048 / medium 1024 软阴影，low 关闭阴影）+ 外网半球光（#fff7e8 天光 / #5a7d3e 地色，随黄昏渐变）+ 月光方向光 + 指数雾
@@ -171,9 +177,11 @@ createHoloUI({ renderer, levels, levelId, onAction }):
     竖屏 / 横屏自适应布局（根据 viewport aspect 动态重排面板锚点，绝不遮挡中心棋盘安全区）:
         - 顶部全息条: 标题、第 N 关、上/下一关、展开式关卡网格/滑动选择、自由试玩徽章（矮按钮自适应双行字距，防止压字）、剩余与机制计数胶囊
         - 底部全息条: 步骤标题、提示开关、状态提示、上一步/下一步、可拖动全息进度条、撤回、重开
-        - 侧边可折叠全息面板: 四季 4 键、天气 4 键、画质(自动/高/中/低)、时间流动开关、音乐/音效开关、视角复位(V)、简洁 2D 控件开关(C)、切回 2D 版
+        - 侧边可折叠全息面板:
+            * 3 指针同心时钟圆盘 (`clock-dial`): 外环 24h 时段（早/中/晚/夜 · 金橙细长针，天光开启时随 dayPhase 实时转动）、中环天气（晴/阴/雨/雪 · 天蓝中针）、内环季节（春/夏/秋/冬 · 青绿短粗针），统一环形扇区配置表计算绘制与极坐标拾取，同时映射 `season-*` / `weather-*` / `time-*` 屏幕坐标供测试点选
+            * 其余控件: 画质(自动/高/中/低)、天光流动开关(流/定)、音乐/音效开关、视角复位(V)、简洁 2D 控件开关(C)、切回 2D 版
         - 关卡滑动选择面板: 内置圆角列表凹槽底板 + `PICK_ROWS_VISIBLE + 1` 行缓冲平滑滑动，配合 `uClipRect` 与 6px 渐隐遮罩严格裁剪上下出界格子，命中拾取同步限制在列表可视遮罩内
-        - 结算全息浮窗: 自适应宽度与 188px 高度居中弹窗，主副标题排布于上半区（0.25/0.46），两个按钮排布于下半区（y=h/2-48）留出 > 28px 安全间距绝不与文字重叠
+        - 结算全息浮窗: 全屏半透明暖深褐遮罩 `modalBackdrop`（#2b140c, opacity 0.56, renderOrder 111）覆盖底层棋盘与背景 HUD 并拦截穿透点击与滚轮，居中弹窗自适应宽度与 188px 高度，主副标题排布于上半区（0.25/0.46），两个按钮排布于下半区（y=h/2-48）留出 > 28px 安全间距绝不与文字重叠
         - 新手引导标语条 `guide-banner`: 无点击拦截（不加入 hitTargets）的金黄描边悬浮提示条，在第 1 关初始前两步或遇到阻挡时显示（如“👆 点击高亮小猪向前移动”），带柔和呼吸缩放并在完成引导/打开弹窗时自动隐藏
     输入: pointerdown/move/up 射线拾取全息按钮、进度条滑块与居中平滑关卡列表（强惯性平滑拖动 `pow(0.24, dt)`，禁用 `pickerBg`/`card` 底板 hover 变色与缩放）；暴露 getButtonScreen(name) 供自动化测试点击
 ```
@@ -215,7 +223,7 @@ createView3D({ container, level, levels, onPick, onAction }):
         - 按内圈棋盘实际区域（hw = cols/2 + 0.15, hh = rows/2 + 0.15, 高度 0..0.92）投影计算安全区居中 lookTarget
         - 横屏（viewW >= viewH）以安全区高度 96% 为主填满高度（兼顾宽度不溢出右侧 HUD）；竖屏（viewH > viewW）以安全区宽度 96% 为主贴紧透视前边最长边填满宽度（兼顾高度不溢出上下 HUD）
         - 二分搜索最优距离 [6..64] 并反推精确居中偏移
-    轨道阻尼控制: 左键/单指拖拽平移、PC 右键拖拽 360° 无极旋转与俯仰（全局捕获拦截 contextmenu 弹窗，围绕按下时鼠标地面射线交点旋转与轻量惯性自转，最大角速度 2.6 rad/s + 8.5/s 指数阻尼）、PC 滚轮缩放以鼠标下地面交点为焦心锁点、移动端双指只控制垂直轴（`yaw`/转盘 Z 轴）360° 无极旋转（融合双指拧转角变化与纯平行横向滑动，带轻量甩手惯性）+ 双指捏合缩放且实时以两指比例中心对应地面点为锚点，缩放/滚轮高度通过 autoPitchForZoom(zoom) 自动计算俯仰角（0.58~1.24 rad）；每帧按当前渲染姿态实时反解 `panOffset`（范围 `[-28, 28]`）消除旋转/缩放插值中途的弦线漂移；双指先后抬指同步剩余坐标防止视角跳变且保留甩手惯性；取消双击地面复位，仅保留 V 键与全息复位按钮按最短角差平滑回正
+    轨道阻尼控制: 左键/单指在空白地面按下拖拽平移（按下点命中动物 `downOnPig = true` 时屏蔽单指/左键相机平移，松手超拖动阈值也不误触发点击离场）、PC 右键拖拽 360° 无极旋转与俯仰（全局捕获拦截 contextmenu 弹窗，围绕按下时鼠标地面射线交点旋转与轻量惯性自转，最大角速度 2.6 rad/s + 8.5/s 指数阻尼）、PC 滚轮缩放以鼠标下地面交点为焦心锁点、移动端双指只控制垂直轴（`yaw`/转盘 Z 轴）360° 无极旋转（融合双指拧转角变化与纯平行横向滑动，带轻量甩手惯性）+ 双指捏合缩放且实时以两指比例中心对应地面点为锚点，缩放/滚轮高度通过 autoPitchForZoom(zoom) 自动计算俯仰角（0.58~1.24 rad）；每帧按当前渲染姿态实时反解 `panOffset`（范围 `[-28, 28]`）消除旋转/缩放插值中途的弦线漂移；双指先后抬指同步剩余坐标防止视角跳变且保留甩手惯性；取消双击地面复位，仅保留 V 键与全息复位按钮按最短角差平滑回正
     输入分发:
         - pointerdown/move/up: 优先交由 holoUI 精确包围盒拾取、居中平滑关卡列表拖动与进度条拖动；未命中 UI 时若移动距离 <= 8px 且非右键旋转视为点击：
           优先对在场非离场动物真实 3D 躯体网格做射线检测（失败再查包围盒）-> onPick(id) + 哼哼音效
@@ -225,5 +233,5 @@ createView3D({ container, level, levels, onPick, onAction }):
     animateExit(id): 蓄力下蹲后沿朝向冲刺跑出棋盘并淡出，沿途写入 grass 踩踏与白金冲刺尾迹，累计帧间隔确保完整播放
     shake(id, message): 前方受阻时前冲撞击喷火花+挤压回弹再左右摇摆；锁定态原地扭动身体；弹出红色叉号 + blocked/spring 音效
     cancelAnimations(): 立即完成或停止进行中补间，确保状态瞬间落位
-    测试钩子 window.__pig3d = { ready, tier, preset, fps, getGrassCount, getBoardScreenBounds, getCameraState, screenOf(id), holoButton(name), setSeasonWeather(s, w), resetCamera }
+    测试钩子 window.__pig3d = { ready, tier, preset, timeSlot, dayPhase, fps, getGrassCount, getBoardScreenBounds, getCameraState, screenOf(id), holoButton(name), setSeasonWeather(s, w), setTimeSlot(slot), resetCamera }
 ```
