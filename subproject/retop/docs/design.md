@@ -13,3 +13,5 @@
 - [CSI 分区边界后处理](design/retop-csi-boundary-postprocess.md)：共享边界显示副本、CSI 整线平滑及检查。
 
 - [小闪审查与贴图辅助小结构分区](design/moxing-csi-topogun-review.md)
+
+- [Retop AI 四边重拓扑（SQuadGen，设计草案）](design/retop-ai-squadgen.md)

@@ -1,5 +1,77 @@
 # Retop 变更日志
 
+### AI 四边重拓扑设计
+
+- ✅ [2026-11-25] 按用户要求整理SQuadGen代码与Retop AI文档的本地Git提交。
+  - 独立代码仓库提交 `3710e789b9575821ec3610eb03002c787d28af4f`，包含CPU兼容、LoRA保存加载/训练及GPU原版对照工具，共19个文件；Python语法与暂存差异空白检查通过，既有训练单测及实测结果见前述记录。
+  - AASC仅暂存AI目标、设计、伪代码、七份任务及相关公共文档增量；未纳入其他项目改动、CSI删除、权重、日志或测试产物。本次只做本地提交，未推送。
+
+- ✅ [2026-11-25] 核对原版扩散模型可调参数及权重语义。
+  - 依据当前infer_sqdiffuse.py/util.py/transport.py与自建adapter.py，确认无原版CFG引导强度参数；区分latent分辨率、初始噪声平滑、函数内部法线邻域权重、损失加权、四边提取和LoRA alpha/r。
+  - 更新design/spec/todo；本次未修改代码、未重跑推理，独立LoRA强度仅列可选需求。
+
+- ✅ [2026-11-25] 完成肩甲原版GPU生成、三组同场提取与五视图验收。
+  - 复用run_official.py与官方权重，无模型代码修改；170NFE，采样1192.29秒，入口1322.09秒，reserved峰值13.9258GiB。源件指纹不变。
+  - 默认10528四边中2面无法严格三角化；div1/s2生成9112四边，div1/s1生成2278四边，后两组当前审计均无无效面/自交。2278面版本双向P95 0.3949%/0.3410%，轮廓完整、锐边有圆化；等价4556三角面仅比原4600少0.96%，不宣称显著减面。
+  - 归档artifacts/squadgen-shoulder-gpu-2026-11-25及I:/ai/SQuadGen/results/shoulder-native-2026-11-25；同步goal/design/spec/task/todo，完成肩甲验证条目移除，保留人物/预算/真实训练待办。主要14个产物远端SHA一致，6份文档格式检查通过；未训练、未修改主工程配置、未提交或推送。
+
+- ✅ [2026-11-25] 完成SQuadGen原版全流程与参数消融，定位三孔模型压缩的关键提取配置，得到通过当前几何检查的候选。
+  - 新增local_gpu/compare_official.py、run_official.py、check_quadtools_io.cpp与说明；官方模型/入口/权重不改。固定输入前向/解码与C++读取核验、鸭子真值场控制组均完成；原生解码与适配解码提取网格逐位相同。
+  - 原版Windows/CUDA FPS/res8192/FP32/Dopri5/原生attention重新采样1181.55秒，reserved峰值13.93GiB；默认div0/s3仍2304面且65面无效，div1/s2/r15生成2056四边面，无自交/无无效面，双向P95 0.8609%/0.8038%。旧场相同调整得到2048面并通过；单独threshold/ringsize调整不能恢复压缩。
+  - 观测hook绕过导致原NFE未知，保留原记录并单独解释；计数包装与陈旧产物保护已修正，缺失/旧/新三分支自测通过。未为计数重跑或捏造评估次数。
+  - 产物归档artifacts/squadgen-official-comparison-2026-11-25，并同步I:/ai/SQuadGen/results/official-comparison；更新goal/design/spec/task/todo，移除完成诊断条目，保留跨资产/面数/真实训练待办。无主工程发布配置改动，未提交/推送Git。
+
+- ✅ [2026-11-25] 核对适配入口与官方流程差异，完成固定预测场的无细分/平滑对照。
+  - checkpoint 配置与源码配置一致；尚未完成原版端到端复现，纠正“完整参数”等同“原版效果”的表述。
+  - 独立 diagnostic-no-smoothing 输出 35 顶点/33 粗面（9 个非四边面），初始提取已严重压缩，排除最终细分/平滑是唯一原因；未改模型代码、权重或原结果，未重新采样。
+  - 更新 task/design/spec/todo 和 goal；根因仍需区分适配、预测场与初始提取，不能归因于缺 Qwen 或训练不足。
+
+- ✅ [2026-11-25] 按用户指示结束本机 CPU 长任务状态，完成远端 GPU 官方完整参数推理、提取与五视图测试，候选几何失败。
+  - 检查时旧进程已不存在，日志最后为第 30 次评估、t=0.24974；保留日志，将旧 running/waiting 状态修正为 stopped-process-already-exited，不推测未记录的退出原因。
+  - 源码、LoRA、官方权重和示例部署到 `192.168.1.101` 的 `I:/ai/SQuadGen`，权重 SHA-256 一致；独立 Python 3.11.18 / torch 2.8.0+cu126，RTX 2080 Ti 22528MiB。
+  - 新增 `local_gpu/attention.py`、`run_example.py` 与 README，`local_cpu/run_shoulder.py` 的 resource 导入兼容 Windows；保持 FP32/8192/Dopri5，完整键值查询分块。CPU/CUDA 注意力对照均通过，CUDA 最大绝对差约 1.03e-7；182 次评估、采样核心 1346.44 秒，allocated/reserved 峰值 3.54/4.11GiB；解码连续布局修复后原容差对照通过，复用 latent 恢复。
+  - 新增远端任务，同步 goal/design/spec/todo，2304 个四边面、62 面严格三角化失败，双向 P95 24.658%/4.387%；五视图严重压缩/折叠，拒绝几何。归档到 I 盘，保留失败记录，todo 改为质量定位；检查图/OBJ 的候选标签去除 CPU 限定。无主工程配置/发布变更，未提交或推送。
+
+- ✅ [2026-11-25] 核验官方完整参数 CPU 示例的运行状态，任务尚未结束。
+  - 09:08 检查进程、run.log 和 final-report.json：已运行约 11 小时，09:04 完成第 29 次网络评估，t=0.24327；每次约 22 分钟，RSS 约 3.40GiB，采样进程仍活跃，无报错或网格结果。
+  - 同步 design/spec/todo 的进度；保持用户选择的 8192/Dopri5 参数继续运行。仅状态核查与文档更新，未改代码、未重启任务，不把状态核查完成写成生成完成。
+
+- ✅ [2026-11-24] 实现冻结底模的独立 LoRA 缓存、训练、保存/加载、断点恢复与 CPU 推理接入。
+  - 用户要求先实现代码；先更新 spec，再新增 `/mnt/SQuadGen/local_train/` 的 adapter/runtime/cache/train/test_lora 模块和 README；`local_cpu/run_shoulder.py` 增加 adapter/base-id/checkpoint-dir 参数。未改官方训练循环、基础权重或主工程配置，未安装依赖、提交或推送。
+  - 产物仅保存 LoRA 与配置/来源清单，精确续训另存 optimizer/scheduler/scaler/RNG/采样游标，绑定底模/AE/数据/实现指纹；错误权重或不兼容显式失败。实现 FP16 autocast、梯度累积和 block 检查点，CUDA 尚待验证。
+  - 9 项 CPU unittest 通过：底模冻结、有效 LoRA 更新、零增量/禁用一致、保存重载与切换、错误键/形状/文件/底模拒绝、检查点梯度一致、下一步逐位续训、缓存保护及官方 NPZ→小型 AE→训练/恢复→真实推理加载入口。日志：`artifacts/squadgen-lora-tests-2026-11-24.log`；仅工程夹具，不宣称领域质量通过。
+  - 官方 meta 架构匹配 56 个投影，rank 8 为 1,548,288 适配参数；FP32 纯权重约 5.91MiB。源码编译、入口 help 和差异空白检查通过。同步 goal/design/spec/task，移除已完成代码待办，保留 GPU/16GiB/真实领域几何验收和后续高低模条件扩展。
+  - 最终核验：9 项 unittest 全通过（测试主体 9.874 秒，不含启动导入）；7 份文档、29 个本地链接、围栏与行尾空白检查通过。官方完整参数 CPU 示例仍在后台采样，未重启或降低参数。
+
+- ✅ [2026-11-24] 明确“冻结底模 + 独立 LoRA 保存/加载”训练设计及不同底模的兼容边界。
+  - 更新 goal 第 6.3 节、design/spec/todo，新增 `task/2026-11-24_SQuadGen_LoRA保存加载设计.md`；指定融合 qkv/proj 注入、底模/AE 指纹校验、推理包与续训包分离、条件模块完整保存、单适配器切换与往返自测。
+  - 仅设计文档变更；未修改训练或推理代码、未启动训练、未安装依赖，现有官方 CPU 长任务继续运行。LoRA 实现保留待办，不标记为已实现。
+  - 验证通过：6 份文档、28 个本地链接、Markdown 围栏与行尾空白；`git diff --check -- subproject/retop` 无错误。训练及加载自测尚未执行。
+
+- ✅ [2026-11-24] 完成官方示例完整参数试验的输入核验并启动 CPU 长任务，推理仍进行中。
+  - 按用户明确选择运行 README 的 res 8192 / Dopri5 / 代理 0.2%，使用官方列表首项 `3_holes.ply`；没有沿用肩甲降配。
+  - 输入 9847 顶点、19702 三角面，闭合有效；预处理完成，查询代理为 710290 三角面。正在 Geometry AE 编码，尚无生成质量结论。
+  - 复用既有 CPU 入口和检查器，串联成功后的五视图/报告生成及失败记录；8GiB 进程地址空间限额明确记录。无算法代码、依赖或主工程配置变更。
+  - 新增官方示例任务记录，更新 goal/design/spec/todo；产物与日志位于 `artifacts/squadgen-official-3holes-2026-11-24/`。完整参数试验保留为进行中，未标为完成。
+
+- ✅ [2026-11-24] 完成官方 SQuadGen 肩甲 CPU 推理、实际四边提取与五视图检查；候选质量未通过。
+  - 经用户确认，在 `/mnt/SQuadGen/.venv` 安装独立依赖，下载并核对官方权重 SHA-256，构建 QuadExtraction / QuadQuality；新增 `local_cpu/run_shoulder.py`、`inspect_result.py`、README 和环境/补丁记录。
+  - `network/utils.py` 延迟渲染依赖、可选八叉树；`util/util.py` 增加 CPU FPS。严格权重加载、官方解码数值对照、脚本语法和差异空白检查通过。
+  - `artifacts/squadgen-shoulder-2026-11-24/cpu-res512/` 保存实际 OBJ/PLY、阶段日志、报告与五视图；源件未改。生成 1282 顶点、1280 四边面，采样约 789 秒；最大进程 RSS 约 3.54GiB。
+  - 质量拒绝：2 个退化面、12 个严格三角化失败面，穿插未知；高→低/低→高诊断 P95 为原对角线 22.60% / 3.76%，可见大块形体缺失。res 512、Euler 16 更新、代理 0.4% 的简化测试不代表官方默认质量。
+  - 同步 goal/design/spec/task，移除已执行的 CPU 测试待办，仅保留后续默认配置/表示诊断。未训练、未接入主工程、未提交或推送代码。
+  - 最终核验：9 份 Markdown 的 27 个本地链接、代码围栏与行尾空白检查通过；五阶段状态均完成，OBJ/PLY/五视图/报告实际存在，质量状态明确为拒绝。
+
+- ✅ [2026-11-24] 完成肩甲 CPU 测试的输入和源码准备。
+  - 官方仓库移至用户指定的 `/mnt/SQuadGen`；原肩甲导出到 `artifacts/squadgen-shoulder-2026-11-24/`，保留原始多边形和独立 4600 三角面输入。
+  - 坐标/面索引回读一致、源文件未改，单闭合组件且现有拓扑审计通过。新增 CPU 测试 task 并同步 design/spec/todo。
+  - 本机检测为 2 核、约 8GB 内存、CPU-only PyTorch；尚未执行 SQuadGen 推理，未将输入准备标为生成效果测试通过。
+
+- ✅ [2026-11-24] 完成基于 SQuadGen 的高模转低模方案与本地微调研究记录。
+  - 新增 `goal.md`、`docs/design/retop-ai-squadgen.md`、`docs/spec/retop-ai-squadgen.md`、`docs/task/2026-11-24_Retop_SQuadGen_AI重拓扑设计.md`；更新 design/spec 索引和 todo。
+  - 记录四边优先、可调面数、2080 Ti 22GB/16GiB 训练目标、冻结 AE 的领域适配、数据监督、高模预处理、可选贴图和 Qwen3.5 非必需结论；区分官方能力与待实现扩展。
+  - 验证：核对官方论文/代码/训练与模型配置；8 份 Markdown 的 18 个本地链接、代码围栏与行尾空白检查通过，`git diff --check -- subproject/retop` 通过。未修改运行代码，未安装/下载模型，未进行训练或功能实测，不宣称 AI 工具已实现。
+
 ### 小闪第二版分区与形体导线
 
 - ✅ [2026-11-24] 合并7个胸前碎区并准备13条美术低模参考路径，生成62分区、121接口的第二版审查结果，未进入 TopoGun。

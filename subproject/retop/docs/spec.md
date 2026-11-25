@@ -9,3 +9,5 @@
 - [独立 CSI 分区网页伪代码](spec/retop-csi-partition-web.md)
 
 - [小闪审查与贴图辅助小结构分区](spec/moxing-csi-topogun-review.md)
+
+- [Retop AI 四边重拓扑伪代码（尚未实现）](spec/retop-ai-squadgen.md)
