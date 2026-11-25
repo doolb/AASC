@@ -1,3 +1,9 @@
+- ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125j`，含夜晚小猪亮面微暗柔和化、全场景物件向月光照亮及晴/阴/雨月光强弱分级）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 9 个变更文件（`index.html`、`app.mjs`、`3d/{environment,grass,holo-ui,models,scenery,textures,view}.mjs`），并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
+- ✅ [2026-11-25] 夜晚小猪亮面微暗柔和化、全场景物件向月光照亮与晴/阴/雨月光亮度分级（`?v=20261125j`）
+  - `web/pig-level/3d/environment.mjs`：取消夜晚主光强度 `[0.62, 0.76]` 窄钳制，按云量 `cloudCover` 与冬雪计算月光强弱系数 `moonFactor` 与 `nightMoonIntensity`（晴夜明月 `~1.31 / 1.00` > 阴夜薄云 `~0.68 / 0.50` > 雨夜微月 `~0.46 / 0.35`），同步联动天空月亮/光晕 `uMoonFactor` 与夜间半球补光并导出 `lightState.moonFactor`。
+  - `web/pig-level/3d/scenery.mjs`：在 `applyPreset` 中将夜晚 PBR 物件基底色压暗比例由 `0.70` 收敛至 `0.38`（冬季 `0.25`）解除双重压暗，在 `enhancePropPbr` 中接入 `uSunDir`、`uDirectTint` 与 `uMoonFactor` 对向月法线面计算银蓝月光漫反射照亮（`moonNoL`），并令地面月光池 `moonPool` 同步随 `uMoonFactor` 强弱变化。
+  - `web/pig-level/3d/models.mjs`、`web/pig-level/3d/grass.mjs`：`toonMat` 同步 `uMoonFactor`，将夜晚小猪亮面 `litBase` 的 `uTimeTint` 权重调整为 `0.48` 并按 `0.54 + 0.38 * uMoonFactor` 缩放受光面照度（晴夜 `~0.92` 较上一版柔和微暗，阴/雨夜逐级变暗）；`grass.mjs` 同步 `uMoonFactor` 联动夜晚叶尖月辉与地面月光池；在 `tests/pig-level-3d.test.js` 校验晴/雨夜晚 `moonFactor` 差异并升级 `?v=20261125j`（`119 / 119`、`1 / 1`、`5 / 5` 全部通过）。
 - ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125i`，含夜晚小猪/角色受夜光照亮亮面提亮及场景 10 棵季节树点击摇晃与四季落花落叶落雪交互）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 10 个变更文件（`index.html`、`app.mjs`、`3d/{environment,grass,holo-ui,models,particles,scenery,textures,view}.mjs`），并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
 - ✅ [2026-11-25] 提亮夜晚猪/角色受夜光照亮亮面并新增场景季节树点击交互（`?v=20261125i`）

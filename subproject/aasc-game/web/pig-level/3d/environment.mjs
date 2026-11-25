@@ -1,7 +1,7 @@
 // 动态环境：手绘天空穹顶、飘动积云、三层远山、太阳与半球光、指数雾、昼夜缓慢流逝与天气闪电。
 import * as THREE from '../vendor/three.module.min.js';
-import { buildPreset, seededRandom } from './presets.mjs?v=20261125i';
-import { blobSphere } from './geometry.mjs?v=20261125i';
+import { buildPreset, seededRandom } from './presets.mjs?v=20261125j';
+import { blobSphere } from './geometry.mjs?v=20261125j';
 
 export const TIME_SLOTS = ['morning', 'noon', 'evening', 'night'];
 export const TIME_LABELS = { morning: '早', noon: '中', evening: '晚', night: '夜' };
@@ -69,6 +69,7 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         uSunDir: { value: new THREE.Vector3(0.4, 0.7, -0.5).normalize() },
         uSunColor: { value: new THREE.Color('#fff1d6') },
         uMoonDir: { value: new THREE.Vector3(-0.34, 0.32, -0.88).normalize() },
+        uMoonFactor: { value: 1.0 },
         uTime: { value: 0 },
         uDusk: { value: 0 },
         uFlash: { value: 0 },
@@ -92,6 +93,7 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
             uniform vec3 uSunDir;
             uniform vec3 uSunColor;
             uniform vec3 uMoonDir;
+            uniform float uMoonFactor;
             uniform float uTime;
             uniform float uDusk;
             uniform float uFlash;
@@ -118,8 +120,8 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
                     vec3 moonFace = mix(vec3(0.86, 0.91, 1.0), vec3(1.0, 0.98, 0.92), 0.55 + moonCrater * 0.45);
                     float moonHalo = pow(moonDot, 18.0) * 0.34 + pow(moonDot, 6.0) * 0.14;
                     float moonAlpha = smoothstep(0.04, 0.45, uDusk);
-                    col += vec3(0.76, 0.87, 1.0) * moonHalo * moonAlpha;
-                    col = mix(col, moonFace * 1.15, moonDisc * moonAlpha);
+                    col += vec3(0.76, 0.87, 1.0) * moonHalo * moonAlpha * uMoonFactor;
+                    col = mix(col, moonFace * 1.15, moonDisc * moonAlpha * (0.45 + 0.55 * uMoonFactor));
                 }
                 // 黄昏/铁笼夜空闪烁星点
                 if (uDusk > 0.1 && h > 0.14) {
@@ -231,6 +233,7 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         dawnBlend: 0,
         duskMix: 0,
         snowCover: 0,
+        moonFactor: 1,
         sunIntensity: 1.5,
         hemiIntensity: 0.7,
         hemiSkyColor: new THREE.Color('#fff7e8'),
@@ -291,12 +294,17 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
 
         sunLight.color.copy(skyUniforms.uSunColor.value);
         const dayLightInt = p.sunIntensity * (1 - sunsetBlend * 0.16);
-        sunLight.intensity = THREE.MathUtils.lerp(dayLightInt, Math.min(0.76, Math.max(0.62, p.sunIntensity * 0.34)), nightBlend) + flashVal * 3.5;
-        // 夜晚转为柔和前向夜空漫反射补光；冬季因地面大面积白雪 24h 高反照率，显著提高半球环境光与雪面漫反射补光
         const snowMix = THREE.MathUtils.clamp(p.snowCover || 0, 0, 1);
+        // 晴 / 阴 / 雨夜晚月光强弱分级（晴夜 1.00 / 阴夜 ~0.50 / 雨夜 ~0.35，冬雪夜适度上浮）
+        const cloudAtten = THREE.MathUtils.clamp((p.cloudCover - 0.34) / 0.66, 0, 1);
+        const moonFactor = THREE.MathUtils.clamp(1.0 - cloudAtten * 0.65 + (p.season === 'winter' ? snowMix * 0.12 : 0), 0.35, 1.05);
+        const nightMoonIntensity = 1.31 * moonFactor;
+        skyUniforms.uMoonFactor.value = moonFactor;
+        sunLight.intensity = THREE.MathUtils.lerp(dayLightInt, nightMoonIntensity, nightBlend) + flashVal * 3.5;
+        // 夜晚转为柔和前向夜空漫反射补光；冬季因地面大面积白雪 24h 高反照率，显著提高半球环境光与雪面漫反射补光
         moonLight.position.set(14, 15, 20);
-        moonLight.intensity = duskMix * 0.24 + snowMix * 0.22;
-        hemiLight.intensity = Math.max(0.42, THREE.MathUtils.lerp(p.hemiIntensity + sunsetBlend * 0.08, 0.44, nightBlend))
+        moonLight.intensity = duskMix * (0.14 + 0.24 * moonFactor) + snowMix * 0.22;
+        hemiLight.intensity = Math.max(0.32, THREE.MathUtils.lerp(p.hemiIntensity + sunsetBlend * 0.08, 0.30 + 0.24 * moonFactor, nightBlend))
             + snowMix * THREE.MathUtils.lerp(0.46, 0.52, nightBlend);
         hemiLight.color.set('#fff7e8').lerp(solar.sun, 0.35).lerp(cB.set('#5d7dc2'), duskMix * 0.82);
         hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#1c2648'), duskMix * 0.82);
@@ -313,6 +321,7 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         lightState.dawnBlend = dawnBlend;
         lightState.duskMix = duskMix;
         lightState.snowCover = snowMix;
+        lightState.moonFactor = moonFactor;
         lightState.sunIntensity = sunLight.intensity;
         lightState.hemiIntensity = hemiLight.intensity;
         lightState.hemiSkyColor.copy(hemiLight.color);

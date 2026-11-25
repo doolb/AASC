@@ -432,6 +432,14 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         assert.ok(snowGroundRgb[2] > 180 && snowBounceRgb[2] > snowBounceRgb[0] && snowBounceRgb[2] > 110,
             `冬季草叶应同步地面雪色与24h雪面半球反光 (ground=${envState.grass.groundColor}, bounce=${envState.grass.hemiGroundColor})`);
         assert.equal(envState.uiSkin, 'winterRain:night', '全息 UI 配色应跟随冬雨和夜间状态自动切换');
+        await page.evaluate(() => window.__pig3d.setSeasonWeather('spring', 'sunny'));
+        await page.waitForFunction(() => window.__pig3d.preset.season === 'spring' && window.__pig3d.preset.weather === 'sunny' && window.__pig3d.getPigLightState().moonFactor > 0.9, { timeout: 5000 });
+        const sunnyMoonFactor = await page.evaluate(() => window.__pig3d.getPigLightState().moonFactor);
+        await page.evaluate(() => window.__pig3d.setSeasonWeather('spring', 'rain'));
+        await page.waitForFunction(() => window.__pig3d.preset.weather === 'rain' && window.__pig3d.getPigLightState().moonFactor < 0.5, { timeout: 5000 });
+        const rainMoonFactor = await page.evaluate(() => window.__pig3d.getPigLightState().moonFactor);
+        assert.ok(sunnyMoonFactor > rainMoonFactor + 0.4,
+            `夜晚月光亮度应随晴(${sunnyMoonFactor.toFixed(2)})到雨(${rainMoonFactor.toFixed(2)})显著变化`);
         await page.mouse.click(setCloseBtn.x, setCloseBtn.y);
         assert.equal(await page.evaluate(() => window.__pig3d.holoButton('settings-title')), null, '点击关闭按钮应关闭环境设置弹窗');
 

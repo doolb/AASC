@@ -1,6 +1,6 @@
 // 角色与棋盘物件程序化建模：猪、小象、小鸭、铁笼、各类机制配件与提示指示器。
 import * as THREE from '../vendor/three.module.min.js';
-import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261125i';
+import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261125j';
 
 // 机制配件与铁笼的无贴图 PBR 金属度/粗糙度预设
 export const PBR_ACCESSORY_PRESETS = {
@@ -187,6 +187,7 @@ export function createModelFactory(textures) {
             uLightColor: { value: new THREE.Color('#fffdf6') },
             uTimeTint: { value: new THREE.Color('#ffffff') },
             uNightMix: { value: 0 },
+            uMoonFactor: { value: 1 },
             uSnow: { value: 0 }
         },
         vertexShader: /* glsl */`
@@ -203,6 +204,7 @@ export function createModelFactory(textures) {
             uniform vec3 uLightColor;
             uniform vec3 uTimeTint;
             uniform float uNightMix;
+            uniform float uMoonFactor;
             uniform float uSnow;
             varying vec3 vColor;
             varying vec3 vWorldNormal;
@@ -214,11 +216,11 @@ export function createModelFactory(textures) {
                 float wrapGrad = smoothstep(-0.62, 0.72, ndl);
                 float topRim = smoothstep(0.55, 0.94, N.y) * 0.09;
 
-                // 夜晚区分受光亮面与暗面：亮面用柔和银白月光漫反射照亮，同时压低 topRim/hiStep 消除塑料反光
-                vec3 litBase = vColor * mix(vec3(1.0), uTimeTint, 0.18 + 0.18 * uNightMix);
+                // 夜晚区分受光亮面与暗面：亮面按晴/阴/雨月光强弱柔和照亮（晴夜适中不刺眼），同时压低 topRim/hiStep 消除塑料反光
+                vec3 litBase = vColor * mix(vec3(1.0), uTimeTint, 0.22 + 0.26 * uNightMix);
                 vec3 shadeBase = vColor * mix(vec3(1.0), uTimeTint, 0.28 + 0.44 * uNightMix * (1.0 - uSnow * 0.20));
-                vec3 moonSilver = mix(uLightColor, mix(vec3(1.0, 0.98, 0.96), uLightColor, 0.42), uNightMix);
-                vec3 litCol = litBase * moonSilver * mix(vec3(1.06, 0.94, 0.90), vec3(1.18, 1.08, 1.00), wrapGrad) * mix(1.0, 1.18, uNightMix)
+                vec3 moonSilver = mix(uLightColor, mix(vec3(1.0, 0.98, 0.96), uLightColor, 0.54), uNightMix);
+                vec3 litCol = litBase * moonSilver * mix(vec3(1.06, 0.94, 0.90), vec3(1.18, 1.08, 1.00), wrapGrad) * mix(1.0, 0.54 + 0.38 * uMoonFactor, uNightMix)
                     + vec3(0.04, 0.025, 0.015) * (1.0 - uNightMix * 0.90)
                     + hiStep * uLightColor * 0.08 * (1.0 - uNightMix * 0.88)
                     + topRim * mix(vec3(1.0), uLightColor, 0.65) * (1.0 - uNightMix * 0.85);
@@ -647,6 +649,7 @@ export function createModelFactory(textures) {
         if (lightState.directTint) toonMat.uniforms.uLightColor.value.copy(lightState.directTint);
         if (lightState.timeTint) toonMat.uniforms.uTimeTint.value.copy(lightState.timeTint);
         toonMat.uniforms.uNightMix.value = THREE.MathUtils.clamp(lightState.nightBlend ?? 0, 0, 1);
+        toonMat.uniforms.uMoonFactor.value = THREE.MathUtils.clamp(lightState.moonFactor ?? 1, 0, 1.2);
         toonMat.uniforms.uSnow.value = THREE.MathUtils.clamp(lightState.snowCover ?? 0, 0, 1);
     }
 
@@ -666,6 +669,7 @@ export function createModelFactory(textures) {
             lightColor: `#${toonMat.uniforms.uLightColor.value.getHexString()}`,
             timeTint: `#${toonMat.uniforms.uTimeTint.value.getHexString()}`,
             nightMix: toonMat.uniforms.uNightMix.value,
+            moonFactor: toonMat.uniforms.uMoonFactor.value,
             accessoryPbr: {
                 steel: { metalness: metalMat.metalness, roughness: metalMat.roughness },
                 gold: { metalness: goldMat.metalness, roughness: goldMat.roughness },

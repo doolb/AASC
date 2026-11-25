@@ -1,7 +1,7 @@
 // 手绘吉卜力风场景：修剪草坪棋盘、卵石边、石板路、高脚木屋、栅栏、季节树、小花与远坡风车。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125i';
-import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125i';
+import { seededRandom } from './presets.mjs?v=20261125j';
+import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125j';
 
 // 无贴图 PBR 材质预设参数（金属度与粗糙度，随湿润度与积雪动态插值）
 export const PBR_SURFACE_PRESETS = {
@@ -17,19 +17,28 @@ export const PBR_SURFACE_PRESETS = {
     seasonProp: { metalness: 0.03, roughness: 0.70, wetRoughness: 0.45 }
 };
 
-// 为场景 MeshStandardMaterial 物件注入轻量明度校准与冬季雪地漫反射反光增益（维持水粉明快色感同时保留完整 Cook-Torrance PBR 高光/粗糙度）
+// 为场景 MeshStandardMaterial 物件注入轻量明度校准、冬季雪地漫反射反光及夜间向月面月光照亮（受晴/阴/雨 uMoonFactor 调制）
 function enhancePropPbr(material, sharedGround) {
-    material.customProgramCacheKey = () => 'pig3d-prop-pbr-v2';
+    material.customProgramCacheKey = () => 'pig3d-prop-pbr-v3';
     material.onBeforeCompile = shader => {
         shader.uniforms.uNightMix = sharedGround.uNightMix;
         shader.uniforms.uSnow = sharedGround.uSnow;
+        shader.uniforms.uSunDir = sharedGround.uSunDir;
+        shader.uniforms.uDirectTint = sharedGround.uDirectTint;
+        shader.uniforms.uMoonFactor = sharedGround.uMoonFactor;
         shader.fragmentShader = shader.fragmentShader
-            .replace('void main() {', 'uniform float uNightMix;\nuniform float uSnow;\nvoid main() {')
+            .replace(
+                'void main() {',
+                'uniform float uNightMix;\nuniform float uSnow;\nuniform vec3 uSunDir;\nuniform vec3 uDirectTint;\nuniform float uMoonFactor;\nvoid main() {'
+            )
             .replace(
                 '#include <opaque_fragment>',
                 `#include <opaque_fragment>
                 float propSnowLift = 1.0 + smoothstep(0.15, 0.75, uSnow) * mix(0.14, 0.24, uNightMix);
-                gl_FragColor.rgb *= mix(1.28, 0.96, uNightMix) * propSnowLift;`
+                vec3 moonLView = normalize((viewMatrix * vec4(normalize(uSunDir), 0.0)).xyz);
+                float moonNoL = smoothstep(0.02, 0.85, dot(normal, moonLView));
+                vec3 moonPropLit = diffuseColor.rgb * uDirectTint * (moonNoL * 0.56 + 0.06) * uNightMix * uMoonFactor;
+                gl_FragColor.rgb = gl_FragColor.rgb * mix(1.28, 0.96, uNightMix) * propSnowLift + moonPropLit;`
             );
     };
 }
@@ -46,6 +55,7 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
         shader.uniforms.uInteractMap = sharedGround.uInteractMap;
         shader.uniforms.uSunDir = sharedGround.uSunDir;
         shader.uniforms.uDirectTint = sharedGround.uDirectTint;
+        shader.uniforms.uMoonFactor = sharedGround.uMoonFactor;
         shader.vertexShader = shader.vertexShader
             .replace(
                 'void main() {',
@@ -75,7 +85,7 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
         shader.fragmentShader = shader.fragmentShader
             .replace(
                 'void main() {',
-                'uniform vec3 uHorizonColor;\nuniform float uNightMix;\nuniform float uSnow;\nuniform float uTime;\nuniform vec2 uBoardHalf;\nuniform sampler2D uInteractMap;\nuniform vec3 uSunDir;\nuniform vec3 uDirectTint;\nvarying vec2 vGroundXZ;\nvoid main() {'
+                'uniform vec3 uHorizonColor;\nuniform float uNightMix;\nuniform float uSnow;\nuniform float uTime;\nuniform vec2 uBoardHalf;\nuniform sampler2D uInteractMap;\nuniform vec3 uSunDir;\nuniform vec3 uDirectTint;\nuniform float uMoonFactor;\nvarying vec2 vGroundXZ;\nvoid main() {'
             )
             .replace(
                 '#include <normal_fragment_maps>',
@@ -165,9 +175,9 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
                     gl_FragColor.rgb += vec3(0.92, 0.96, 1.0) * smoothstep(0.985, 0.998, snowSp) * scSnow * spPulse * 0.24;
                 }`}
                 if (uNightMix > 0.02) {
-                    // 月夜左上角银青漫射月光池
+                    // 月夜左上角银青漫射月光池（随晴/阴/雨 uMoonFactor 强弱变化）
                     float moonPool = 1.0 - smoothstep(4.0, 28.0, length(vGroundXZ - vec2(-uBoardHalf.x - 4.0, -uBoardHalf.y - 5.0)));
-                    gl_FragColor.rgb += vec3(0.07, 0.15, 0.20) * moonPool * uNightMix;
+                    gl_FragColor.rgb += vec3(0.07, 0.15, 0.20) * moonPool * uNightMix * uMoonFactor;
                 }
                 ${isInnerLawn ? '' : `
                 if (uNightMix > 0.02 || scSnow > 0.05) {
@@ -244,7 +254,8 @@ export function createScenery(scene, textures, level, tier = 'high') {
         uBoardHalf: { value: new THREE.Vector2(halfW, halfH) },
         uInteractMap: { value: textures.noiseMap() },
         uSunDir: { value: new THREE.Vector3(0.4, 0.85, 0.35).normalize() },
-        uDirectTint: { value: new THREE.Color('#ffffff') }
+        uDirectTint: { value: new THREE.Color('#ffffff') },
+        uMoonFactor: { value: 1.0 }
     };
     const pbrPropMats = new Map();
     const makePbrMat = (key, opts = {}) => {
@@ -857,6 +868,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
         if (horizonColor) sharedGround.uHorizonColor.value.copy(horizonColor);
         if (lightState?.sunDir) sharedGround.uSunDir.value.copy(lightState.sunDir).normalize();
         if (lightState?.directTint) sharedGround.uDirectTint.value.copy(lightState.directTint);
+        sharedGround.uMoonFactor.value = lightState?.moonFactor ?? 1.0;
         const nightMix = lightState?.nightBlend ?? 0;
         const sunsetMix = lightState?.sunsetBlend ?? 0;
         const duskMix = lightState?.duskMix ?? preset.dusk;
@@ -921,24 +933,24 @@ export function createScenery(scene, textures, level, tier = 'high') {
         pondWaterMat.color.set(isWinter ? '#9bd5f2' : '#64c6e8').lerp(colTmp.set('#1d3f6e'), nightMix * 0.82);
         outlineMat.color.set('#4c342b').lerp(colTmp.set('#1f2c4f'), Math.max(nightMix * 0.88, isWinter ? 0.55 : 0));
 
-        // 树木枝干、木框、栅栏、木屋、灌木、卵石、石板与冬季雪顶随夜色压暗融入月夜（冬季受雪面环境反光保留更多通透感）
-        const propNight = nightMix * (isWinter ? 0.45 : 0.70);
-        trunkMat.color.set('#785034').lerp(colTmp.set('#3b3248'), propNight);
-        boardMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), propNight);
-        fenceMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), propNight);
-        cabinMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), propNight);
-        bushMesh.material.color.set('#ffffff').lerp(colTmp.set('#2c5863'), nightMix * (isWinter ? 0.50 : 0.74));
-        lilyMat.color.set('#ffffff').lerp(colTmp.set('#2c5863'), nightMix * (isWinter ? 0.50 : 0.74));
-        pebbleMat.color.set('#cfd5cd').lerp(colTmp.set('#586b8a'), propNight);
-        pathMat.color.set('#dcd4c6').lerp(colTmp.set('#556785'), propNight);
-        pondRimMat.color.set('#ffffff').lerp(colTmp.set('#5c6e8c'), propNight);
+        // 树木枝干、木框、栅栏、木屋、灌木、卵石、石板与冬季雪顶适度收敛夜间底色压暗，让 PBR 向月受光面清晰受月光照亮
+        const propNight = nightMix * (isWinter ? 0.25 : 0.38);
+        trunkMat.color.set('#785034').lerp(colTmp.set('#4c415e'), propNight);
+        boardMesh.material.color.set('#ffffff').lerp(colTmp.set('#746b8c'), propNight);
+        fenceMesh.material.color.set('#ffffff').lerp(colTmp.set('#746b8c'), propNight);
+        cabinMesh.material.color.set('#ffffff').lerp(colTmp.set('#746b8c'), propNight);
+        bushMesh.material.color.set('#ffffff').lerp(colTmp.set('#3d707e'), nightMix * (isWinter ? 0.30 : 0.44));
+        lilyMat.color.set('#ffffff').lerp(colTmp.set('#3d707e'), nightMix * (isWinter ? 0.30 : 0.44));
+        pebbleMat.color.set('#cfd5cd').lerp(colTmp.set('#6e82a4'), propNight);
+        pathMat.color.set('#dcd4c6').lerp(colTmp.set('#6c7f9f'), propNight);
+        pondRimMat.color.set('#ffffff').lerp(colTmp.set('#7286a6'), propNight);
         const nightSnowHex = '#8ba4cf';
-        boardSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
-        roofSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
-        fenceSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
-        bushSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
-        pondSnowMat.color.set('#eff5fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
-        pineSnowMat.color.set('#eff6fd').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
+        boardSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.46);
+        roofSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.46);
+        fenceSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.46);
+        bushSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.46);
+        pondSnowMat.color.set('#eff5fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.46);
+        pineSnowMat.color.set('#eff6fd').lerp(colTmp.set(nightSnowHex), nightMix * 0.46);
 
         const warmGlow = isWinter ? Math.max(0.85, duskMix) : Math.max(0, (duskMix - 0.22) / 0.78);
         cabinWinMat.emissiveIntensity = 0.10 + warmGlow * 1.45;

@@ -1,8 +1,8 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125i';
-import { groundHeight } from './geometry.mjs?v=20261125i';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261125i';
+import { seededRandom } from './presets.mjs?v=20261125j';
+import { groundHeight } from './geometry.mjs?v=20261125j';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261125j';
 
 // 草叶无贴图 PBR 物理参数预设
 export const PBR_GRASS_PRESET = {
@@ -156,6 +156,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
         uTimeTint: { value: new THREE.Color('#ffffff') },
         uDirectTint: { value: new THREE.Color('#ffffff') },
         uNightMix: { value: 0 },
+        uMoonFactor: { value: 1 },
         uMetalness: { value: PBR_GRASS_PRESET.metalness },
         uRoughness: { value: PBR_GRASS_PRESET.roughness },
         uSunIntensity: { value: 2.2 },
@@ -261,6 +262,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
             uniform vec3 uTimeTint;
             uniform vec3 uDirectTint;
             uniform float uNightMix;
+            uniform float uMoonFactor;
             uniform float uMetalness;
             uniform float uRoughness;
             uniform float uSunIntensity;
@@ -384,7 +386,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                 }
                 float moonPool = 1.0 - smoothstep(4.0, 28.0, length(vWorldXZ - vec2(${(-halfW - 4.0).toFixed(2)}, ${(-halfH - 5.0).toFixed(2)})));
                 if (uNightMix > 0.02) {
-                    gLit += vec3(0.07, 0.15, 0.20) * moonPool * uNightMix;
+                    gLit += vec3(0.07, 0.15, 0.20) * moonPool * uNightMix * uMoonFactor;
                 }
                 if (isInnerG < 0.5 && (uNightMix > 0.02 || scSnowG > 0.05)) {
                     float cabinPool = 1.0 - smoothstep(1.1, 6.0, length(vWorldXZ - vec2(${(halfW + 4.2).toFixed(2)}, ${(-halfH - 3.4).toFixed(2)})));
@@ -413,7 +415,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                 vec3 nightBlade = mix(nightRoot, nightBladeBase, 0.28 + 0.72 * vY);
                 float nightMixWeight = mix(0.84, 0.42, snowBounce);
                 vec3 litBlade = mix(pbrLit, mix(pbrLit * mix(0.62, 1.0, snowBounce), nightBlade, nightMixWeight), uNightMix);
-                float moonTip = uNightMix * smoothstep(0.56, 1.0, vY) * (1.0 - shadowMask * 0.88) * (0.11 + 0.26 * moonPool + 0.24 * snowBounce);
+                float moonTip = uNightMix * uMoonFactor * smoothstep(0.56, 1.0, vY) * (1.0 - shadowMask * 0.88) * (0.11 + 0.26 * moonPool + 0.24 * snowBounce);
                 litBlade += (mix(vec3(0.13, 0.26, 0.34), vec3(0.46, 0.62, 0.78), snowBounce) + specular * 0.35) * moonTip;
                 if (snowBounce > 0.05) {
                     // 冬夜/冬日雪地漫反射暗部兜底：防止背光面、阴影区或草叶中段低于脚下雪面散射亮度
@@ -472,6 +474,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
         if (horizonColor) uniforms.uHorizonColor.value.copy(horizonColor);
         if (lightState) {
             uniforms.uNightMix.value = THREE.MathUtils.clamp(lightState.nightBlend ?? 0, 0, 1);
+            uniforms.uMoonFactor.value = THREE.MathUtils.clamp(lightState.moonFactor ?? 1, 0, 1.2);
             if (lightState.timeTint) uniforms.uTimeTint.value.copy(lightState.timeTint);
             if (lightState.directTint) uniforms.uDirectTint.value.copy(lightState.directTint);
             if (lightState.sunDir) uniforms.uSunDir.value.copy(lightState.sunDir);
@@ -578,6 +581,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
         getLightState: () => ({
             nightMix: uniforms.uNightMix.value,
             snowCover: uniforms.uSnow.value,
+            moonFactor: uniforms.uMoonFactor.value,
             metalness: uniforms.uMetalness.value,
             roughness: Number(uniforms.uRoughness.value.toFixed(3)),
             timeTint: `#${uniforms.uTimeTint.value.getHexString()}`,
