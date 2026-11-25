@@ -14,6 +14,7 @@ export { ActiveGoalController } from './runtime/active-goal.js';
 export { NavigationGapQueue } from './runtime/navigation-gap-queue.js';
 export { GameTaskBridge } from './runtime/game-task-bridge.js';
 export { PigNavigation } from './runtime/pig-navigation.js';
+export { NeteaseCloudAdTime } from './runtime/netease-cloud-ad-time.js';
 export { Localizer } from './computation/navigation/localizer.js';
 export { BattleNavigator } from './computation/battle-navigator.js';
 export { BattleHudRecognizer } from './recognition/battle-hud-recognizer.js';

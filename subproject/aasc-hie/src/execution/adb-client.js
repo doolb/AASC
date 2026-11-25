@@ -56,6 +56,36 @@ export class AdbClient {
     catch (error) { throw new Error(`failed to capture screenshot from ${this.serial}`, { cause: error }); }
   }
 
+  async shell(...parts) {
+    const args = ['-s', this.serial, 'shell', ...parts];
+    return successful(await this.runner(DEFAULT_ADB_COMMAND, args), DEFAULT_ADB_COMMAND, args).toString('utf8');
+  }
+
+  async uiHierarchy() {
+    const output = await this.shell('uiautomator', 'dump', '/sdcard/aasc-hie-window.xml');
+    if (!output.includes('dumped to: /sdcard/aasc-hie-window.xml')) throw new Error('ADB UI hierarchy capture failed');
+    const xml = await this.shell('cat', '/sdcard/aasc-hie-window.xml');
+    if (!xml.includes('<hierarchy')) throw new Error('ADB UI hierarchy is invalid');
+    return xml;
+  }
+
+  async foregroundPackage() {
+    const output = await this.shell('dumpsys', 'activity', 'activities');
+    return output.match(/(?:mResumedActivity|topResumedActivity)[^\n]*?\s([\w.]+)\//)?.[1] ?? null;
+  }
+
+  async back() { await this.shell('input', 'keyevent', '4'); }
+
+  async launch(packageName) {
+    activityPart(packageName, 'package name', /^[A-Za-z0-9._]+$/);
+    await this.shell('monkey', '-p', packageName, '-c', 'android.intent.category.LAUNCHER', '1');
+  }
+
+  async forceStop(packageName) {
+    activityPart(packageName, 'package name', /^[A-Za-z0-9._]+$/);
+    await this.shell('am', 'force-stop', packageName);
+  }
+
   async tap(x, y) {
     coordinate(x); coordinate(y);
     const args = ['-s', this.serial, 'shell', 'input', 'tap', String(x), String(y)];

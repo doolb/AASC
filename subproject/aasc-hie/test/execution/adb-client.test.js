@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { AdbClient } from '../../src/execution/adb-client.js';
 
 describe('AdbClient', () => {
+  it('不会把失败的界面采集当作有效数据', async () => {
+    const client = new AdbClient({ serial: 'device-1', runner: async () => ({ exitCode: 0, stdout: Buffer.from('ERROR: could not get idle state'), stderr: Buffer.alloc(0) }) });
+    await expect(client.uiHierarchy()).rejects.toThrow('hierarchy capture failed');
+  });
   it('uses argument arrays and validates inputs before the runner', async () => {
     const calls = [];
     const client = new AdbClient({ serial: 'device-1', runner: async (file, args) => {

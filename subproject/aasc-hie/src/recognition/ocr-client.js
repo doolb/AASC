@@ -2,7 +2,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 
 const DEFAULT_OCR_URL = 'https://127.0.0.1:8081';
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 const OCR_ROUTE = '/api/vision/ocr';
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const errorMessage = (error) => (error instanceof Error ? error.message : String(error));
