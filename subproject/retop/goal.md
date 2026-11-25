@@ -365,3 +365,26 @@ Qwen3.5-0.8B 官方模型支持图像与文字，包含视觉编码器；它不�
 产物位于`artifacts/squadgen-shoulder-gpu-2026-11-25`，远端`I:/ai/SQuadGen/results/shoulder-native-2026-11-25`，三组各含OBJ/PLY、五视图、独立审计与QuadQuality原始报告。未修补生成几何。
 
 详见[肩甲任务](docs/task/2026-11-25_SQuadGen肩甲GPU原版测试.md)。
+
+## 新会话：高低模配对 LoRA 训练交接（2026-11-25）
+
+当前代码尚缺高低模配对条件扩展，以下为下一会话工作提示，非已启动训练。将数据路径替换后使用。
+
+```text
+请继续 SQuadGen 高模→四边低模的 LoRA 训练任务。
+
+工作区 /mnt/AASC；先读适用AGENTS.md、subproject/retop/goal.md、docs/design/retop-ai-squadgen.md、docs/spec/retop-ai-squadgen.md，以及 /mnt/SQuadGen/local_train/README.md。
+代码仓库 /mnt/SQuadGen，LoRA实现提交3710e78；AASC文档提交d800ea65。均为本地提交，未推送；先核对当前文件和版本，禁止覆盖其他会话改动。
+训练数据目录：[填写路径]；每个资产包含配准的high.obj和low.obj，low为人工认可的四边布局，贴图暂不参与。
+GPU机器as@192.168.1.101，工作目录I:/ai/SQuadGen，2080Ti 22GB；复用独立.venv，按16GiB训练预算实测。连接凭据使用已有SSH配置，缺失再询问。
+
+现有LoRA支持官方patchboard NPZ缓存、训练、保存/加载和恢复，但没有直接接收独立high/low文件对的完整管线；不得把低模自身的几何条件误称高模条件，也不能拿预测extract_mesh.npz直接当真值训练包。
+
+先检查数据配对、单位/朝向/姿态、部件对应、低模四边质量和源件指纹。按基础资产划分train/val/test；同资产增强不跨分组；只有一对时仅报告过拟合冒烟，不能宣称泛化或伪造验证集。
+提出文件级方案并等我确认后，补齐配对预处理/缓存和必要的GPU适配器推理入口。高模提供几何条件，低模经官方CDF流程提供目标布局；明确共享坐标变换、表面对应和latent锚点顺序，并验证编码解码重建上限。
+先完成小批量真实数据训练、保存重载和恢复测试，记录训练峰值显存；通过后再确定完整训练步数。冻结底模/AE，只更新LoRA，不加Qwen。res是latent数量，不是输出面数。
+最终在未参与训练的高模上比较底模与LoRA，固定采样和提取配置，检查实际四边/等价三角数、表面误差、自交、无效面及五视图，不能只报告loss。
+交付LoRA文件、底模与数据指纹、续训状态、复现命令和质量报告；更新goal及子项目文档。模型/缓存/产物保持外置；此次提示不授权自动提交或推送。
+```
+
+跨机器恢复补充：源码现以19文件镜像及保留3710e78提交身份的bundle纳入AASC的[squadgen-extension](squadgen-extension/README.md)。另一台机器先拉取AASC，再按说明恢复独立SQuadGen；不能假定/mnt/SQuadGen或远端GPU环境已存在。权重与数据不在源码包内。

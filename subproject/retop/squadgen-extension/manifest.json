@@ -1,0 +1,32 @@
+{
+  "source_repository": "https://github.com/microsoft/SQuadGen.git",
+  "base_commit": "b00a83b6f2068b9e66cbf195978dbe9c084108ee",
+  "extension_commit": "3710e789b9575821ec3610eb03002c787d28af4f",
+  "files": {
+    "local_cpu/README.md": "3171c02386d91ba6968f57ba78f8d263d7e40c2a2f6f337fc3576a659b269e45",
+    "local_cpu/inspect_result.py": "dfa04ac6f615c0bdf4f7b6302605bc1876f2fcdc3794d30c45fe887b506332b5",
+    "local_cpu/run_shoulder.py": "a890f87e8264c6b7cba31573297f4a1deafe0ce5b7f2d26d5b14284448dfefe7",
+    "local_gpu/README.md": "6f3151a836628a2b9d4588220c108569fbf9ea9f26b4ee7dddd872f85c78dd8a",
+    "local_gpu/__init__.py": "7e09bb67bc266a8f9bf78c1eaeaa444d8b240ed81edc6dc888effc08f5bbeea6",
+    "local_gpu/attention.py": "18cf35f6100849d76a96d52be6498c23e1281c56da5c5bf769ce34da1a292c62",
+    "local_gpu/check_quadtools_io.cpp": "ef52b5c531af616a7cd8b84286322be439ea5b2935cf267a03c25fe2b5cdf2d8",
+    "local_gpu/compare_official.py": "f86752eb5ef582acb36ba8936e2d3d30aee074626323798b61609ca79c4886ab",
+    "local_gpu/run_example.py": "cb9588a5f22ad8dac1847f374e5f8f6081ccc916ac5c9838233b8b511fa009ce",
+    "local_gpu/run_official.py": "4862607b91163f1bdb7417476d4de39fd7d7883e3f176a4523097282fda5d49d",
+    "local_train/README.md": "2bfb3e86f52fbc1764b7581fcc7b94d0bffcb22c8c240efe920a0ca1eea0ac10",
+    "local_train/__init__.py": "f497c8cb9c60691da812c792137e0c059d2fa6974e9a748576dc1c439601176e",
+    "local_train/adapter.py": "eb4c6946319d805154c36c107a9c87cc172387479f0f838f9b00879c5584977c",
+    "local_train/cache.py": "6e5e4423363b66840b641f539f66ed5ba79e98ab07f12f6d19646248ff639d06",
+    "local_train/runtime.py": "a4a4bf0d7e97d9c4cc470ec964fff0cc6375bc6c5393c4e7968627142f4bd730",
+    "local_train/test_lora.py": "a58700eb26604e4a056ce8c5ff2db036ba3bb6cbe90f85ce1c5962f98280ad48",
+    "local_train/train.py": "a73467091be82610f94ff0b00ee386798f45a8768aca5a75d45103556afd56d3",
+    "squadgen/network/utils.py": "1172ab9865c09104fc7cba79897b348994b11ed3dc49731d08c196e6ce6daf45",
+    "squadgen/util/util.py": "3ee0b0cbbd8c0eb174fa49a5f54c356b0b353e2b8221ec5bac3c54948ad5429d"
+  },
+  "bundle": {
+    "file": "squadgen-local.bundle",
+    "bytes": 48211,
+    "sha256": "1151d87b91c97caf90c65b9b08bdc55f601f463f96432c0f8ff7a248a37e30bd"
+  },
+  "purpose": "Source-only transfer; bundle preserves exact source_commit required by LoRA identity checks. No model weights, environments, caches, or generated outputs."
+}
