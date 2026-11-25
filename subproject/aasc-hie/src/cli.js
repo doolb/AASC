@@ -6,6 +6,9 @@ import { validateNavigationPackage } from './package/package-validator.js';
 import { buildNavigationChain } from './computation/navigation/navigation-chain.js';
 import { NavMeshBuilder, NavMeshStore } from './computation/navigation/index.js';
 import { createNavigationHttpService } from './server/navigation-http-service.js';
+import { AdbClient } from './execution/adb-client.js';
+import { OcrClient } from './recognition/ocr-client.js';
+import { NeteaseCloudAdTime } from './runtime/netease-cloud-ad-time.js';
 
 const valueAfter = (argv, index) => {
   if (index + 1 >= argv.length || argv[index + 1].startsWith('--')) throw new Error(`missing value for ${argv[index]}`);
@@ -28,6 +31,9 @@ export const parseCliArgs = (argv = []) => {
     else if (argument === '--revision') { result.revision = Number(valueAfter(argv, index)); index += 1; }
     else if (argument === '--host') { result.host = valueAfter(argv, index); index += 1; }
     else if (argument === '--port') { result.port = Number(valueAfter(argv, index)); index += 1; }
+    else if (argument === '--serial') { result.serial = valueAfter(argv, index); index += 1; }
+    else if (argument === '--ocr-url') { result.ocrUrl = valueAfter(argv, index); index += 1; }
+    else if (argument === '--max-rewards') { result.maxRewards = Number(valueAfter(argv, index)); index += 1; }
     else throw new Error(`unknown option: ${argument}`);
   }
   return result;
@@ -36,6 +42,12 @@ export const parseCliArgs = (argv = []) => {
 export const runCli = async (argv = process.argv.slice(2), dependencies = {}) => {
   const options = parseCliArgs(argv);
   const noDependencies = Object.keys(dependencies).length === 0;
+  if (options.command === 'netease-ad-time') {
+    if (!options.serial && !dependencies.adb) throw new Error('--serial is required');
+    const adb = dependencies.adb ?? new AdbClient({ serial: options.serial });
+    const ocr = dependencies.ocr ?? new OcrClient({ baseUrl: options.ocrUrl });
+    return new NeteaseCloudAdTime({ adb, ocr, dryRun: options.dryRun, maxRewards: options.maxRewards }).run();
+  }
   if (Object.keys(dependencies).length === 0 && ['nav-serve'].includes(options.command)
     || Object.keys(dependencies).length === 0 && options.command === 'nav-chain' && !options.file
     || Object.keys(dependencies).length === 0 && options.command === 'nav-check' && !options.file

@@ -81,3 +81,16 @@ period boundary without changing the package.
 显式以 `new GameTaskBridge({ enabled: true })` 启用后，`run({ startLevel, windowId, display, maxLevels, duckAuto })` 才能启动相邻 `aasc-game` 的连续游玩脚本；调用会等到脚本退出并返回退出码。此接口不接管正在运行的进程，也不自动修复卡关。默认路径可通过 `gameRoot` 覆盖。设备输入与状态核验仍由原脚本负责。
 
 `decide(path, coordinator, context)` 把快照和缺口交给现有 `AutonomyCoordinator`，返回分层决策；不会自动执行决策。
+
+## 网易云游戏广告时长
+
+在子工程目录运行：
+
+```sh
+node src/cli.js netease-ad-time --serial 设备序列号 --dry-run
+node src/cli.js netease-ad-time --serial 设备序列号 --ocr-url https://127.0.0.1:8081 --max-rewards 8 --enable-execution
+```
+
+默认 dry-run 只观察当前界面；显式启用执行后才启动应用和操作。`--max-rewards` 为本次运行的安全上限，默认 50，不表示平台剩余次数；默认总时长上限为 10 分钟。设备须已连接、账号已登录，OCR 服务仅在节点不足时使用，按当前步骤裁剪相关区域；中层 OCR 客户端默认单次请求超时为 60 秒，调用方可显式覆盖。结果输出状态、停止原因、奖励秒数、起止余额及状态事件；`balance-unconfirmed` 不代表到账。运行中的云游戏、未知页面、未完成广告、识别失败或断线会停止，安装确认仅取消，不主动强停客户端。
+
+2026-11-25 修复后实机连续完成4次广告，达到今日次数上限并核对余额；冷启动和其他素材仍待验证，建议先 dry-run 并观察停止原因。导航包为目标说明和控制器交接点，通用导航链不会自行启动此控制器。

@@ -1,5 +1,7 @@
 ### 工程目录与文档规范
 
+- ✅ [2026-11-25] 明确游戏日常执行记录规则：执行结果仅保存在对应 goal 且只保留当周，长期目标与流程保留；更新 `AGENTS.md`、`docs/rules.md` 和对应设计、伪代码。
+
 - ✅ [2026-11-21] 将仅属于 `3rd/` 与 `subproject/` 的文档迁出根目录 `docs/`，归位至各自子目录 `docs/`
   - 更新 `AGENTS.md`、`CLAUDE.md`、`docs/rules.md`、`readme.md`、`docs/design/project-structure.md` 和 `docs/spec/project-structure.md`，固化“仅属于单个 `3rd/<组件名>/` 或 `subproject/<子项目名>/` 的 `design`/`spec`/`usage`/`task`/`superpowers`/`todo` 文档一律放在各自 `docs/` 下，根目录仅保留主工程及跨端集成文档”的规范。
   - 迁入并合并 302 篇专属文档到 `3rd/mmd-ar-test/docs/`、`3rd/mind-basic/docs/`、`3rd/hmr2-node-onnx/docs/`、`3rd/imu-six-axis-test/docs/`、`3rd/tts-server/docs/`、`subproject/aasc-agent/docs/`、`subproject/retop/docs/`、`subproject/aasc-hie/docs/` 和 `subproject/aasc-game/docs/`，同时将 `docs/todo.md` 中 87 块纯子项目待办同步拆入对应子目录 `docs/todo.md`。

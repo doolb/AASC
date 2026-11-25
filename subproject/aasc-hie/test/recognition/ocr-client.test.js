@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { OcrClient } from '../../src/recognition/ocr-client.js';
 
 describe('OcrClient', () => {
+  it('uses a 60 second default and respects explicitly configured timeouts', async () => {
+    const timeouts = [];
+    const request = async (url, body, options) => {
+      timeouts.push(options.timeoutMs);
+      return { statusCode: 200, body: JSON.stringify({ status: 'success', boxes: [] }) };
+    };
+    const client = new OcrClient({ request });
+    await client.read(Buffer.from('screen'));
+    await client.read(Buffer.from('screen'), { timeoutMs: 7000 });
+    await new OcrClient({ request, timeoutMs: 9000 }).read(Buffer.from('screen'));
+    expect(timeouts).toEqual([60000, 7000, 9000]);
+  });
   it('sends image bytes and parses external OCR boxes', async () => {
     let requestUrl;
     let requestBody;
