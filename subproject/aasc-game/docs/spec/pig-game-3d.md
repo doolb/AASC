@@ -104,30 +104,30 @@ shadeGradient(geo, lowColor, highColor, axis): 按局部坐标轴对几何体写
 outlineOf(geometry, thickness): 反面 BackSide 法线外扩描边网格
 
 createModelFactory(textures):
-    共用外网顶点色水粉双阶着色器 toonMat：保留经典 Painted Valley 侧前主受光亮面 + 高光阶梯 + 顶面柔和微辉 `topRim` + 暖玫瑰可可暗面，接入 `setLightState(lightState)` 每帧同步当前太阳/月亮主光方向 `uLightDir`、24h 光色 `uLightColor`、环境色温 `uTimeTint` 与夜晚融合度 `uNightMix`（去掉多余高光点与广域轮廓反光，仅在明暗交界线 `litStep` 附近以高斯衰减精确叠加暖桃粉次表面散射 SSS 透光带）
+    导出 PBR_ACCESSORY_PRESETS = { steel: { metalness: 0.82, roughness: 0.26 }, gold: { metalness: 0.86, roughness: 0.22 }, spring: { metalness: 0.72, roughness: 0.28 }, ironBomb: { metalness: 0.68, roughness: 0.42 }, paintedRed: { metalness: 0.16, roughness: 0.46 }, rope: { metalness: 0.04, roughness: 0.82 } }
+    共用外网顶点色水粉双阶着色器 toonMat：保留经典 Painted Valley 侧前主受光亮面 + 高光阶梯 + 顶面柔和微辉 `topRim` + 暖玫瑰可可暗面，接入 `setLightState(lightState)` 每帧同步当前太阳/月亮主光方向 `uLightDir`、24h 光色 `uLightColor`、环境色温 `uTimeTint`、夜晚融合度 `uNightMix` 与冬季积雪反光 `uSnow`（夜晚压低 `topRim` 85%、`hiStep` 88%、常驻偏置 90% 并将受光面收敛至 0.72 且放宽明暗过渡，保持夜晚角色哑光水粉肤质不刺眼；冬季适度抬升暗面与下肚皮亮度；明暗交界线附近以高斯衰减叠加暖桃粉次表面散射 SSS 透光带）
     接触阴影: 底部半透明软阴影椭圆（shadowMesh）+ 实时太阳阴影贴图
     按 (kind, length, width) 缓存几何体与描边几何体：
-        - pig / elephant / duck 与六种机制配件（lock / scissors / rope / spring / bomb / timer_bomb）
+        - pig / elephant / duck 与六种机制配件（lock / scissors / rope / spring / bomb / timer_bomb；配件与铁笼全部使用无贴图参数化 THREE.MeshStandardMaterial，按材质种类预设金属度/粗糙度）
     铁笼(cage): 外网原始笼框与 'steel' 金属计数牌
+    getLightState(): 返回 { lightDir, lightColor, timeTint, nightMix, accessoryPbr }
     提示与受阻: 脚下旋转鲜艳红贴花环 + 猪背表面贴花（片元尾部补全 #include <tonemapping_fragment> 与 #include <colorspace_fragment> 保真鲜红显色） + 头顶浮动全息箭头 + 卡通点按手势精灵 `handSprite`（`center=(0.35, 0.84)` 对齐食指尖端并直接锚定在目标猪背部中心上方沿视图微抬轻点，360° 任意旋转视角不偏移）；受阻弹出红色全息叉号
 ```
 
 ## 5. 手绘场景（3d/scenery.mjs）
 ```
 createScenery(scene, textures, level, tier):
-    导出 PBR_SURFACE_PRESETS = { ground: { metalness: 0.0, roughness: 0.86, wetRoughness: 0.46, snowRoughness: 0.68 }, lawn: { metalness: 0.0, roughness: 0.82, wetRoughness: 0.42, snowRoughness: 0.74 } }
-    外网完整手绘地貌与景物:
-        - 修剪草坪平面(y=0.008，细分 48×48 网格)与外部起伏大草地(82×82)升级为无额外 PBR 贴图的参数化 THREE.MeshStandardMaterial（Cook-Torrance GGX 微表面 PBR），通过 setInteractTexture(tex) 绑定共享交互贴图 uInteractMap；在 enhanceGroundAerial(material, sharedGround, isInnerLawn) 中：
+    导出 PBR_SURFACE_PRESETS（含 ground、lawn、wood、stone、foliage、water、snowProp、windmill、cabinWindow、seasonProp 金属度/粗糙度及湿润/积雪动态参数）
+    全部地貌与静态场景物件统一升级为无额外 PBR 贴图的参数化 THREE.MeshStandardMaterial（Cook-Torrance GGX 微表面 PBR）：
+        - 修剪草坪平面(y=0.008，细分 48×48 网格)与外部起伏大草地(82×82)通过 setInteractTexture(tex) 绑定共享交互贴图 uInteractMap；在 enhanceGroundAerial(material, sharedGround, isInnerLawn) 中：
             * 冬季(uSnow>0.15)顶点着色器采样 uInteractMap 抬升积雪层（内棋盘 +0.044m / 外雪地 +0.052m），在踩踏/滑行轨迹 R 与占位 G 处下陷为 3D 雪槽并挤起四周雪垄 scRim
-            * 片元着色器于 `#include <normal_fragment_maps>` 按 uInteractMap 4 邻域梯度扰动 PBR 法线形成立体受光雪脊；棋盘覆一层柔和蓬松白雪，被小猪踏过或玩家划拨处（scPress）拨开露底显示覆霜青绿草坪并呈冰蓝冷雪槽与亮雪垄，外围雪地平滑笔触、沿栅栏灯串与木屋前投出暖金地面光晕并点缀雪地微闪星点
-            * 夜晚(uNightMix>0.05)由左后明月投出银青漫射光池并在右后木屋前形成暖黄窗光晕，配合 PBR 能量守恒漫反射自然进入深沉月夜
-            * 远景(20.0~36.0)低饱和柔和融入 uHorizonColor
-        - 卵石镶边 + 粗段原木棋盘围框（四角立柱帽、长边拼缝端头与散落石块，含冬季厚雪顶盖及向内棋盘边角漫延的雪堆 + 池塘卵石雪帽）
-        - 四向生态布局对齐概念图: 左前开阔豁口让位于荷花小池塘（卵石砌边+冬季雪帽、圆缺荷叶与小荷花，冬转冰蓝）、右前补全短段木栅栏，西北石板小径旁置 3 簇圆润灌木丛（冬盖雪帽）及冬季围巾胡萝卜鼻雪人；右上角高脚木屋（对称双暖亮方窗）与粗柱木栅栏（仅冬季启用下垂暖黄灯串 `fenceBulbInst.visible = isWinter`，非冬季夜晚保持幽暗原木突显木屋暖窗唯一焦点）；正后中偏右山脊风车、四季四角 10 棵主题树（冬松三层叠翠+厚雪盖）
+            * 片元着色器于 `#include <normal_fragment_maps>` 按双倍差分跨度(2/256)提取真实下凹斜率 `vec2(pR - pL, pU - pD)` 强力扰动 PBR 法线(`1.45`)；并接入主光水平方向 `uSunDir.xz` 与光色 `uDirectTint`，在被拨开/踩踏雪槽的**背光坡面与迎光雪坎背阴槽底**计算 `backShadow`（叠加深冷冰蓝阴影与槽底遮蔽），在**迎光坡面与推起雪脊**计算 `frontLit`（叠加太阳/月亮调制的亮白微高光），形成“一侧背光冷蓝暗影、对侧迎光亮白高光”的立体雪槽体积感
+            * 棋盘内覆雪在拨开露底(scPress)处显现覆霜青绿草坪，外围雪地沿栅栏灯串与木屋前投出暖金地面光晕并点缀雪地微闪星点；夜晚由左后明月投出银青漫射光池并在右后木屋前形成暖黄窗光晕；远景(20.0~36.0)低饱和柔和融入 uHorizonColor
+        - 卵石镶边、粗段原木围框、石板路、高脚木屋与双暖窗、木栅栏、池塘水面与砌石、三簇灌木、远景风车塔/盖/扇叶、四季树干与树冠、冬季各处积雪帽及季节道具全部升级为 MeshStandardMaterial 并通过 `enhancePropPbr` 保持 Painted Valley 明快发色，同时接入 `uSnow` 叠加冬季雪地环境漫反射提亮
         - 实例化小花: 按棋盘左/右两侧通道草带及前后栅栏内缘形成聚簇花丛（high 1800 / medium 900 / low 420），high/medium 采用交叉双面 5 瓣星形花（夜晚随环境压暗调色）
-    applyPreset(preset, blend, horizonColor, lightState): 同步 ground/lawn 的 PBR metalness/roughness 与底色、外景道具随 nightMix 的冷青靛紫压暗、sharedGround uniforms、雪景 props、仅冬季灯串与木屋暖窗显隐
+    applyPreset(preset, blend, horizonColor, lightState): 同步地面与全部场景物件 PBR roughness（随 wetness / snowCover 插值）与底色（冬季夜晚减轻外景物件压暗并将雪帽提亮至 `#8ba4cf`）、sharedGround uniforms（含 uSunDir / uDirectTint）、雪景 props、仅冬季灯串与木屋暖窗显隐
     setInteractTexture(tex): 绑定实时踩踏/占位交互贴图 uInteractMap
-    getGroundPbrState(): 返回 { ground: { metalness, roughness }, lawn: { metalness, roughness } }
+    getGroundPbrState(): 返回 ground、lawn、wood、stone、foliage、water、snowProp、windmill、cabinWindow、seasonProp 各材质的 { metalness, roughness }
 ```
 
 ## 6. 可交互草地（3d/grass.mjs）
@@ -145,8 +145,8 @@ createGrass(scene, textures, level, tier):
     交互贴图 DataTexture 256×256 RGBA: R 踩踏衰减 + G 在场动物占格压扁
     片元着色器(无贴图 Cook-Torrance GGX PBR + 草根跟随当前地面渐变 + 冬季 24h 雪地反光):
         - 同步传入 `uGroundColor` (`preset.ground`) 与 `uLawnColor` (`preset.lawn`)，按 `vWorldXZ` 区分棋盘内草坪与外围地面并复用同一套地面明暗（色斑、移动云影、太阳/月亮实时阴影 `shadowMask`、白天/月夜底色混入、冬季外围 `powderSnow` / 棋盘内按 `vPress` 拨雪露底的 `boardSnow`、夜间左上月光池 `moonPool`、木屋前暖窗光池 `cabinPool` 与冬季栅栏灯串光晕 `fenceGlow`）实时算出脚下地面颜色 `groundSurfaceCol`
-        - 基于 `uMetalness` 与随湿润/积雪变化的 `uRoughness` 计算 Trowbridge-Reitz GGX 法线分布 $D$、Schlick-GGX 几何遮蔽 $G$、Schlick 菲涅尔 $F$、能量守恒漫反射 $k_D$、逆光叶片次表面透射与半球环境光；冬季 `snowBounce = smoothstep(0.10, 0.75, uSnow)` 抬升草根 AO（`0.48 -> 0.94`）并注入 24 小时全天候雪地向上漫反射反光 `snowBounceLight`（跟随当前时段日光/月光与雪地半球反射色变化）
-        - 非冬季夜晚收敛夜斑与夜色压暗（`nightRoot` / `nightBlade` 与贴合地面的叶尖微辉）；冬季夜晚结合 `snowBounce` 大幅保留雪地月光反弹与覆霜提亮
+        - 基于 `uMetalness` 与随湿润/积雪变化的 `uRoughness` 计算 Trowbridge-Reitz GGX 法线分布 $D$、Schlick-GGX 几何遮蔽 $G$、Schlick 菲涅尔 $F$、能量守恒漫反射 $k_D$、逆光叶片次表面透射与半球环境光；冬季 `snowBounce = smoothstep(0.10, 0.75, uSnow)` 抬升色斑/云影/`shadowMask` 暗部下限（投影内草叶呈清透冰蓝雪影 `vec3(0.68, 0.76, 0.90)`）、将草身覆霜白雪下延至 `smoothstep(0.12, 0.88, vY)`、抬升草根 AO（`0.48 -> 0.94`）并融合脚下雪面亮度 `gLit` 与背光全向补光 `(1.0 - NoL * 0.45)` 注入 24 小时全天候雪地向上漫反射反光 `snowBounceLight`
+        - 非冬季夜晚收敛夜斑与夜色压暗（`nightRoot` / `nightBlade` 与贴合地面的叶尖微辉）；冬季夜晚结合 `snowBounce` 大幅减轻 `uTimeTint` 压暗并用脚下雪面反光兜底暗部（`litBlade = max(litBlade, gLit * mix(0.84, 0.96, vY) * snowBounce)`），消除背光面/阴影区发黑
         - 最终将草叶从 `vY = 0`（100% 承接当前脚下地面颜色 `groundSurfaceCol`）沿 `smoothstep(0.0, 0.58, vY)` 平滑渐变至受光草身与叶尖，远景平滑融入 `uHorizonColor`
     getLightState(): 返回 { nightMix, snowCover, metalness, roughness, timeTint, directTint, sunColor, hemiGroundColor, groundColor, lawnColor }
     getInteractTexture(): 返回 256×256 共享实时交互贴图供棋盘与地面雪坑交互共用
@@ -178,10 +178,10 @@ createEnvironment(scene, textures, tier):
     一局内时间推进（默认开启，可开关，并受表盘 24h 时段控制）:
         - TIME_SLOTS = ['morning', 'noon', 'evening', 'night']（早/中/晚/夜，对应 dayPhase 0.0 / 0.25 / 0.5 / 0.75）
         - 周期缩短至 90 秒一圈（默认 `timeCycleEnabled = true`）；内置 24 小时真实日光光谱关键帧表 `SOLAR_24H_STOPS` + `sampleSolarCycle(dayPhase)`（0.00 日出桃金 `#ffb36b` → 0.12 晨阳 `#fff1d4` → 0.25 正午纯白 `#fffdf6` → 0.40 午后 `#ffd594` → 0.50 夕照橘红 `#ff7d3e` → 0.58 蓝调暮色 `#6e84cf` → 0.75 午夜银蓝 `#9ec2ff` → 0.90 破晓微曙 `#7285c4`），同步驱动天穹、地平线晚霞、主光色彩与草地/角色色温；白天 `sunLight` 跟随东→正中→西太阳弧线，入夜后平滑转向天空月亮 `uMoonDir` 方位，夜晚大幅下调半球补光至 `~0.44`、月光主强 `~0.66`，使草地与地形真实压暗进入月夜
-        - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` / `getSunPosition()` / `getLightState()` 供时钟圆盘手控与草地/角色着色器每帧同步（`lightState` 同步导出 `sunIntensity` / `hemiIntensity` / `hemiSkyColor` / `hemiGroundColor`）
+        - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` / `getSunPosition()` / `getLightState()` 供时钟圆盘手控与草地/角色着色器每帧同步（`lightState` 同步导出 `sunIntensity` / `hemiIntensity` / `hemiSkyColor` / `hemiGroundColor` / `snowCover`）
     积云: 14~20 朵噪声球簇，顶白底蓝灰，按风速缓慢漂移并环绕回折；阴雨天加厚下压并调暗
     远山: 3 层圆柱剪影带（textures.mountain(0..2)），随季节与雾色过渡
-    灯光与雾: 主平行光（high 2048 / medium 1024 软阴影，low 关闭阴影）+ 24h 动态半球光（`hemiLight.groundColor` 随 `snowCover` 与当前时段日光/地平线/月光插值提供全天候雪地反光，冬季小幅提升 `hemiLight.intensity`）+ 月光方向光 + 指数雾
+    灯光与雾: 主平行光（high 2048 / medium 1024 软阴影，low 关闭阴影）+ 24h 动态半球光（冬季 `hemiLight.intensity` 增加 `snowMix * lerp(0.46, 0.52, nightBlend)`，`hemiLight.groundColor` 插值至高明度雪面反射色且冬夜呈 `#8eb0e8`、天光呈 `#7e9ee0`，`moonLight.intensity` 增加 `snowMix * 0.22`）+ 指数雾
     setPreset(season, weather, isCageLevel, immediate=false): 非 immediate 时在 2 秒内平滑插值参数
     getHorizonColor(): 返回当前 scene.fog.color（供草叶与远景地面空气透视雾化同步）
     getShadowData / getCurrent / update(dt): 更新云漂移、时间推进、天气过渡插值、雨天随机闪电闪白（触发回调播放雷声）

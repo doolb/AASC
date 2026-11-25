@@ -1,6 +1,6 @@
 // 程序纹理：全部由 Canvas 与种子化噪声生成，不加载任何外部图片。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125d';
+import { seededRandom } from './presets.mjs?v=20261125h';
 
 // 二维 value noise（带平滑插值），用于 fbm 与色斑。
 export function createNoise2D(seed = 1) {

@@ -1,7 +1,7 @@
 // 动态环境：手绘天空穹顶、飘动积云、三层远山、太阳与半球光、指数雾、昼夜缓慢流逝与天气闪电。
 import * as THREE from '../vendor/three.module.min.js';
-import { buildPreset, seededRandom } from './presets.mjs?v=20261125d';
-import { blobSphere } from './geometry.mjs?v=20261125d';
+import { buildPreset, seededRandom } from './presets.mjs?v=20261125h';
+import { blobSphere } from './geometry.mjs?v=20261125h';
 
 export const TIME_SLOTS = ['morning', 'noon', 'evening', 'night'];
 export const TIME_LABELS = { morning: '早', noon: '中', evening: '晚', night: '夜' };
@@ -230,6 +230,7 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         sunsetBlend: 0,
         dawnBlend: 0,
         duskMix: 0,
+        snowCover: 0,
         sunIntensity: 1.5,
         hemiIntensity: 0.7,
         hemiSkyColor: new THREE.Color('#fff7e8'),
@@ -291,17 +292,19 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         sunLight.color.copy(skyUniforms.uSunColor.value);
         const dayLightInt = p.sunIntensity * (1 - sunsetBlend * 0.16);
         sunLight.intensity = THREE.MathUtils.lerp(dayLightInt, Math.min(0.76, Math.max(0.62, p.sunIntensity * 0.34)), nightBlend) + flashVal * 3.5;
-        // 夜晚转为柔和前向夜空漫反射补光并明显压低半球环境光，让地面与草叶真正进入月夜暗调
-        moonLight.position.set(14, 15, 20);
-        moonLight.intensity = duskMix * 0.24;
+        // 夜晚转为柔和前向夜空漫反射补光；冬季因地面大面积白雪 24h 高反照率，显著提高半球环境光与雪面漫反射补光
         const snowMix = THREE.MathUtils.clamp(p.snowCover || 0, 0, 1);
-        hemiLight.intensity = Math.max(0.42, THREE.MathUtils.lerp(p.hemiIntensity + sunsetBlend * 0.08, 0.44, nightBlend)) + snowMix * 0.18;
+        moonLight.position.set(14, 15, 20);
+        moonLight.intensity = duskMix * 0.24 + snowMix * 0.22;
+        hemiLight.intensity = Math.max(0.42, THREE.MathUtils.lerp(p.hemiIntensity + sunsetBlend * 0.08, 0.44, nightBlend))
+            + snowMix * THREE.MathUtils.lerp(0.46, 0.52, nightBlend);
         hemiLight.color.set('#fff7e8').lerp(solar.sun, 0.35).lerp(cB.set('#5d7dc2'), duskMix * 0.82);
         hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#1c2648'), duskMix * 0.82);
         if (snowMix > 0.01) {
-            // 冬季 24 小时雪地高反照率漫反射（早/中/晚跟随日光与地平线，夜晚呈清亮银蓝月光反光）
-            cA.copy(skyUniforms.uHorizon.value).lerp(solar.sun, 0.45).lerp(cB.set('#6e8ac4'), nightBlend * 0.65);
-            hemiLight.groundColor.lerp(cA, snowMix * 0.85);
+            // 冬季 24 小时雪地高反照率漫反射（白天随日光与天际提亮，冬夜呈清亮冰蓝雪夜天光与雪面反射光）
+            hemiLight.color.lerp(cB.set('#7e9ee0'), snowMix * nightBlend * 0.55);
+            cA.copy(skyUniforms.uHorizon.value).lerp(solar.sun, 0.45).lerp(cB.set('#f4f8ff'), 0.28 * (1 - nightBlend)).lerp(cB.set('#8eb0e8'), nightBlend * 0.78);
+            hemiLight.groundColor.lerp(cA, snowMix * 0.92);
         }
 
         // 同步草地、角色与外景 24h 时变色温、主光方向及 PBR 物理光源参数
@@ -309,6 +312,7 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         lightState.sunsetBlend = sunsetBlend;
         lightState.dawnBlend = dawnBlend;
         lightState.duskMix = duskMix;
+        lightState.snowCover = snowMix;
         lightState.sunIntensity = sunLight.intensity;
         lightState.hemiIntensity = hemiLight.intensity;
         lightState.hemiSkyColor.copy(hemiLight.color);

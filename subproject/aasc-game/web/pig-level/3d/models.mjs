@@ -1,6 +1,16 @@
 // 角色与棋盘物件程序化建模：猪、小象、小鸭、铁笼、各类机制配件与提示指示器。
 import * as THREE from '../vendor/three.module.min.js';
-import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261125d';
+import { PART, part, trs, mergeParts, shadeGradient, outlineOf, curlTail, helixTube } from './geometry.mjs?v=20261125h';
+
+// 机制配件与铁笼的无贴图 PBR 金属度/粗糙度预设
+export const PBR_ACCESSORY_PRESETS = {
+    steel: { metalness: 0.82, roughness: 0.26 },
+    gold: { metalness: 0.86, roughness: 0.22 },
+    spring: { metalness: 0.72, roughness: 0.28 },
+    ironBomb: { metalness: 0.68, roughness: 0.42 },
+    paintedRed: { metalness: 0.16, roughness: 0.46 },
+    rope: { metalness: 0.04, roughness: 0.82 }
+};
 
 export const DIR_ANGLES = { south: 0, north: Math.PI, east: Math.PI / 2, west: -Math.PI / 2 };
 export const DIR_VECTORS = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -176,7 +186,8 @@ export function createModelFactory(textures) {
             uLightDir: { value: new THREE.Vector3(-0.74, 0.44, 0.50).normalize() },
             uLightColor: { value: new THREE.Color('#fffdf6') },
             uTimeTint: { value: new THREE.Color('#ffffff') },
-            uNightMix: { value: 0 }
+            uNightMix: { value: 0 },
+            uSnow: { value: 0 }
         },
         vertexShader: /* glsl */`
             varying vec3 vColor;
@@ -192,24 +203,26 @@ export function createModelFactory(textures) {
             uniform vec3 uLightColor;
             uniform vec3 uTimeTint;
             uniform float uNightMix;
+            uniform float uSnow;
             varying vec3 vColor;
             varying vec3 vWorldNormal;
             void main() {
                 vec3 N = normalize(vWorldNormal);
                 float ndl = dot(N, normalize(uLightDir));
-                float litStep = smoothstep(0.06, 0.30, ndl);
+                float litStep = smoothstep(mix(0.06, -0.08, uNightMix), mix(0.30, 0.48, uNightMix), ndl);
                 float hiStep = smoothstep(0.56, 0.80, ndl);
                 float wrapGrad = smoothstep(-0.62, 0.72, ndl);
                 float topRim = smoothstep(0.55, 0.94, N.y) * 0.09;
 
-                // 还原原版手绘水粉受光与可可暗面，并跟随 24h 日/月光源颜色与夜晚暗度演变
-                vec3 baseCol = vColor * mix(vec3(1.0), uTimeTint, 0.28 + 0.44 * uNightMix);
-                vec3 litCol = baseCol * uLightColor * mix(vec3(1.06, 0.94, 0.90), vec3(1.18, 1.08, 1.00), wrapGrad)
-                    + vec3(0.04, 0.025, 0.015) * (1.0 - uNightMix * 0.6)
-                    + hiStep * uLightColor * 0.08 * (1.0 - uNightMix * 0.45)
-                    + topRim * mix(vec3(1.0), uLightColor, 0.65);
+                // 还原原版手绘水粉受光与可可暗面，夜晚明显压低高光与顶面反光以维持柔和哑光质感
+                vec3 baseCol = vColor * mix(vec3(1.0), uTimeTint, 0.28 + 0.44 * uNightMix * (1.0 - uSnow * 0.20));
+                vec3 litCol = baseCol * uLightColor * mix(vec3(1.06, 0.94, 0.90), vec3(1.18, 1.08, 1.00), wrapGrad) * mix(1.0, 0.72, uNightMix)
+                    + vec3(0.04, 0.025, 0.015) * (1.0 - uNightMix * 0.90)
+                    + hiStep * uLightColor * 0.08 * (1.0 - uNightMix * 0.88)
+                    + topRim * mix(vec3(1.0), uLightColor, 0.65) * (1.0 - uNightMix * 0.85);
                 vec3 shadeCol = baseCol * mix(vec3(0.42, 0.31, 0.39), vec3(0.56, 0.42, 0.48), wrapGrad)
-                    * mix(vec3(1.0), vec3(0.58, 0.68, 0.96), uNightMix * 0.72);
+                    * mix(vec3(1.0), mix(vec3(0.58, 0.68, 0.96), vec3(0.72, 0.82, 1.02), uSnow), uNightMix * 0.72)
+                    * (1.0 + uSnow * (0.18 + 0.14 * (1.0 - N.y * 0.40)));
 
                 // 仅在明暗交界线 (ndl ≈ 0.16 附近) 精准叠加柔和的暖桃粉次表面散射带
                 float termSSS = exp(-pow((ndl - 0.16) / 0.20, 2.0));
@@ -224,12 +237,12 @@ export function createModelFactory(textures) {
     });
     const outlineMat = new THREE.MeshBasicMaterial({ color: '#7a3f3b', side: THREE.BackSide });
     const eyeMat = new THREE.MeshBasicMaterial({ vertexColors: true });
-    const metalMat = new THREE.MeshToonMaterial({ color: '#c4d5ea', gradientMap });
-    const goldMat = new THREE.MeshToonMaterial({ color: '#f2be3d', gradientMap });
-    const blueCoilMat = new THREE.MeshToonMaterial({ color: '#397aa9', gradientMap });
-    const springMat = new THREE.MeshToonMaterial({ color: '#4fa2ff', gradientMap });
-    const redMat = new THREE.MeshToonMaterial({ color: '#c84231', gradientMap });
-    const bombMat = new THREE.MeshToonMaterial({ color: '#2b2629', gradientMap });
+    const metalMat = new THREE.MeshStandardMaterial({ color: '#c4d5ea', ...PBR_ACCESSORY_PRESETS.steel });
+    const goldMat = new THREE.MeshStandardMaterial({ color: '#f2be3d', ...PBR_ACCESSORY_PRESETS.gold });
+    const blueCoilMat = new THREE.MeshStandardMaterial({ color: '#397aa9', ...PBR_ACCESSORY_PRESETS.rope });
+    const springMat = new THREE.MeshStandardMaterial({ color: '#4fa2ff', ...PBR_ACCESSORY_PRESETS.spring });
+    const redMat = new THREE.MeshStandardMaterial({ color: '#c84231', ...PBR_ACCESSORY_PRESETS.paintedRed });
+    const bombMat = new THREE.MeshStandardMaterial({ color: '#2b2629', ...PBR_ACCESSORY_PRESETS.ironBomb });
 
     const geoCache = new Map();
     const outlineCache = new Map();
@@ -467,7 +480,7 @@ export function createModelFactory(textures) {
         const group = new THREE.Group();
         const postGeo = new THREE.CylinderGeometry(0.045, 0.045, 1.12, 8);
         const barGeo = new THREE.CylinderGeometry(0.032, 0.032, 1.0, 6);
-        const cageMat = new THREE.MeshToonMaterial({ color: '#9ab9d9', gradientMap });
+        const cageMat = new THREE.MeshStandardMaterial({ color: '#9ab9d9', ...PBR_ACCESSORY_PRESETS.steel });
         disposables.push(postGeo, barGeo, cageMat);
 
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -586,7 +599,7 @@ export function createModelFactory(textures) {
         bodyDecal.visible = false;
 
         const arrowGroup = new THREE.Group();
-        const arrowMat = new THREE.MeshToonMaterial({ color: '#ff9642', gradientMap });
+        const arrowMat = new THREE.MeshStandardMaterial({ color: '#ff9642', emissive: '#ff7018', emissiveIntensity: 0.25, ...PBR_ACCESSORY_PRESETS.paintedRed });
         const arrowEdgeMat = new THREE.MeshBasicMaterial({ color: '#6b361a', side: THREE.BackSide });
         const coneGeo = new THREE.ConeGeometry(0.2, 0.34, 8);
         const cone = new THREE.Mesh(coneGeo, arrowMat);
@@ -632,6 +645,7 @@ export function createModelFactory(textures) {
         if (lightState.directTint) toonMat.uniforms.uLightColor.value.copy(lightState.directTint);
         if (lightState.timeTint) toonMat.uniforms.uTimeTint.value.copy(lightState.timeTint);
         toonMat.uniforms.uNightMix.value = THREE.MathUtils.clamp(lightState.nightBlend ?? 0, 0, 1);
+        toonMat.uniforms.uSnow.value = THREE.MathUtils.clamp(lightState.snowCover ?? 0, 0, 1);
     }
 
     return {
@@ -649,7 +663,15 @@ export function createModelFactory(textures) {
             },
             lightColor: `#${toonMat.uniforms.uLightColor.value.getHexString()}`,
             timeTint: `#${toonMat.uniforms.uTimeTint.value.getHexString()}`,
-            nightMix: toonMat.uniforms.uNightMix.value
+            nightMix: toonMat.uniforms.uNightMix.value,
+            accessoryPbr: {
+                steel: { metalness: metalMat.metalness, roughness: metalMat.roughness },
+                gold: { metalness: goldMat.metalness, roughness: goldMat.roughness },
+                spring: { metalness: springMat.metalness, roughness: springMat.roughness },
+                ironBomb: { metalness: bombMat.metalness, roughness: bombMat.roughness },
+                paintedRed: { metalness: redMat.metalness, roughness: redMat.roughness },
+                rope: { metalness: blueCoilMat.metalness, roughness: blueCoilMat.roughness }
+            }
         }),
         dispose() {
             for (const item of disposables) item?.dispose?.();

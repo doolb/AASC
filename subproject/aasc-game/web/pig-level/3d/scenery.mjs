@@ -1,17 +1,42 @@
 // 手绘吉卜力风场景：修剪草坪棋盘、卵石边、石板路、高脚木屋、栅栏、季节树、小花与远坡风车。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125d';
-import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125d';
+import { seededRandom } from './presets.mjs?v=20261125h';
+import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125h';
 
 // 无贴图 PBR 材质预设参数（金属度与粗糙度，随湿润度与积雪动态插值）
 export const PBR_SURFACE_PRESETS = {
     ground: { metalness: 0.0, roughness: 0.86, wetRoughness: 0.46, snowRoughness: 0.68 },
-    lawn: { metalness: 0.0, roughness: 0.82, wetRoughness: 0.42, snowRoughness: 0.74 }
+    lawn: { metalness: 0.0, roughness: 0.82, wetRoughness: 0.42, snowRoughness: 0.74 },
+    wood: { metalness: 0.04, roughness: 0.78, wetRoughness: 0.48 },
+    stone: { metalness: 0.06, roughness: 0.82, wetRoughness: 0.44 },
+    foliage: { metalness: 0.02, roughness: 0.68, wetRoughness: 0.36 },
+    water: { metalness: 0.12, roughness: 0.16, wetRoughness: 0.10, snowRoughness: 0.26 },
+    snowProp: { metalness: 0.02, roughness: 0.72, wetRoughness: 0.56 },
+    windmill: { metalness: 0.18, roughness: 0.62, wetRoughness: 0.40 },
+    cabinWindow: { metalness: 0.08, roughness: 0.22 },
+    seasonProp: { metalness: 0.03, roughness: 0.70, wetRoughness: 0.45 }
 };
 
-// 为大草地与棋盘草坪注入 PBR 交互雪层位移、法线扰动、反照率校准、空气透视与昼夜地面光池
+// 为场景 MeshStandardMaterial 物件注入轻量明度校准与冬季雪地漫反射反光增益（维持水粉明快色感同时保留完整 Cook-Torrance PBR 高光/粗糙度）
+function enhancePropPbr(material, sharedGround) {
+    material.customProgramCacheKey = () => 'pig3d-prop-pbr-v2';
+    material.onBeforeCompile = shader => {
+        shader.uniforms.uNightMix = sharedGround.uNightMix;
+        shader.uniforms.uSnow = sharedGround.uSnow;
+        shader.fragmentShader = shader.fragmentShader
+            .replace('void main() {', 'uniform float uNightMix;\nuniform float uSnow;\nvoid main() {')
+            .replace(
+                '#include <opaque_fragment>',
+                `#include <opaque_fragment>
+                float propSnowLift = 1.0 + smoothstep(0.15, 0.75, uSnow) * mix(0.14, 0.24, uNightMix);
+                gl_FragColor.rgb *= mix(1.28, 0.96, uNightMix) * propSnowLift;`
+            );
+    };
+}
+
+// 为大草地与棋盘草坪注入 PBR 交互雪层位移、法线扰动、雪槽迎/背光与雪坎自投影、空气透视与昼夜地面光池
 function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
-    material.customProgramCacheKey = () => (isInnerLawn ? 'pig3d-lawn-pbr-snow-v2' : 'pig3d-ground-pbr-snow-v2');
+    material.customProgramCacheKey = () => (isInnerLawn ? 'pig3d-lawn-pbr-snow-v3' : 'pig3d-ground-pbr-snow-v3');
     material.onBeforeCompile = shader => {
         shader.uniforms.uHorizonColor = sharedGround.uHorizonColor;
         shader.uniforms.uNightMix = sharedGround.uNightMix;
@@ -19,6 +44,8 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
         shader.uniforms.uTime = sharedGround.uTime;
         shader.uniforms.uBoardHalf = sharedGround.uBoardHalf;
         shader.uniforms.uInteractMap = sharedGround.uInteractMap;
+        shader.uniforms.uSunDir = sharedGround.uSunDir;
+        shader.uniforms.uDirectTint = sharedGround.uDirectTint;
         shader.vertexShader = shader.vertexShader
             .replace(
                 'void main() {',
@@ -48,7 +75,7 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
         shader.fragmentShader = shader.fragmentShader
             .replace(
                 'void main() {',
-                'uniform vec3 uHorizonColor;\nuniform float uNightMix;\nuniform float uSnow;\nuniform float uTime;\nuniform vec2 uBoardHalf;\nuniform sampler2D uInteractMap;\nvarying vec2 vGroundXZ;\nvoid main() {'
+                'uniform vec3 uHorizonColor;\nuniform float uNightMix;\nuniform float uSnow;\nuniform float uTime;\nuniform vec2 uBoardHalf;\nuniform sampler2D uInteractMap;\nuniform vec3 uSunDir;\nuniform vec3 uDirectTint;\nvarying vec2 vGroundXZ;\nvoid main() {'
             )
             .replace(
                 '#include <normal_fragment_maps>',
@@ -56,7 +83,7 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
                 float scSnowN = smoothstep(0.15, 0.70, uSnow);
                 if (scSnowN > 0.01) {
                     vec2 scNuv = clamp(vGroundXZ / 48.0 + 0.5, 0.0, 1.0);
-                    float scNeps = 1.0 / 256.0;
+                    float scNeps = 2.0 / 256.0;
                     vec4 iL = texture2D(uInteractMap, clamp(scNuv - vec2(scNeps, 0.0), 0.0, 1.0));
                     vec4 iR = texture2D(uInteractMap, clamp(scNuv + vec2(scNeps, 0.0), 0.0, 1.0));
                     vec4 iD = texture2D(uInteractMap, clamp(scNuv - vec2(0.0, scNeps), 0.0, 1.0));
@@ -65,7 +92,8 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
                     float pR = clamp(iR.r * 0.88 + iR.g * 0.95, 0.0, 1.0);
                     float pD = clamp(iD.r * 0.88 + iD.g * 0.95, 0.0, 1.0);
                     float pU = clamp(iU.r * 0.88 + iU.g * 0.95, 0.0, 1.0);
-                    vec3 scSlopeView = mat3(viewMatrix) * vec3((pL - pR) * 0.65, 0.0, (pD - pU) * 0.65);
+                    // 凹陷高度 h ∝ -p，故向坑内倾斜法线水平分量为 (pR - pL, pU - pD)
+                    vec3 scSlopeView = mat3(viewMatrix) * vec3((pR - pL) * 1.45, 0.0, (pU - pD) * 1.45);
                     normal = normalize(normal + scSlopeView * scSnowN);
                 }`
             )
@@ -77,31 +105,52 @@ function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
                 vec2 scUvF = clamp(vGroundXZ / 48.0 + 0.5, 0.0, 1.0);
                 vec4 scInterF = texture2D(uInteractMap, scUvF);
                 float scPressF = clamp(scInterF.r * 0.88 + scInterF.g * 0.95, 0.0, 1.0);
-                float scFeps = 1.0 / 256.0;
-                float scNb = max(
-                    max(texture2D(uInteractMap, clamp(scUvF + vec2(scFeps, 0.0), 0.0, 1.0)).r,
-                        texture2D(uInteractMap, clamp(scUvF - vec2(scFeps, 0.0), 0.0, 1.0)).r),
-                    max(texture2D(uInteractMap, clamp(scUvF + vec2(0.0, scFeps), 0.0, 1.0)).r,
-                        texture2D(uInteractMap, clamp(scUvF - vec2(0.0, scFeps), 0.0, 1.0)).r)
-                );
+                float scFeps = 2.0 / 256.0;
+                vec4 fL = texture2D(uInteractMap, clamp(scUvF - vec2(scFeps, 0.0), 0.0, 1.0));
+                vec4 fR = texture2D(uInteractMap, clamp(scUvF + vec2(scFeps, 0.0), 0.0, 1.0));
+                vec4 fD = texture2D(uInteractMap, clamp(scUvF - vec2(0.0, scFeps), 0.0, 1.0));
+                vec4 fU = texture2D(uInteractMap, clamp(scUvF + vec2(0.0, scFeps), 0.0, 1.0));
+                float fpL = clamp(fL.r * 0.88 + fL.g * 0.95, 0.0, 1.0);
+                float fpR = clamp(fR.r * 0.88 + fR.g * 0.95, 0.0, 1.0);
+                float fpD = clamp(fD.r * 0.88 + fD.g * 0.95, 0.0, 1.0);
+                float fpU = clamp(fU.r * 0.88 + fU.g * 0.95, 0.0, 1.0);
+                float scNb = max(max(fL.r, fR.r), max(fD.r, fU.r));
                 float scRimF = max(0.0, scNb - scPressF) * 0.65;
+                // 计算拨雪/踩雪凹坑坡向与主光方向夹角，以及向光侧雪坎投下的背阴自投影
+                vec2 snowSlopeXZ = vec2(fpR - fpL, fpU - fpD);
+                vec2 lightXZ = normalize(uSunDir.xz + vec2(1e-4, 1e-4));
+                float wallDot = dot(snowSlopeXZ, lightXZ);
+                float backWall = clamp(-wallDot * 1.9, 0.0, 1.0);
+                float frontWall = clamp(wallDot * 1.9, 0.0, 1.0);
+                vec4 sSun1 = texture2D(uInteractMap, clamp(scUvF + lightXZ * (1.8 / 256.0), 0.0, 1.0));
+                vec4 sSun2 = texture2D(uInteractMap, clamp(scUvF + lightXZ * (3.6 / 256.0), 0.0, 1.0));
+                float pSun1 = clamp(sSun1.r * 0.88 + sSun1.g * 0.95, 0.0, 1.0);
+                float pSun2 = clamp(sSun2.r * 0.88 + sSun2.g * 0.95, 0.0, 1.0);
+                float rimShadow = clamp((scPressF - pSun1) * 0.85 + (scPressF - pSun2) * 0.65, 0.0, 1.0);
+                float hasTrench = smoothstep(0.03, 0.22, scPressF + backWall + frontWall + scRimF);
+                float backShadow = clamp(max(backWall * 0.92, rimShadow * 0.88) + scPressF * 0.22, 0.0, 1.0) * scSnow * hasTrench;
+                float frontLit = clamp(frontWall * 0.95 + scRimF * 0.72 * (0.45 + 0.55 * max(dot(normalize(snowSlopeXZ + vec2(1e-4)), lightXZ), 0.0)), 0.0, 1.0) * scSnow;
+                vec3 backShadowTint = mix(vec3(0.46, 0.60, 0.86), vec3(0.36, 0.48, 0.76), uNightMix);
                 ${isInnerLawn ? `
                 if (scSnow > 0.01) {
-                    // 冬季棋盘内覆盖蓬松雪层（保留轻微修剪条纹肌理），小猪踏过或玩家拨雪时露出底层覆霜青绿草坪
+                    // 冬季棋盘内覆盖蓬松雪层（保留轻微修剪条纹肌理），小猪踏过或玩家拨雪时露出底层覆霜青绿草坪、背光冷蓝雪槽与迎光亮雪垄
                     float lumLawn = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
                     vec3 boardSnow = vec3(lumLawn * 0.30 + 0.64) * vec3(0.90, 0.95, 1.03) * mix(vec3(1.0), vec3(0.45, 0.58, 0.82), uNightMix);
                     float snowReveal = 1.0 - smoothstep(0.10, 0.58, scPressF) * 0.82;
                     vec3 snowUnder = mix(boardSnow, boardSnow * vec3(0.70, 0.80, 0.95), scPressF * 0.45);
+                    snowUnder *= mix(vec3(1.0), backShadowTint, backShadow);
                     gl_FragColor.rgb = mix(gl_FragColor.rgb, snowUnder, scSnow * 0.84 * snowReveal);
-                    gl_FragColor.rgb += vec3(0.14, 0.16, 0.22) * scRimF * scSnow;
+                    gl_FragColor.rgb *= mix(vec3(1.0), backShadowTint, backShadow * (1.0 - snowReveal * 0.45));
+                    gl_FragColor.rgb += uDirectTint * mix(0.24, 0.16, uNightMix) * frontLit;
                 }` : `
                 if (scSnow > 0.01) {
-                    // 冬季外围平滑粉雪质感（柔化绿草刷痕并叠加淡淡粉紫冷雪调）
+                    // 冬季外围平滑粉雪质感，被拨开时同样体现迎光雪壁高光与背光雪槽冷蓝阴影
                     float lumSnow = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
                     vec3 powderSnow = vec3(lumSnow * 0.42 + 0.54) * vec3(0.90, 0.94, 1.02);
                     gl_FragColor.rgb = mix(gl_FragColor.rgb, powderSnow, scSnow * 0.56);
                     gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * vec3(0.72, 0.82, 0.96), scPressF * scSnow * 0.52);
-                    gl_FragColor.rgb += vec3(0.14, 0.16, 0.22) * scRimF * scSnow;
+                    gl_FragColor.rgb *= mix(vec3(1.0), backShadowTint, backShadow);
+                    gl_FragColor.rgb += uDirectTint * mix(0.24, 0.16, uNightMix) * frontLit;
                     // 栅栏暖黄灯串沿雪地投出暖金光晕
                     float dBack = length(vec2(vGroundXZ.x - clamp(vGroundXZ.x, -uBoardHalf.x - 4.4, uBoardHalf.x + 3.0), vGroundXZ.y - (-uBoardHalf.y - 4.9)));
                     float dLeft = length(vec2(vGroundXZ.x - (-uBoardHalf.x - 5.05), vGroundXZ.y - clamp(vGroundXZ.y, -uBoardHalf.y - 4.3, uBoardHalf.y + 1.4)));
@@ -193,7 +242,22 @@ export function createScenery(scene, textures, level, tier = 'high') {
         uSnow: { value: 0 },
         uTime: { value: 0 },
         uBoardHalf: { value: new THREE.Vector2(halfW, halfH) },
-        uInteractMap: { value: textures.noiseMap() }
+        uInteractMap: { value: textures.noiseMap() },
+        uSunDir: { value: new THREE.Vector3(0.4, 0.85, 0.35).normalize() },
+        uDirectTint: { value: new THREE.Color('#ffffff') }
+    };
+    const pbrPropMats = new Map();
+    const makePbrMat = (key, opts = {}) => {
+        const cfg = PBR_SURFACE_PRESETS[key] || PBR_SURFACE_PRESETS.wood;
+        const mat = new THREE.MeshStandardMaterial({
+            ...opts,
+            metalness: cfg.metalness,
+            roughness: cfg.roughness
+        });
+        enhancePropPbr(mat, sharedGround);
+        if (!pbrPropMats.has(key)) pbrPropMats.set(key, []);
+        pbrPropMats.get(key).push(mat);
+        return mat;
     };
 
     // 1. 远景起伏大地（76×76，棋盘外平滑抬升成柔和丘陵）
@@ -240,7 +304,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
     // 3. 棋盘四周卵石镶边（实例化）
     const rand = seededRandom(level.id * 17 + 3);
     const pebbleGeo = blobSphere(0.18, 3, 0.22, 1, 0.5);
-    const pebbleMat = new THREE.MeshToonMaterial({ map: textures.stone(), color: '#cfd5cd', gradientMap });
+    const pebbleMat = makePbrMat('stone', { map: textures.stone(), color: '#cfd5cd' });
     const pebblePositions = [];
     for (let x = -halfW - 0.35; x <= halfW + 0.35; x += 0.45) {
         pebblePositions.push([x + (rand() - 0.5) * 0.08, -halfH - 0.35 + (rand() - 0.5) * 0.08]);
@@ -332,13 +396,13 @@ export function createScenery(scene, textures, level, tier = 'high') {
         boardParts.push(part(blobSphere(0.14, 12, 0.18, 1, 0.55), '#aeb7b2', trs(sx + 0.42, 0.05, bzEdge + 0.22)));
     }
     const boardGeo = mergeParts(boardParts);
-    const boardMesh = new THREE.Mesh(boardGeo, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
+    const boardMesh = new THREE.Mesh(boardGeo, makePbrMat('wood', { vertexColors: true }));
     boardMesh.castShadow = true;
     boardMesh.receiveShadow = true;
     attachOutline(boardMesh, 0.025);
     group.add(boardMesh);
     const boardSnowGeo = mergeParts(boardSnowParts);
-    const boardSnowMat = new THREE.MeshToonMaterial({ color: '#f3f7fc', gradientMap });
+    const boardSnowMat = makePbrMat('snowProp', { color: '#f3f7fc' });
     const boardSnowMesh = new THREE.Mesh(boardSnowGeo, boardSnowMat);
     boardSnowMesh.visible = false;
     group.add(boardSnowMesh);
@@ -346,7 +410,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
 
     // 4. 左上石板路（从西北灌木外侧蜿蜒延伸向远山）
     const pathGeo = blobSphere(0.42, 11, 0.16, 1, 0.20);
-    const pathMat = new THREE.MeshToonMaterial({ map: textures.stone(), color: '#dcd4c6', gradientMap });
+    const pathMat = makePbrMat('stone', { map: textures.stone(), color: '#dcd4c6' });
     const pathCount = 12;
     const pathInst = new THREE.InstancedMesh(pathGeo, pathMat, pathCount);
     pathInst.receiveShadow = true;
@@ -364,7 +428,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
     disposables.push(pathGeo, pathMat);
 
     // 5. 右上原木垒墙人字顶高脚木屋（对称暖光双四格方窗 + 中央木门 + 前阶梯 + 冬季雪顶）
-    const woodMat = new THREE.MeshToonMaterial({ map: textures.wood(), color: '#c48d59', gradientMap });
+    const woodMat = makePbrMat('wood', { map: textures.wood(), color: '#c48d59' });
     const cabinParts = [];
     const roofColor = '#8f5232';
     const plankColor = '#a9683f';
@@ -402,7 +466,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
         cabinParts.push(part(new THREE.BoxGeometry(1.18, 0.11, 0.30), postColor, trs(-0.15, 0.18 + s * 0.26, 1.92 - s * 0.22)));
     }
     const cabinGeo = mergeParts(cabinParts);
-    const cabinMesh = new THREE.Mesh(cabinGeo, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
+    const cabinMesh = new THREE.Mesh(cabinGeo, makePbrMat('wood', { vertexColors: true }));
     cabinMesh.position.set(halfW + 5.8, 0, -halfH - 5.2);
     cabinMesh.rotation.y = -0.42;
     cabinMesh.castShadow = true;
@@ -411,7 +475,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
     group.add(cabinMesh);
     // 可随冬/夜点亮的小屋对称暖光双窗
     const cabinWinGeo = new THREE.BoxGeometry(0.50, 0.50, 0.08);
-    const cabinWinMat = new THREE.MeshToonMaterial({ color: '#e8d8a8', emissive: '#ffb842', emissiveIntensity: 0.12, gradientMap });
+    const cabinWinMat = makePbrMat('cabinWindow', { color: '#e8d8a8', emissive: '#ffb842', emissiveIntensity: 0.12 });
     const cabinWin1 = new THREE.Mesh(cabinWinGeo, cabinWinMat);
     cabinWin1.position.set(-0.82, 2.26, 1.05);
     const cabinWin2 = new THREE.Mesh(cabinWinGeo, cabinWinMat);
@@ -424,7 +488,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
         part(new THREE.CylinderGeometry(0.18, 0.18, 3.24, 8), '#ffffff', trs(0, 4.11, -0.15, Math.PI / 2, 0, 0))
     ];
     const roofSnowGeo = mergeParts(roofSnowParts);
-    const roofSnowMat = new THREE.MeshToonMaterial({ color: '#f3f7fc', gradientMap });
+    const roofSnowMat = makePbrMat('snowProp', { color: '#f3f7fc' });
     const roofSnow = new THREE.Mesh(roofSnowGeo, roofSnowMat);
     roofSnow.visible = false;
     cabinMesh.add(roofSnow);
@@ -493,13 +557,13 @@ export function createScenery(scene, textures, level, tier = 'high') {
     buildFencePolyline(frontRightPts);
 
     const fenceGeo = mergeParts(fenceParts);
-    const fenceMesh = new THREE.Mesh(fenceGeo, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
+    const fenceMesh = new THREE.Mesh(fenceGeo, makePbrMat('wood', { vertexColors: true }));
     fenceMesh.castShadow = true;
     fenceMesh.receiveShadow = true;
     attachOutline(fenceMesh, 0.022);
     group.add(fenceMesh);
     const fenceSnowGeo = mergeParts(fenceSnowParts);
-    const fenceSnowMat = new THREE.MeshToonMaterial({ color: '#f3f7fc', gradientMap });
+    const fenceSnowMat = makePbrMat('snowProp', { color: '#f3f7fc' });
     const fenceSnowMesh = new THREE.Mesh(fenceSnowGeo, fenceSnowMat);
     fenceSnowMesh.visible = false;
     group.add(fenceSnowMesh);
@@ -523,7 +587,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
     pondGroup.position.set(pondX, Math.max(0, groundHeight(pondX, pondZ, halfW, halfH) - 0.01), pondZ);
     const pondWaterGeo = new THREE.CircleGeometry(2.25, 28);
     pondWaterGeo.rotateX(-Math.PI / 2);
-    const pondWaterMat = new THREE.MeshToonMaterial({ color: '#64c6e8', gradientMap });
+    const pondWaterMat = makePbrMat('water', { color: '#64c6e8' });
     const pondWater = new THREE.Mesh(pondWaterGeo, pondWaterMat);
     pondWater.position.y = 0.04;
     pondWater.scale.set(1.14, 1, 0.72);
@@ -539,13 +603,13 @@ export function createScenery(scene, textures, level, tier = 'high') {
         pondSnowParts.push(part(blobSphere(rw * 0.88, pi + 29, 0.15, 1, 0.38), '#eff5fc', trs(rx, 0.13, rz)));
     }
     const pondRimGeo = mergeParts(pondRimParts);
-    const pondRimMat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap });
+    const pondRimMat = makePbrMat('stone', { vertexColors: true });
     const pondRimMesh = new THREE.Mesh(pondRimGeo, pondRimMat);
     pondRimMesh.receiveShadow = true;
     attachOutline(pondRimMesh, 0.02);
     pondGroup.add(pondRimMesh);
     const pondSnowGeo = mergeParts(pondSnowParts);
-    const pondSnowMat = new THREE.MeshToonMaterial({ color: '#eff5fc', gradientMap });
+    const pondSnowMat = makePbrMat('snowProp', { color: '#eff5fc' });
     const pondSnowMesh = new THREE.Mesh(pondSnowGeo, pondSnowMat);
     pondSnowMesh.visible = false;
     pondGroup.add(pondSnowMesh);
@@ -559,7 +623,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
         part(new THREE.SphereGeometry(0.09, 8, 6), '#f8a0bf', trs(0.55, 0.11, -0.32))
     ];
     const lilyGeo = mergeParts(lilyParts);
-    const lilyMat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap });
+    const lilyMat = makePbrMat('foliage', { vertexColors: true });
     pondSummerGroup.add(new THREE.Mesh(lilyGeo, lilyMat));
     pondGroup.add(pondSummerGroup);
     group.add(pondGroup);
@@ -576,13 +640,13 @@ export function createScenery(scene, textures, level, tier = 'high') {
         bushSnowParts.push(part(blobSphere(0.48 * bs, idx + 51, 0.14, 1, 0.52), '#f3f7fc', trs(bx, by + 0.56 * bs, bz)));
     });
     const bushGeo = mergeParts(bushParts);
-    const bushMesh = new THREE.Mesh(bushGeo, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
+    const bushMesh = new THREE.Mesh(bushGeo, makePbrMat('foliage', { vertexColors: true }));
     bushMesh.castShadow = true;
     bushMesh.receiveShadow = true;
     attachOutline(bushMesh, 0.024);
     group.add(bushMesh);
     const bushSnowGeo = mergeParts(bushSnowParts);
-    const bushSnowMat = new THREE.MeshToonMaterial({ color: '#f3f7fc', gradientMap });
+    const bushSnowMat = makePbrMat('snowProp', { color: '#f3f7fc' });
     const bushSnowMesh = new THREE.Mesh(bushSnowGeo, bushSnowMat);
     bushSnowMesh.visible = false;
     group.add(bushSnowMesh);
@@ -593,13 +657,13 @@ export function createScenery(scene, textures, level, tier = 'high') {
     millGroup.position.set(halfW * 0.25 + 1.5, 1.55, -halfH - 18.5);
     millGroup.scale.setScalar(0.84);
     millGroup.rotation.y = 0.05;
-    const millTower = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.05, 3.6, 10), new THREE.MeshToonMaterial({ color: '#9eb2a8', gradientMap }));
+    const millTower = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.05, 3.6, 10), makePbrMat('stone', { color: '#9eb2a8' }));
     millTower.position.y = 1.8;
-    const millCap = new THREE.Mesh(new THREE.ConeGeometry(0.75, 0.95, 10), new THREE.MeshToonMaterial({ color: '#7b8e85', gradientMap }));
+    const millCap = new THREE.Mesh(new THREE.ConeGeometry(0.75, 0.95, 10), makePbrMat('windmill', { color: '#7b8e85' }));
     millCap.position.y = 4.05;
     const rotor = new THREE.Group();
     rotor.position.set(0, 3.3, 0.72);
-    const bladeMat = new THREE.MeshToonMaterial({ color: '#a8bbb2', gradientMap });
+    const bladeMat = makePbrMat('windmill', { color: '#a8bbb2' });
     const bladeGeo = new THREE.BoxGeometry(0.24, 1.85, 0.05);
     for (let b = 0; b < 4; b++) {
         const pivot = new THREE.Group();
@@ -622,11 +686,11 @@ export function createScenery(scene, textures, level, tier = 'high') {
         [-halfW - 11.2, -halfH - 6.5, 1.32], [halfW + 10.6, -halfH - 6.2, 1.26]
     ];
     const trunkGeo = new THREE.CylinderGeometry(0.20, 0.30, 2.0, 7);
-    const trunkMat = new THREE.MeshToonMaterial({ color: '#785034', gradientMap });
+    const trunkMat = makePbrMat('wood', { color: '#785034' });
     const crownBlobGeo = blobSphere(1.08, 9, 0.22, 2, 0.86);
     const pineConeGeo = new THREE.ConeGeometry(1.18, 1.75, 9);
-    const crownMat = new THREE.MeshToonMaterial({ color: '#f7b8c8', gradientMap });
-    const pineSnowMat = new THREE.MeshToonMaterial({ color: '#eff6fd', gradientMap });
+    const crownMat = makePbrMat('foliage', { color: '#f7b8c8' });
+    const pineSnowMat = makePbrMat('snowProp', { color: '#eff6fd' });
     const trees = [];
     for (let i = 0; i < treePlacements.length; i++) {
         const [tx, tz, sc] = treePlacements[i];
@@ -730,7 +794,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
 
     // 10. 季节限定小道具：夏向日葵、秋稻草堆与南瓜、冬围巾雪人（对齐概念图左侧位置）
     const seasonProps = { sunflower: new THREE.Group(), autumn: new THREE.Group(), snowman: new THREE.Group() };
-    const sfMat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap });
+    const sfMat = makePbrMat('seasonProp', { vertexColors: true });
     const sfParts = [];
     for (const [sx, sz] of [[-halfW - 3.6, 1.2], [-halfW - 4.1, 2.0], [halfW + 3.8, 1.4]]) {
         sfParts.push(part(new THREE.CylinderGeometry(0.04, 0.05, 0.95, 6), '#4b8d32', trs(sx, 0.47, sz)));
@@ -787,6 +851,8 @@ export function createScenery(scene, textures, level, tier = 'high') {
     let lastFlowerKey = '';
     function applyPreset(preset, blend = 1, horizonColor = null, lightState = null) {
         if (horizonColor) sharedGround.uHorizonColor.value.copy(horizonColor);
+        if (lightState?.sunDir) sharedGround.uSunDir.value.copy(lightState.sunDir).normalize();
+        if (lightState?.directTint) sharedGround.uDirectTint.value.copy(lightState.directTint);
         const nightMix = lightState?.nightBlend ?? 0;
         const sunsetMix = lightState?.sunsetBlend ?? 0;
         const duskMix = lightState?.duskMix ?? preset.dusk;
@@ -794,7 +860,7 @@ export function createScenery(scene, textures, level, tier = 'high') {
         sharedGround.uNightMix.value = nightMix;
         sharedGround.uSnow.value = preset.snowCover;
 
-        // 地面、棋盘先做预设平滑插值并同步更新 PBR 金属度/粗糙度（按湿润度与积雪插值），再温和染入月夜冷青
+        // 地面、棋盘及全部场景物件先做预设平滑插值并同步更新 PBR 金属度/粗糙度（按湿润度与积雪插值），再温和染入月夜冷青
         const gPreset = PBR_SURFACE_PRESETS.ground;
         const lPreset = PBR_SURFACE_PRESETS.lawn;
         const snowMix = THREE.MathUtils.clamp(preset.snowCover, 0, 1);
@@ -811,6 +877,17 @@ export function createScenery(scene, textures, level, tier = 'high') {
             lPreset.snowRoughness,
             snowMix
         );
+        for (const [key, mats] of pbrPropMats.entries()) {
+            const cfg = PBR_SURFACE_PRESETS[key];
+            if (!cfg) continue;
+            const wetR = cfg.wetRoughness ?? cfg.roughness;
+            let nextR = THREE.MathUtils.lerp(cfg.roughness, wetR, wetMix);
+            if (cfg.snowRoughness !== undefined) nextR = THREE.MathUtils.lerp(nextR, cfg.snowRoughness, snowMix);
+            for (const m of mats) {
+                m.metalness = cfg.metalness;
+                m.roughness = nextR;
+            }
+        }
 
         colTmp.set(preset.ground);
         curGround.lerp(colTmp, blend);
@@ -840,23 +917,24 @@ export function createScenery(scene, textures, level, tier = 'high') {
         pondWaterMat.color.set(isWinter ? '#9bd5f2' : '#64c6e8').lerp(colTmp.set('#1d3f6e'), nightMix * 0.82);
         outlineMat.color.set('#4c342b').lerp(colTmp.set('#1f2c4f'), Math.max(nightMix * 0.88, isWinter ? 0.55 : 0));
 
-        // 树木枝干、木框、栅栏、木屋、灌木、卵石、石板与冬季雪顶随夜色压暗融入月夜
-        trunkMat.color.set('#785034').lerp(colTmp.set('#3b3248'), nightMix * 0.72);
-        boardMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), nightMix * 0.68);
-        fenceMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), nightMix * 0.68);
-        cabinMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), nightMix * 0.68);
-        bushMesh.material.color.set('#ffffff').lerp(colTmp.set('#2c5863'), nightMix * 0.74);
-        lilyMat.color.set('#ffffff').lerp(colTmp.set('#2c5863'), nightMix * 0.74);
-        pebbleMat.color.set('#cfd5cd').lerp(colTmp.set('#586b8a'), nightMix * 0.72);
-        pathMat.color.set('#dcd4c6').lerp(colTmp.set('#556785'), nightMix * 0.72);
-        pondRimMat.color.set('#ffffff').lerp(colTmp.set('#5c6e8c'), nightMix * 0.72);
-        const nightSnowHex = '#667da8';
-        boardSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.68);
-        roofSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.68);
-        fenceSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.68);
-        bushSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.68);
-        pondSnowMat.color.set('#eff5fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.68);
-        pineSnowMat.color.set('#eff6fd').lerp(colTmp.set(nightSnowHex), nightMix * 0.68);
+        // 树木枝干、木框、栅栏、木屋、灌木、卵石、石板与冬季雪顶随夜色压暗融入月夜（冬季受雪面环境反光保留更多通透感）
+        const propNight = nightMix * (isWinter ? 0.45 : 0.70);
+        trunkMat.color.set('#785034').lerp(colTmp.set('#3b3248'), propNight);
+        boardMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), propNight);
+        fenceMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), propNight);
+        cabinMesh.material.color.set('#ffffff').lerp(colTmp.set('#5e5673'), propNight);
+        bushMesh.material.color.set('#ffffff').lerp(colTmp.set('#2c5863'), nightMix * (isWinter ? 0.50 : 0.74));
+        lilyMat.color.set('#ffffff').lerp(colTmp.set('#2c5863'), nightMix * (isWinter ? 0.50 : 0.74));
+        pebbleMat.color.set('#cfd5cd').lerp(colTmp.set('#586b8a'), propNight);
+        pathMat.color.set('#dcd4c6').lerp(colTmp.set('#556785'), propNight);
+        pondRimMat.color.set('#ffffff').lerp(colTmp.set('#5c6e8c'), propNight);
+        const nightSnowHex = '#8ba4cf';
+        boardSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
+        roofSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
+        fenceSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
+        bushSnowMat.color.set('#f3f7fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
+        pondSnowMat.color.set('#eff5fc').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
+        pineSnowMat.color.set('#eff6fd').lerp(colTmp.set(nightSnowHex), nightMix * 0.56);
 
         const warmGlow = isWinter ? Math.max(0.85, duskMix) : Math.max(0, (duskMix - 0.22) / 0.78);
         cabinWinMat.emissiveIntensity = 0.10 + warmGlow * 1.45;
@@ -896,10 +974,18 @@ export function createScenery(scene, textures, level, tier = 'high') {
         setInteractTexture(tex) {
             if (tex) sharedGround.uInteractMap.value = tex;
         },
-        getGroundPbrState: () => ({
-            ground: { metalness: groundMat.metalness, roughness: Number(groundMat.roughness.toFixed(3)) },
-            lawn: { metalness: lawnMat.metalness, roughness: Number(lawnMat.roughness.toFixed(3)) }
-        }),
+        getGroundPbrState: () => {
+            const out = {
+                ground: { metalness: groundMat.metalness, roughness: Number(groundMat.roughness.toFixed(3)) },
+                lawn: { metalness: lawnMat.metalness, roughness: Number(lawnMat.roughness.toFixed(3)) }
+            };
+            for (const [key, mats] of pbrPropMats.entries()) {
+                if (mats.length) {
+                    out[key] = { metalness: mats[0].metalness, roughness: Number(mats[0].roughness.toFixed(3)) };
+                }
+            }
+            return out;
+        },
         dispose() {
             scene.remove(group);
             for (const d of disposables) d?.dispose?.();

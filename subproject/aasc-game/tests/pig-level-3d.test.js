@@ -401,6 +401,15 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         assert.equal(envState.groundPbr.ground.metalness, 0, '外围地形 PBR 金属度应为 0');
         assert.equal(envState.groundPbr.lawn.metalness, 0, '棋盘草坪 PBR 金属度应为 0');
         assert.ok(
+            envState.groundPbr.wood && envState.groundPbr.stone && envState.groundPbr.foliage &&
+            envState.groundPbr.water && envState.groundPbr.snowProp && envState.groundPbr.windmill,
+            '全部场景物件应暴露无贴图 PBR 金属度/粗糙度状态'
+        );
+        assert.ok(
+            envState.pig.accessoryPbr && envState.pig.accessoryPbr.steel.metalness > 0.7 && envState.pig.accessoryPbr.gold.metalness > 0.7,
+            '金属机制配件(铁笼/金锁/剪刀)应具备高金属度 PBR 参数'
+        );
+        assert.ok(
             envState.groundPbr.ground.roughness >= 0.4 && envState.groundPbr.ground.roughness <= 0.9 &&
             envState.groundPbr.lawn.roughness >= 0.4 && envState.groundPbr.lawn.roughness <= 0.9,
             `地面与草坪 PBR 粗糙度应在合理范围 (ground=${envState.groundPbr.ground.roughness}, lawn=${envState.groundPbr.lawn.roughness})`

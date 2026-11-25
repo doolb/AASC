@@ -1,3 +1,17 @@
+- ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125h`，含冬夜草叶提亮、全部场景/配件无贴图 PBR、拨雪迎/背光与雪坎自投影、冬季环境雪面反光提亮及夜晚小猪哑光去反光优化）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 9 个变更文件（`index.html`、`app.mjs`、`3d/{environment,grass,holo-ui,models,scenery,textures,view}.mjs`），并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
+- ✅ [2026-11-25] 优化夜晚猪/小鸭/大象着色器哑光表现并消除夜间反光过重（`?v=20261125h`）
+  - `web/pig-level/3d/models.mjs`：在 `toonMat` 片元着色器中将夜晚顶面反光 `topRim` 衰减 `85%`、高光阶梯 `hiStep` 衰减 `88%`、常驻暖偏置衰减 `90%`，受光面 `litCol` 乘以柔和月光系数 `mix(1.0, 0.72, uNightMix)` 并放宽夜间明暗交界 `litStep` 过渡区间至 `smoothstep(mix(0.06, -0.08, uNightMix), mix(0.30, 0.48, uNightMix), ndl)`，同时收敛冬季夜晚 `baseCol` 与 `shadeCol` 反光力度；统一升级 `?v=20261125h`，全部测试（`119 / 119`、`1 / 1`、`5 / 5`）通过。
+- ✅ [2026-11-25] 提升冬季雪地全天候环境光与角色/景物雪面漫反射补光（`?v=20261125g`）
+  - `web/pig-level/3d/environment.mjs`：冬季 `hemiLight.intensity` 增益提升至 `snowMix * lerp(0.46, 0.52, nightBlend)`、`moonLight.intensity` 增加 `snowMix * 0.22`；冬季 `hemiLight.groundColor` 插值至高明度雪面反射色（冬夜 `#8eb0e8`）且天光呈 `#7e9ee0`，`lightState` 同步导出 `snowCover`。
+  - `web/pig-level/3d/scenery.mjs`：`enhancePropPbr` 接入 `uSnow` 为 PBR 静态景物叠加 `1 + smoothstep(0.15, 0.75, uSnow) * mix(0.14, 0.24, uNightMix)` 雪地环境提亮；`applyPreset` 减轻冬季夜晚外景物件压暗比例（`propNight = nightMix * 0.45`）并将积雪顶盖夜色提亮至 `#8ba4cf`。
+  - `web/pig-level/3d/models.mjs`：`toonMat` 新增 `uSnow`（经 `setLightState` 同步），在冬季抬升猪/鸭/象暗面与下腹部受白雪向上反光的亮度；统一升级 `?v=20261125g` 并通过全量测试（`119 / 119`、`1 / 1`、`5 / 5`）。
+- ✅ [2026-11-25] 其余场景物件与机制配件全面升级无贴图参数化 PBR，并增强交互拨雪迎/背光与雪坎自投影（`?v=20261125f`）
+  - `web/pig-level/3d/scenery.mjs`：扩充 `PBR_SURFACE_PRESETS`（新增 `wood` / `stone` / `foliage` / `water` / `snowProp` / `windmill` / `cabinWindow` / `seasonProp` 金属度与粗糙度预设，随 `wetness` 与 `snowCover` 动态插值），通过 `enhancePropPbr` 与 `makePbrMat` 将棋盘围框、木屋与暖窗、栅栏、池塘水面与砌石、灌木、石板路、风车、树干/树冠、雪帽及季节道具共 23 组静态材质全部升级为 `THREE.MeshStandardMaterial`，并由 `getGroundPbrState()` 统一导出；在 `enhanceGroundAerial` 中加入 `uSunDir` 与 `uDirectTint`，修正 `vec2(pR - pL, pU - pD)` 凹坑法线倾角并使用双倍采样跨度增强法线扰动（`1.45`），按向光坡向与向光侧雪坎遮挡计算 `backShadow`（冷冰蓝暗影）与 `frontLit`（受主光色调制的迎光雪壁高光）。
+  - `web/pig-level/3d/models.mjs`：导出 `PBR_ACCESSORY_PRESETS`（`steel` `0.82/0.26`、`gold` `0.86/0.22`、`spring` `0.72/0.28`、`ironBomb` `0.68/0.42`、`paintedRed` `0.16/0.46`、`rope` `0.04/0.82`），将铁笼与六种机制配件及浮标箭头全部升级为 `THREE.MeshStandardMaterial`，并在 `getLightState()` 暴露 `accessoryPbr`。
+  - `tests/pig-level-3d.test.js`：补充场景物件与高金属度配件 PBR 校验，检查 `scenery.mjs` / `models.mjs` 无残留 `MeshToonMaterial`。
+- ✅ [2026-11-25] 修复冬夜草叶局部过暗（背光面、阴影区与中段）（`?v=20261125e`）
+  - `web/pig-level/3d/grass.mjs`：冬季 `snowBounce` 抬升色斑 `nightPatchTint`、云影 `shadowK`（`0.72 -> 0.90`）与方向光阴影 `shadowMask`（清透冰蓝雪影 `vec3(0.68, 0.76, 0.90)`）暗部下限；将草身覆霜白雪下延至 `smoothstep(0.12, 0.88, vY)`，降低冬夜 `uTimeTint` 压暗，令 `snowBounceLight` 直接融合脚下实时雪面亮度 `gLit` 与背光全向补光 `(1.0 - NoL * 0.45)`，并以 `litBlade = max(litBlade, gLit * mix(0.84, 0.96, vY) * snowBounce)` 为冬夜草叶暗部兜底。
 - ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125d`，含取消移动鼠标溅雪、草根跟随地面颜色渐变、非冬季夜草压暗及冬季草 24 小时雪地反光）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 9 个变更文件（`index.html`、`app.mjs`、`3d/{environment,grass,holo-ui,models,scenery,textures,view}.mjs`），并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
 - ✅ [2026-11-25] 草根跟随当前地面颜色渐变、非冬季夜草压暗及冬季草 24 小时雪地反光与冬夜提亮（`?v=20261125d`）

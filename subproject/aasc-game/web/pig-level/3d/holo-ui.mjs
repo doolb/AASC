@@ -1,7 +1,7 @@
 // 3D 卡通浮动 UI：高饱和圆角描边卡片、3D 浮漂与视差、居中无限滑动关卡选择、精确包围盒拾取。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261125d';
-import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261125d';
+import { SEASONS, WEATHERS, SEASON_LABELS, WEATHER_LABELS } from './presets.mjs?v=20261125h';
+import { TIME_SLOTS, TIME_LABELS } from './environment.mjs?v=20261125h';
 
 // 时钟圆盘环形配置表：外圈 24h 时段（唯一三角指针指示，无遮字）、中环 120° 晴阴雨、内环 90° 四季
 const DIAL_SIZE = 180;
@@ -234,7 +234,7 @@ export function createHoloUI({ levels, levelId, onAction, onEnvChange, onTimeSlo
         const img = new Image();
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
-        img.src = `./assets/ui/${name}.svg?v=20261125d`;
+        img.src = `./assets/ui/${name}.svg?v=20261125h`;
         svgImgCache.set(name, img);
     }))).then(results => {
         if (!results.some(Boolean)) return;

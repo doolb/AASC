@@ -1,8 +1,8 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125d';
-import { groundHeight } from './geometry.mjs?v=20261125d';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261125d';
+import { seededRandom } from './presets.mjs?v=20261125h';
+import { groundHeight } from './geometry.mjs?v=20261125h';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261125h';
 
 // 草叶无贴图 PBR 物理参数预设
 export const PBR_GRASS_PRESET = {
@@ -278,27 +278,29 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
             const vec4 UNPACK_DEPTH = (255.0 / 256.0) / vec4(256.0 * 256.0 * 256.0, 256.0 * 256.0, 256.0, 1.0);
             float unpackDepth(vec4 v) { return dot(v, UNPACK_DEPTH); }
             void main() {
+                float snowBounce = smoothstep(0.10, 0.75, uSnow);
                 // Painted Valley 双阶明暗水粉草叶：根部柔和承接当前地面、叶尖高饱和亮黄绿，约 13% 混入金色麦草秆。
                 vec3 base = mix(uRootColor, uTipColor, 0.28 + 0.72 * smoothstep(0.0, 0.80, vY));
                 if (vTint > 0.87) {
                     vec3 straw = mix(vec3(0.74, 0.78, 0.44), vec3(0.92, 0.88, 0.58), smoothstep(0.08, 0.88, vY));
                     base = mix(base, straw, 0.76);
                 }
-                // 雨天湿润与冬季草尖积雪先参与表面基底色混合，再统一经过光照/云影/实时阴影计算，确保冬季雪草同样接收投影
+                // 雨天湿润与冬季草身/草尖积雪先参与表面基底色混合，再统一经过光照/云影/实时阴影计算，确保冬季雪草同样接收投影
                 base = mix(base, base * 0.90 + vec3(0.06, 0.09, 0.11) * vY * vY, uWet * 0.65);
-                base = mix(base, vec3(0.95, 0.97, 1.0), uSnow * smoothstep(0.35, 0.95, vY) * 0.85);
+                base = mix(base, vec3(0.95, 0.97, 1.0), uSnow * smoothstep(0.12, 0.88, vY) * 0.88);
                 vec4 patchN = texture2D(uNoiseMap, vWorldXZ * 0.025);
-                // 大尺度晴天受光亮部与冷润阴影区对比（入夜后收敛暖晒亮斑并随冬季雪地保留柔和雪辉）
+                // 大尺度晴天受光亮部与冷润阴影区对比（冬季抬升夜斑暗部防止雪草发黑，非冬季入夜收敛暖晒亮斑）
                 float sunPatch = smoothstep(0.38, 0.62, patchN.b);
                 vec3 dayPatchTint = mix(vec3(0.76, 0.82, 0.86), vec3(1.16, 1.14, 1.02), sunPatch);
                 vec3 nightPatchTint = mix(vec3(0.62, 0.70, 0.84), vec3(0.88, 0.94, 1.04), sunPatch);
+                nightPatchTint = mix(nightPatchTint, vec3(0.92, 0.96, 1.04), snowBounce * 0.75);
                 vec3 patchTint = mix(dayPatchTint, nightPatchTint, uNightMix);
                 base *= patchTint * (0.97 + (vTint - 0.5) * 0.08);
-                // 移动云影（拉大晴天云影暗部与阳光区层次）
+                // 移动云影（冬季收缩云影暗部下限为 0.90，避免雪地叠加发黑）
                 float cloud = texture2D(uNoiseMap, vWorldXZ * 0.015 + vec2(uTime * 0.01, uTime * 0.006)).r;
-                float shadowK = mix(0.72, 1.12, smoothstep(0.36, 0.64, cloud));
+                float shadowK = mix(mix(0.72, 0.90, snowBounce), 1.12, smoothstep(0.36, 0.64, cloud));
                 base *= shadowK;
-                // 采样太阳/月亮方向光阴影贴图（5 点 PCF），让树影/木屋/栅栏/小猪阴影清晰落到草叶上
+                // 采样太阳/月亮方向光阴影贴图（5 点 PCF），冬季阴影区呈清透冰蓝雪影避免发黑
                 float shadowMask = 0.0;
                 if (uShadowEnabled > 0.5) {
                     vec3 sc = vShadowCoord.xyz / vShadowCoord.w;
@@ -310,7 +312,8 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                         s += (sc.z - bias > unpackDepth(texture2D(uShadowMap, sc.xy + vec2(-0.8, 0.8) * uShadowTexel))) ? 1.0 : 0.0;
                         s += (sc.z - bias > unpackDepth(texture2D(uShadowMap, sc.xy + vec2(0.8, 0.8) * uShadowTexel))) ? 1.0 : 0.0;
                         shadowMask = (s * 0.2) * uShadowStrength;
-                        base *= mix(vec3(1.0), vec3(0.22, 0.30, 0.38), shadowMask);
+                        vec3 shadowAlbedos = mix(vec3(0.22, 0.30, 0.38), vec3(0.68, 0.76, 0.90), snowBounce);
+                        base *= mix(vec3(1.0), shadowAlbedos, shadowMask);
                     }
                 }
                 // 无贴图 Cook-Torrance GGX 微表面 PBR + 叶片逆光次表面透射 + 冬季 24h 雪地漫反射反光
@@ -348,19 +351,6 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                 float directVis = 1.0 - shadowMask * 0.86;
                 vec3 radiance = uDirectTint * uSunIntensity * 1.42;
                 vec3 directLight = ((diffuseBRDF + translucency) * (0.34 + 0.66 * NoL) + specular * NoL) * radiance * directVis;
-
-                // 半球环境光 PBR + 冬季 24h 雪地反光抬升草根 AO
-                float snowBounce = smoothstep(0.10, 0.75, uSnow);
-                float hemiWeight = 0.5 + 0.5 * N.y;
-                vec3 hemiIrradiance = mix(uHemiGroundColor, uHemiSkyColor, hemiWeight) * uHemiIntensity;
-                float ao = mix(mix(0.48, 0.94, snowBounce), 1.0, smoothstep(0.0, 0.75, vY)) * (1.0 - vTrample * 0.08);
-                vec3 envFresnel = f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(1.0 - NoV, 5.0);
-                vec3 ambientLight = (kD * base * hemiIrradiance * 0.96 + uHemiSkyColor * envFresnel * uHemiIntensity * 0.24) * ao;
-
-                // 冬季 24 小时雪面向上漫反射反光（早/中/晚/夜随当前日光与月光色温实时照亮草叶）
-                vec3 snowIrradiance = uDirectTint * uSunIntensity * (0.28 + 0.52 * max(L.y, 0.0)) * (1.0 - shadowMask * 0.55)
-                    + uHemiGroundColor * uHemiIntensity * 1.15;
-                vec3 snowBounceLight = kD * base * snowIrradiance * mix(1.08, 0.54, vY) * snowBounce * 0.52;
 
                 // 实时同步脚下地面表面颜色（区分棋盘内草坪与外围地形、明暗阴影、冬雪与踩踏拨雪露底、月光/木屋/栅栏光池）
                 float isInnerG = (abs(vWorldXZ.x) < ${(halfW + 0.25).toFixed(2)} && abs(vWorldXZ.y) < ${(halfH + 0.25).toFixed(2)}) ? 1.0 : 0.0;
@@ -401,17 +391,34 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                     gLit += vec3(0.38, 0.22, 0.06) * cabinPool * max(uNightMix, scSnowG * 0.75);
                 }
 
-                // 合成草身昼夜光照（压暗非冬季夜晚，保留冬季 24h 及冬夜雪面反光提亮）
-                vec3 pbrLit = (directLight + ambientLight + snowBounceLight) * mix(vec3(1.0), uTimeTint, 0.30 + 0.42 * uNightMix * (1.0 - snowBounce * 0.55));
+                // 半球环境光 PBR + 冬季 24h 雪地反光抬升草根 AO 与 360° 背光面雪面漫反射补光
+                float hemiWeight = 0.5 + 0.5 * N.y;
+                vec3 hemiIrradiance = mix(uHemiGroundColor, uHemiSkyColor, hemiWeight) * uHemiIntensity;
+                float ao = mix(mix(0.48, 0.94, snowBounce), 1.0, smoothstep(0.0, 0.75, vY)) * (1.0 - vTrample * 0.08);
+                vec3 envFresnel = f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(1.0 - NoV, 5.0);
+                vec3 ambientLight = (kD * base * hemiIrradiance * 0.96 + uHemiSkyColor * envFresnel * uHemiIntensity * 0.24) * ao;
+
+                // 冬季 24 小时雪面向上漫反射反光（直接融合脚下雪面亮度 gLit，并着重补亮背光面与中段）
+                vec3 snowIrradiance = uDirectTint * uSunIntensity * (0.28 + 0.52 * max(L.y, 0.0)) * (1.0 - shadowMask * 0.45)
+                    + uHemiGroundColor * uHemiIntensity * 1.15
+                    + gLit * mix(0.65, 0.95, uNightMix);
+                vec3 snowBounceLight = kD * base * snowIrradiance * mix(1.08, 0.62, vY) * (1.0 - NoL * 0.45) * snowBounce * 0.68;
+
+                // 合成草身昼夜光照（压暗非冬季夜晚；冬季大幅减轻 uTimeTint 压暗并用脚下雪面反光兜底暗部）
+                vec3 pbrLit = (directLight + ambientLight + snowBounceLight) * mix(vec3(1.0), uTimeTint, (0.30 + 0.42 * uNightMix) * (1.0 - snowBounce * 0.80));
                 vec3 nightNonWinterRoot = vec3(0.025, 0.068, 0.092) * (0.82 + 0.36 * vTint);
-                vec3 nightWinterRoot = mix(gLit * 0.92, vec3(0.32, 0.44, 0.58), 0.35);
+                vec3 nightWinterRoot = max(gLit * 0.96, vec3(0.38, 0.50, 0.66));
                 vec3 nightRoot = mix(nightNonWinterRoot, nightWinterRoot, snowBounce);
-                vec3 nightBladeBase = mix(base * vec3(0.10, 0.20, 0.25), base * vec3(0.56, 0.68, 0.84) + snowBounceLight * 1.35, snowBounce);
+                vec3 nightBladeBase = mix(base * vec3(0.10, 0.20, 0.25), max(base * vec3(0.68, 0.80, 0.94), gLit * 0.95) + snowBounceLight * 1.35, snowBounce);
                 vec3 nightBlade = mix(nightRoot, nightBladeBase, 0.28 + 0.72 * vY);
-                float nightMixWeight = mix(0.84, 0.56, snowBounce);
+                float nightMixWeight = mix(0.84, 0.42, snowBounce);
                 vec3 litBlade = mix(pbrLit, mix(pbrLit * mix(0.62, 1.0, snowBounce), nightBlade, nightMixWeight), uNightMix);
-                float moonTip = uNightMix * smoothstep(0.56, 1.0, vY) * (1.0 - shadowMask * 0.88) * (0.11 + 0.26 * moonPool + 0.22 * snowBounce);
-                litBlade += (mix(vec3(0.13, 0.26, 0.34), vec3(0.42, 0.58, 0.74), snowBounce) + specular * 0.35) * moonTip;
+                float moonTip = uNightMix * smoothstep(0.56, 1.0, vY) * (1.0 - shadowMask * 0.88) * (0.11 + 0.26 * moonPool + 0.24 * snowBounce);
+                litBlade += (mix(vec3(0.13, 0.26, 0.34), vec3(0.46, 0.62, 0.78), snowBounce) + specular * 0.35) * moonTip;
+                if (snowBounce > 0.05) {
+                    // 冬夜/冬日雪地漫反射暗部兜底：防止背光面、阴影区或草叶中段低于脚下雪面散射亮度
+                    litBlade = max(litBlade, gLit * mix(0.84, 0.96, vY) * snowBounce);
+                }
 
                 // 草根 100% 承接脚下当前地面颜色，随高度平滑渐变过渡到受光草身与叶尖
                 float rootFollow = smoothstep(0.0, 0.58, vY);
