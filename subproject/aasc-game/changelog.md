@@ -1,3 +1,11 @@
+- ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125d`，含取消移动鼠标溅雪、草根跟随地面颜色渐变、非冬季夜草压暗及冬季草 24 小时雪地反光）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 9 个变更文件（`index.html`、`app.mjs`、`3d/{environment,grass,holo-ui,models,scenery,textures,view}.mjs`），并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
+- ✅ [2026-11-25] 草根跟随当前地面颜色渐变、非冬季夜草压暗及冬季草 24 小时雪地反光与冬夜提亮（`?v=20261125d`）
+  - `web/pig-level/3d/environment.mjs`：`applyColors()` 根据 `snowCover` 与 24 小时日光光谱及天际色计算全天候雪地高反照率反射色（冬夜呈清亮银蓝月光反光 `#6e8ac4`），插值更新 `hemiLight.groundColor` 并提升冬季半球漫反射强度。
+  - `web/pig-level/3d/grass.mjs`：新增 `uGroundColor` 与 `uLawnColor` 同步 `preset.ground`/`preset.lawn` 并输出踩踏占位度 `vPress`；片元着色器按 `vWorldXZ` 实时复现脚下当前地面颜色 `gLit`（区分棋盘内外草坪与地形、实时阴影/云影、冬季 `powderSnow`/`boardSnow` 覆雪与踩踏拨雪露底、月光池、木屋暖窗光池及冬季栅栏灯串光晕），草根 `vY = 0` 100% 承接当前地面色并沿 `smoothstep(0.0, 0.58, vY)` 平滑渐变至草尖；同时收敛非冬季夜晚过亮（压暗 `nightPatchTint`、`nightRoot`/`nightBlade` 与叶尖微辉）并注入冬季 24 小时雪面向上漫反射反光 `snowBounceLight` 与 AO 抬升，使冬夜草叶受雪地反光自然提亮；`getLightState()` 补充暴露 `hemiGroundColor`、`groundColor`、`lawnColor`。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/spec/pig-game-3d.md`、`docs/task/20261124_场景丰富草地时变与462表盘.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261125d` 并新增草根地面色与冬季 24h 雪地半球反光校验，`test:pig-web`（`119 / 119`）、`test:pig-animation`（`1 / 1`）、`test:pig-3d`（`5 / 5`）全部通过。
+- ✅ [2026-11-25] 取消拖动/移动鼠标时的雪花飞溅，仅保留点击地面时飞溅粒子（`?v=20261125c`）
+  - `web/pig-level/3d/view.mjs`：`onPointerMove` 仅调用 `grass.stamp(pt.x, pt.z, 0.85, 0.65)` 压出雪槽与拨草轨迹，移除 `particles.burstGrass`；雪花/草屑粒子飞溅仅在点击地面（`onPointerUp`）时触发；`test:pig-web`（`119 / 119`）、`test:pig-animation`（`1 / 1`）、`test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125b`，含 PBR 草叶/草地与冬季棋盘踩雪交互）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 14 个文件，并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
 - ✅ [2026-11-25] 为棋盘与外围地面加入冬季积雪及 3D 踩雪/拨雪交互效果（`?v=20261125b`）

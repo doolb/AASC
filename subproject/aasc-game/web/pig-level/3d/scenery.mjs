@@ -1,7 +1,7 @@
 // 手绘吉卜力风场景：修剪草坪棋盘、卵石边、石板路、高脚木屋、栅栏、季节树、小花与远坡风车。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125b';
-import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125b';
+import { seededRandom } from './presets.mjs?v=20261125d';
+import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125d';
 
 // 无贴图 PBR 材质预设参数（金属度与粗糙度，随湿润度与积雪动态插值）
 export const PBR_SURFACE_PRESETS = {

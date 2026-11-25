@@ -141,13 +141,17 @@ createGrass(scene, textures, level, tier):
     实例数: 由 grassCountForTier(tier, isMobile, isSoftware) 决定；棋盘内缩减至 8% 并偏向棋盘边缘且保持 0.06~0.12 低矮高度以露出整洁草坪条纹与清晰小猪投影；外围跳过池塘范围并按自然草丛聚簇分布；冬季通过顶点着色器按 `uSnow` 与 `aTint` 剔除约 90% 外围草叶与 97% 棋盘内草叶，露出干净平滑雪地与零星覆霜草簇
     草叶几何: 5 段渐细弯折三角带（uv.y 0→1，基底宽 0.072）
     实例属性: aOffset(x,z), aBaseY(groundHeight 贴合丘陵), aHeight, aAngle, aTint
-    顶点着色器额外输出: 随 aAngle 与倒伏姿态旋转的世界法线 vWorldNormal 及世界坐标 vWorldPos
+    顶点着色器额外输出: 随 aAngle 与倒伏姿态旋转的世界法线 vWorldNormal、世界坐标 vWorldPos 及脚下踩踏/占位压平度 vPress = clamp(trample * 0.88 + occupy * 0.95, 0.0, 1.0)
     交互贴图 DataTexture 256×256 RGBA: R 踩踏衰减 + G 在场动物占格压扁
-    片元着色器(无贴图 Cook-Torrance GGX PBR + 叶片透射): 保留外网明快水粉渐层、13% 金色麦草秆、晴天冷暖斑块、移动云影、5 点 PCF 阴影 `shadowMask` 与踩踏微暗，基于 `uMetalness` 与随湿润/积雪变化的 `uRoughness` 计算 Trowbridge-Reitz GGX 法线分布 $D$、Schlick-GGX 几何遮蔽 $G$、Schlick 菲涅尔 $F$ ($F_0=0.04+0.02\cdot uWet$)、能量守恒漫反射 $k_D=(1-F)(1-uMetalness)$、逆光叶片次表面透射、以及受草根 AO 调制的半球环境光 (`uHemiSkyColor`/`uHemiGroundColor`/`uHemiIntensity`)；入夜与左上月光池融合呈深青绿并按 `(1.0 - shadowMask*0.88)` 约束叶尖银青月辉，远景平滑融入 uHorizonColor
-    getLightState(): 返回 { nightMix, snowCover, metalness, roughness, timeTint, directTint, sunColor }
+    片元着色器(无贴图 Cook-Torrance GGX PBR + 草根跟随当前地面渐变 + 冬季 24h 雪地反光):
+        - 同步传入 `uGroundColor` (`preset.ground`) 与 `uLawnColor` (`preset.lawn`)，按 `vWorldXZ` 区分棋盘内草坪与外围地面并复用同一套地面明暗（色斑、移动云影、太阳/月亮实时阴影 `shadowMask`、白天/月夜底色混入、冬季外围 `powderSnow` / 棋盘内按 `vPress` 拨雪露底的 `boardSnow`、夜间左上月光池 `moonPool`、木屋前暖窗光池 `cabinPool` 与冬季栅栏灯串光晕 `fenceGlow`）实时算出脚下地面颜色 `groundSurfaceCol`
+        - 基于 `uMetalness` 与随湿润/积雪变化的 `uRoughness` 计算 Trowbridge-Reitz GGX 法线分布 $D$、Schlick-GGX 几何遮蔽 $G$、Schlick 菲涅尔 $F$、能量守恒漫反射 $k_D$、逆光叶片次表面透射与半球环境光；冬季 `snowBounce = smoothstep(0.10, 0.75, uSnow)` 抬升草根 AO（`0.48 -> 0.94`）并注入 24 小时全天候雪地向上漫反射反光 `snowBounceLight`（跟随当前时段日光/月光与雪地半球反射色变化）
+        - 非冬季夜晚收敛夜斑与夜色压暗（`nightRoot` / `nightBlade` 与贴合地面的叶尖微辉）；冬季夜晚结合 `snowBounce` 大幅保留雪地月光反弹与覆霜提亮
+        - 最终将草叶从 `vY = 0`（100% 承接当前脚下地面颜色 `groundSurfaceCol`）沿 `smoothstep(0.0, 0.58, vY)` 平滑渐变至受光草身与叶尖，远景平滑融入 `uHorizonColor`
+    getLightState(): 返回 { nightMix, snowCover, metalness, roughness, timeTint, directTint, sunColor, hemiGroundColor, groundColor, lawnColor }
     getInteractTexture(): 返回 256×256 共享实时交互贴图供棋盘与地面雪坑交互共用
     getInteractSample(wx, wz): 查询指定世界坐标当前 trample / occupy 归一化采样值
-    update(dt, time, state, actorPositions, preset, shadowData, horizonColor, lightState): 冬季 uSnow > 0.35 时放缓踩踏回弹系数为 pow(0.68, dt) 以拉长雪槽保留时间
+    update(dt, time, state, actorPositions, preset, shadowData, horizonColor, lightState): 冬季 uSnow > 0.35 时放缓踩踏回弹系数为 pow(0.68, dt) 以拉长雪槽保留时间，并同步 uGroundColor / uLawnColor
 ```
 
 ## 7. 粒子系统（3d/particles.mjs）
@@ -177,7 +181,7 @@ createEnvironment(scene, textures, tier):
         - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` / `getSunPosition()` / `getLightState()` 供时钟圆盘手控与草地/角色着色器每帧同步（`lightState` 同步导出 `sunIntensity` / `hemiIntensity` / `hemiSkyColor` / `hemiGroundColor`）
     积云: 14~20 朵噪声球簇，顶白底蓝灰，按风速缓慢漂移并环绕回折；阴雨天加厚下压并调暗
     远山: 3 层圆柱剪影带（textures.mountain(0..2)），随季节与雾色过渡
-    灯光与雾: 主平行光（high 2048 / medium 1024 软阴影，low 关闭阴影）+ 外网半球光（#fff7e8 天光 / #5a7d3e 地色，随黄昏渐变）+ 月光方向光 + 指数雾
+    灯光与雾: 主平行光（high 2048 / medium 1024 软阴影，low 关闭阴影）+ 24h 动态半球光（`hemiLight.groundColor` 随 `snowCover` 与当前时段日光/地平线/月光插值提供全天候雪地反光，冬季小幅提升 `hemiLight.intensity`）+ 月光方向光 + 指数雾
     setPreset(season, weather, isCageLevel, immediate=false): 非 immediate 时在 2 秒内平滑插值参数
     getHorizonColor(): 返回当前 scene.fog.color（供草叶与远景地面空气透视雾化同步）
     getShadowData / getCurrent / update(dt): 更新云漂移、时间推进、天气过渡插值、雨天随机闪电闪白（触发回调播放雷声）
@@ -243,8 +247,8 @@ createView3D({ container, level, levels, onPick, onAction }):
     输入分发:
         - pointerdown/move/up: 优先交由 holoUI 精确包围盒拾取、居中平滑关卡列表拖动与进度条拖动；未命中 UI 时若移动距离 <= 8px 且非右键旋转视为点击：
           优先对在场非离场动物真实 3D 躯体网格做射线检测（失败再查包围盒）-> onPick(id) + 哼哼音效
-          否则命中地面 -> grass.stamp + particles.burstGrass + 草地沙沙声
-        - pointermove 悬停地面 -> grass.stamp 拨开草叶
+          否则命中地面 -> grass.stamp(pt.x, pt.z, 1.1, 1.0) + particles.burstGrass(pt.x, pt.z, season)（点击才飞溅雪花/草屑）+ 草地沙沙声
+        - pointermove 移动/悬停地面 -> 仅调用 grass.stamp(pt.x, pt.z, 0.85, 0.65) 压出雪槽/拨开草叶，不触发雪花/草屑粒子飞溅
     sync({ level, state, hintId, ui }): 同步全部猪/象/鸭/笼、启动位置滑行撞障补间、检测逃出棋盘的小鸭并通过空格 BFS 搜索通路启动蹦跳逃出动画、炸弹归零定位爆炸点、更新地面+猪背表面贴花提示、更新卡通浮动 UI
     animateExit(id): 蓄力下蹲后沿朝向冲刺跑出棋盘并淡出，沿途写入 grass 踩踏与白金冲刺尾迹，累计帧间隔确保完整播放
     shake(id, message): 前方受阻时前冲撞击喷火花+挤压回弹再左右摇摆；锁定态原地扭动身体；弹出红色叉号 + blocked/spring 音效

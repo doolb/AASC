@@ -1,7 +1,7 @@
 // 动态环境：手绘天空穹顶、飘动积云、三层远山、太阳与半球光、指数雾、昼夜缓慢流逝与天气闪电。
 import * as THREE from '../vendor/three.module.min.js';
-import { buildPreset, seededRandom } from './presets.mjs?v=20261125b';
-import { blobSphere } from './geometry.mjs?v=20261125b';
+import { buildPreset, seededRandom } from './presets.mjs?v=20261125d';
+import { blobSphere } from './geometry.mjs?v=20261125d';
 
 export const TIME_SLOTS = ['morning', 'noon', 'evening', 'night'];
 export const TIME_LABELS = { morning: '早', noon: '中', evening: '晚', night: '夜' };
@@ -294,9 +294,15 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         // 夜晚转为柔和前向夜空漫反射补光并明显压低半球环境光，让地面与草叶真正进入月夜暗调
         moonLight.position.set(14, 15, 20);
         moonLight.intensity = duskMix * 0.24;
-        hemiLight.intensity = Math.max(0.42, THREE.MathUtils.lerp(p.hemiIntensity + sunsetBlend * 0.08, 0.44, nightBlend));
+        const snowMix = THREE.MathUtils.clamp(p.snowCover || 0, 0, 1);
+        hemiLight.intensity = Math.max(0.42, THREE.MathUtils.lerp(p.hemiIntensity + sunsetBlend * 0.08, 0.44, nightBlend)) + snowMix * 0.18;
         hemiLight.color.set('#fff7e8').lerp(solar.sun, 0.35).lerp(cB.set('#5d7dc2'), duskMix * 0.82);
         hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#1c2648'), duskMix * 0.82);
+        if (snowMix > 0.01) {
+            // 冬季 24 小时雪地高反照率漫反射（早/中/晚跟随日光与地平线，夜晚呈清亮银蓝月光反光）
+            cA.copy(skyUniforms.uHorizon.value).lerp(solar.sun, 0.45).lerp(cB.set('#6e8ac4'), nightBlend * 0.65);
+            hemiLight.groundColor.lerp(cA, snowMix * 0.85);
+        }
 
         // 同步草地、角色与外景 24h 时变色温、主光方向及 PBR 物理光源参数
         lightState.nightBlend = nightBlend;

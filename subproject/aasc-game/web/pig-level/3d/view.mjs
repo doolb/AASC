@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261125b';
-import { createTextureLibrary } from './textures.mjs?v=20261125b';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261125b';
-import { createScenery } from './scenery.mjs?v=20261125b';
-import { createGrass } from './grass.mjs?v=20261125b';
-import { createParticles } from './particles.mjs?v=20261125b';
-import { createEnvironment } from './environment.mjs?v=20261125b';
-import { createHoloUI } from './holo-ui.mjs?v=20261125b';
-import { createAudioSystem } from './audio.mjs?v=20261125b';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261125b';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261125d';
+import { createTextureLibrary } from './textures.mjs?v=20261125d';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261125d';
+import { createScenery } from './scenery.mjs?v=20261125d';
+import { createGrass } from './grass.mjs?v=20261125d';
+import { createParticles } from './particles.mjs?v=20261125d';
+import { createEnvironment } from './environment.mjs?v=20261125d';
+import { createHoloUI } from './holo-ui.mjs?v=20261125d';
+import { createAudioSystem } from './audio.mjs?v=20261125d';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261125d';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -795,10 +795,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             }
         }
         const pt = pickGround(e.clientX, e.clientY);
-        if (pt) {
-            grass.stamp(pt.x, pt.z, 0.85, 0.65);
-            if (season === 'winter' && Math.random() < 0.18) particles.burstGrass(pt.x, pt.z, season);
-        }
+        // 指针移动仅压出草叶与雪槽轨迹，雪花/草屑飞溅仅在点击地面时触发
+        if (pt) grass.stamp(pt.x, pt.z, 0.85, 0.65);
     };
 
     const onPointerUp = e => {

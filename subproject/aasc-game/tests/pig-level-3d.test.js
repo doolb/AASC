@@ -412,6 +412,10 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         assert.ok(snowInteract.trample > 0.5, `冬季棋盘雪地应响应踩雪交互写入 (trample=${snowInteract.trample})`);
         assert.ok(envState.sunNight.z < -10 && envState.pig.lightDir.z < -0.3, `夜晚主光与猪受光方向均应转向天空月亮方位 z<0 (sunZ=${envState.sunNight.z.toFixed(1)}, pigDirZ=${envState.pig.lightDir.z.toFixed(2)})`);
         assert.ok(envState.grass.nightMix > 0.8 && nightRgb[2] > nightRgb[0], `夜晚草地与月光应响应深靛冷蓝夜色 (nightMix=${envState.grass.nightMix.toFixed(2)}, moon=${envState.grass.sunColor})`);
+        const snowGroundRgb = parseHexRgb(envState.grass.groundColor);
+        const snowBounceRgb = parseHexRgb(envState.grass.hemiGroundColor);
+        assert.ok(snowGroundRgb[2] > 180 && snowBounceRgb[2] > snowBounceRgb[0] && snowBounceRgb[2] > 110,
+            `冬季草叶应同步地面雪色与24h雪面半球反光 (ground=${envState.grass.groundColor}, bounce=${envState.grass.hemiGroundColor})`);
         assert.equal(envState.uiSkin, 'winterRain:night', '全息 UI 配色应跟随冬雨和夜间状态自动切换');
         await page.mouse.click(setCloseBtn.x, setCloseBtn.y);
         assert.equal(await page.evaluate(() => window.__pig3d.holoButton('settings-title')), null, '点击关闭按钮应关闭环境设置弹窗');
