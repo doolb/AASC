@@ -105,7 +105,7 @@ outlineOf(geometry, thickness): 反面 BackSide 法线外扩描边网格
 
 createModelFactory(textures):
     导出 PBR_ACCESSORY_PRESETS = { steel: { metalness: 0.82, roughness: 0.26 }, gold: { metalness: 0.86, roughness: 0.22 }, spring: { metalness: 0.72, roughness: 0.28 }, ironBomb: { metalness: 0.68, roughness: 0.42 }, paintedRed: { metalness: 0.16, roughness: 0.46 }, rope: { metalness: 0.04, roughness: 0.82 } }
-    共用外网顶点色水粉双阶着色器 toonMat：保留经典 Painted Valley 侧前主受光亮面 + 高光阶梯 + 顶面柔和微辉 `topRim` + 暖玫瑰可可暗面，接入 `setLightState(lightState)` 每帧同步当前太阳/月亮主光方向 `uLightDir`、24h 光色 `uLightColor`、环境色温 `uTimeTint`、夜晚融合度 `uNightMix` 与冬季积雪反光 `uSnow`（夜晚压低 `topRim` 85%、`hiStep` 88%、常驻偏置 90% 并将受光面收敛至 0.72 且放宽明暗过渡，保持夜晚角色哑光水粉肤质不刺眼；冬季适度抬升暗面与下肚皮亮度；明暗交界线附近以高斯衰减叠加暖桃粉次表面散射 SSS 透光带）
+    共用外网顶点色水粉双阶着色器 toonMat：保留经典 Painted Valley 侧前主受光亮面 + 高光阶梯 + 顶面柔和微辉 `topRim` + 暖玫瑰可可暗面，接入 `setLightState(lightState)` 每帧同步当前太阳/月亮主光方向 `uLightDir`、24h 光色 `uLightColor`、环境色温 `uTimeTint`、夜晚融合度 `uNightMix` 与冬季积雪反光 `uSnow`（夜晚区分亮面 `litBase` 与暗面 `shadeBase`，以银白月光 `mix(uLightColor, mix(vec3(1.0, 0.98, 0.96), uLightColor, 0.42), uNightMix)` 与 `mix(1.0, 1.18, uNightMix)` 柔和照亮受光面同时压低 `topRim` 85% 与 `hiStep` 88% 保持哑光无塑料反光；冬季适度抬升暗面与下肚皮亮度；明暗交界线附近叠加暖桃粉次表面散射 SSS 透光带）
     接触阴影: 底部半透明软阴影椭圆（shadowMesh）+ 实时太阳阴影贴图
     按 (kind, length, width) 缓存几何体与描边几何体：
         - pig / elephant / duck 与六种机制配件（lock / scissors / rope / spring / bomb / timer_bomb；配件与铁笼全部使用无贴图参数化 THREE.MeshStandardMaterial，按材质种类预设金属度/粗糙度）
@@ -127,6 +127,7 @@ createScenery(scene, textures, level, tier):
         - 实例化小花: 按棋盘左/右两侧通道草带及前后栅栏内缘形成聚簇花丛（high 1800 / medium 900 / low 420），high/medium 采用交叉双面 5 瓣星形花（夜晚随环境压暗调色）
     applyPreset(preset, blend, horizonColor, lightState): 同步地面与全部场景物件 PBR roughness（随 wetness / snowCover 插值）与底色（冬季夜晚减轻外景物件压暗并将雪帽提亮至 `#8ba4cf`）、sharedGround uniforms（含 uSunDir / uDirectTint）、雪景 props、仅冬季灯串与木屋暖窗显隐
     setInteractTexture(tex): 绑定实时踩踏/占位交互贴图 uInteractMap
+    pickTree(raycaster) / shakeTree(index) / getTreeState(index): 为 10 棵季节树树干与四季树冠/雪松网格标记 `userData.treeIndex`，支持点击射线拾取并触发 0.72s 阻尼弹性摇晃与 Q 弹缩放动画，返回树冠中心坐标与尺寸
     getGroundPbrState(): 返回 ground、lawn、wood、stone、foliage、water、snowProp、windmill、cabinWindow、seasonProp 各材质的 { metalness, roughness }
 ```
 
@@ -161,6 +162,7 @@ createParticles(scene, textures, tier):
     Points + 自定义着色器（支持 2×2 图集索引、大小随寿命缩放、旋转、透明度、雨丝拉伸）
     发射接口:
         - burstGrass(x, z, season): 草屑 + 季节花瓣/落叶/雪团
+        - burstTree(x, y, z, season): 树冠抖落四季粒子（春粉白樱花瓣、夏翠绿树叶与金粉、秋金红枫叶、冬松枝雪团与冰晶）
         - burstDust(x, z): 离场或滑停扬尘
         - burstSpark(x, y, z, color, count): 解锁金光 / 剪绳 / 开笼火花
         - burstFireworks(): 胜利彩色星光烟花
@@ -247,11 +249,12 @@ createView3D({ container, level, levels, onPick, onAction }):
     输入分发:
         - pointerdown/move/up: 优先交由 holoUI 精确包围盒拾取、居中平滑关卡列表拖动与进度条拖动；未命中 UI 时若移动距离 <= 8px 且非右键旋转视为点击：
           优先对在场非离场动物真实 3D 躯体网格做射线检测（失败再查包围盒）-> onPick(id) + 哼哼音效
+          其次对 10 棵季节树做射线拾取 pickTree() -> scenery.shakeTree + particles.burstTree + grass.stamp(tree.x, tree.z, 1.35, 0.95) + 沙沙音效
           否则命中地面 -> grass.stamp(pt.x, pt.z, 1.1, 1.0) + particles.burstGrass(pt.x, pt.z, season)（点击才飞溅雪花/草屑）+ 草地沙沙声
         - pointermove 移动/悬停地面 -> 仅调用 grass.stamp(pt.x, pt.z, 0.85, 0.65) 压出雪槽/拨开草叶，不触发雪花/草屑粒子飞溅
     sync({ level, state, hintId, ui }): 同步全部猪/象/鸭/笼、启动位置滑行撞障补间、检测逃出棋盘的小鸭并通过空格 BFS 搜索通路启动蹦跳逃出动画、炸弹归零定位爆炸点、更新地面+猪背表面贴花提示、更新卡通浮动 UI
     animateExit(id): 蓄力下蹲后沿朝向冲刺跑出棋盘并淡出，沿途写入 grass 踩踏与白金冲刺尾迹，累计帧间隔确保完整播放
     shake(id, message): 前方受阻时前冲撞击喷火花+挤压回弹再左右摇摆；锁定态原地扭动身体；弹出红色叉号 + blocked/spring 音效
     cancelAnimations(): 立即完成或停止进行中补间，确保状态瞬间落位
-    测试钩子 window.__pig3d = { ready, tier, preset, timeSlot, dayPhase, fps, getGrassCount, getGrassLightState, getGroundPbrState, getSnowInteractSample, stampGround, getPigLightState, getClockDialSize, getBoardScreenBounds, getCameraState, screenOf(id), getGuideHandScreen(), holoButton(name), setSeasonWeather(s, w), setTimeSlot(slot), resetCamera }
+    测试钩子 window.__pig3d = { ready, tier, preset, timeSlot, dayPhase, fps, getGrassCount, getGrassLightState, getGroundPbrState, getSnowInteractSample, stampGround, shakeTree, getTreeState, getPigLightState, getClockDialSize, getBoardScreenBounds, getCameraState, screenOf(id), getGuideHandScreen(), holoButton(name), setSeasonWeather(s, w), setTimeSlot(slot), resetCamera }
 ```

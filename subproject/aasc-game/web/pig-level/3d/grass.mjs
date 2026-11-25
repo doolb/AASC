@@ -1,8 +1,8 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125h';
-import { groundHeight } from './geometry.mjs?v=20261125h';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261125h';
+import { seededRandom } from './presets.mjs?v=20261125i';
+import { groundHeight } from './geometry.mjs?v=20261125i';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261125i';
 
 // 草叶无贴图 PBR 物理参数预设
 export const PBR_GRASS_PRESET = {

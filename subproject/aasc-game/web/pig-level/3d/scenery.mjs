@@ -1,7 +1,7 @@
 // 手绘吉卜力风场景：修剪草坪棋盘、卵石边、石板路、高脚木屋、栅栏、季节树、小花与远坡风车。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261125h';
-import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125h';
+import { seededRandom } from './presets.mjs?v=20261125i';
+import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125i';
 
 // 无贴图 PBR 材质预设参数（金属度与粗糙度，随湿润度与积雪动态插值）
 export const PBR_SURFACE_PRESETS = {
@@ -695,7 +695,8 @@ export function createScenery(scene, textures, level, tier = 'high') {
     for (let i = 0; i < treePlacements.length; i++) {
         const [tx, tz, sc] = treePlacements[i];
         const tGroup = new THREE.Group();
-        tGroup.position.set(tx, Math.max(0, groundHeight(tx, tz, halfW, halfH) - 0.04), tz);
+        const baseY = Math.max(0, groundHeight(tx, tz, halfW, halfH) - 0.04);
+        tGroup.position.set(tx, baseY, tz);
         tGroup.scale.setScalar(sc);
         const trunk = new THREE.Mesh(trunkGeo, trunkMat);
         trunk.position.y = 1.0;
@@ -727,8 +728,11 @@ export function createScenery(scene, textures, level, tier = 'high') {
         pine.visible = false;
 
         tGroup.add(trunk, broad, pine);
+        tGroup.traverse(obj => {
+            if (obj.isMesh) obj.userData.treeIndex = i;
+        });
         group.add(tGroup);
-        trees.push({ group: tGroup, broad, pine, phase: i * 0.9 });
+        trees.push({ group: tGroup, broad, pine, trunk, phase: i * 0.9, shakeTimer: 0, baseY, sc });
     }
     disposables.push(trunkGeo, trunkMat, crownBlobGeo, pineConeGeo, crownMat, pineSnowMat);
 
@@ -958,19 +962,74 @@ export function createScenery(scene, textures, level, tier = 'high') {
         }
     }
 
+    function pickTree(raycaster) {
+        const targets = [];
+        for (const t of trees) {
+            targets.push(t.trunk);
+            const activeCrown = t.pine.visible ? t.pine : t.broad;
+            targets.push(...activeCrown.children);
+        }
+        const hits = raycaster.intersectObjects(targets, false);
+        if (!hits.length) return null;
+        const idx = hits[0].object.userData.treeIndex;
+        const t = trees[idx];
+        if (!t) return null;
+        return {
+            index: idx,
+            x: t.group.position.x,
+            y: t.baseY + 2.35 * t.sc,
+            z: t.group.position.z,
+            scale: t.sc
+        };
+    }
+
+    function shakeTree(index) {
+        const t = trees[index];
+        if (!t) return null;
+        t.shakeTimer = 0.72;
+        return {
+            index,
+            x: t.group.position.x,
+            y: t.baseY + 2.35 * t.sc,
+            z: t.group.position.z,
+            scale: t.sc
+        };
+    }
+
     function update(dt, time, wind = 0.6) {
         sharedGround.uTime.value = time;
         flowerUniforms.uTime.value = time;
         flowerUniforms.uWind.value = wind;
         rotor.rotation.z -= dt * (0.25 + wind * 0.45);
         for (const t of trees) {
-            t.group.rotation.z = Math.sin(time * (1.2 + wind * 0.6) + t.phase) * 0.018 * wind;
+            const windSway = Math.sin(time * (1.2 + wind * 0.6) + t.phase) * 0.018 * wind;
+            if (t.shakeTimer > 0) {
+                t.shakeTimer = Math.max(0, t.shakeTimer - dt);
+                const p = 1 - t.shakeTimer / 0.72;
+                const env = Math.pow(1 - p, 1.5);
+                const wiggle = Math.sin(p * Math.PI * 6.5) * 0.14 * env;
+                const squash = Math.sin(p * Math.PI * 3.5) * 0.11 * env;
+                t.group.rotation.z = windSway + wiggle;
+                t.group.rotation.x = Math.cos(p * Math.PI * 5.0) * 0.07 * env;
+                t.group.scale.set(t.sc * (1 + squash * 0.55), t.sc * (1 - squash), t.sc * (1 + squash * 0.55));
+            } else {
+                t.group.rotation.z = windSway;
+                t.group.rotation.x = 0;
+                t.group.scale.setScalar(t.sc);
+            }
         }
     }
 
     return {
         applyPreset,
         update,
+        pickTree,
+        shakeTree,
+        getTreeState: (index = 0) => ({
+            count: trees.length,
+            shakeTimer: Number((trees[index]?.shakeTimer ?? 0).toFixed(3)),
+            rotZ: Number((trees[index]?.group?.rotation?.z ?? 0).toFixed(4))
+        }),
         setInteractTexture(tex) {
             if (tex) sharedGround.uInteractMap.value = tex;
         },

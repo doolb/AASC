@@ -419,6 +419,12 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
             return window.__pig3d.getSnowInteractSample(0, 0);
         });
         assert.ok(snowInteract.trample > 0.5, `冬季棋盘雪地应响应踩雪交互写入 (trample=${snowInteract.trample})`);
+        const treeInteract = await page.evaluate(() => {
+            const ok = window.__pig3d.shakeTree(0);
+            return { ok, state: window.__pig3d.getTreeState(0) };
+        });
+        assert.ok(treeInteract.ok && treeInteract.state.count >= 10 && treeInteract.state.shakeTimer > 0.5,
+            `场景季节树应支持点击交互摇晃与落叶落雪动画 (count=${treeInteract.state.count}, timer=${treeInteract.state.shakeTimer})`);
         assert.ok(envState.sunNight.z < -10 && envState.pig.lightDir.z < -0.3, `夜晚主光与猪受光方向均应转向天空月亮方位 z<0 (sunZ=${envState.sunNight.z.toFixed(1)}, pigDirZ=${envState.pig.lightDir.z.toFixed(2)})`);
         assert.ok(envState.grass.nightMix > 0.8 && nightRgb[2] > nightRgb[0], `夜晚草地与月光应响应深靛冷蓝夜色 (nightMix=${envState.grass.nightMix.toFixed(2)}, moon=${envState.grass.sunColor})`);
         const snowGroundRgb = parseHexRgb(envState.grass.groundColor);

@@ -1,3 +1,10 @@
+- ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125i`，含夜晚小猪/角色受夜光照亮亮面提亮及场景 10 棵季节树点击摇晃与四季落花落叶落雪交互）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 10 个变更文件（`index.html`、`app.mjs`、`3d/{environment,grass,holo-ui,models,particles,scenery,textures,view}.mjs`），并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
+- ✅ [2026-11-25] 提亮夜晚猪/角色受夜光照亮亮面并新增场景季节树点击交互（`?v=20261125i`）
+  - `web/pig-level/3d/models.mjs`：在 `toonMat` 中区分夜晚受光亮面 `litBase`（减轻 `uTimeTint` 压暗保留粉润肤色）与暗面 `shadeBase`，采用柔和银白月光 `moonSilver` 与 `mix(1.0, 1.18, uNightMix)` 提亮夜晚小猪受光面漫反射照度，同时保留 `topRim` 与 `hiStep` 夜间大幅衰减以维持无塑料反光哑光表现。
+  - `web/pig-level/3d/scenery.mjs`：为 10 棵场景季节树（树干与四季树冠/冬季雪松网格）标记 `userData.treeIndex`，新增 `pickTree(raycaster)`、`shakeTree(index)` 与 `getTreeState(index)`，点击命中触发 `0.72s` 阻尼弹性摇晃与 Q 弹挤压回弹动画。
+  - `web/pig-level/3d/particles.mjs`：新增 `burstTree(x, y, z, season)` 树冠粒子配置表与喷发接口，点击时按季节飘落粉白樱花瓣、夏叶金粉、秋红/金枫叶或冬松雪团冰晶。
+  - `web/pig-level/3d/view.mjs`、`tests/pig-level-3d.test.js`：`onPointerUp` 优先小猪拾取后接入 `pickTree` 联动树木摇晃、树冠落叶/落雪、`grass.stamp` 震落压痕与 `rustle` 沙沙音效，在 `window.__pig3d` 暴露 `shakeTree` / `getTreeState` 并补充树木点击交互校验；统一升级 `?v=20261125i`，`test:pig-web`（`119 / 119`）、`test:pig-animation`（`1 / 1`）、`test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125h`，含冬夜草叶提亮、全部场景/配件无贴图 PBR、拨雪迎/背光与雪坎自投影、冬季环境雪面反光提亮及夜晚小猪哑光去反光优化）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 9 个变更文件（`index.html`、`app.mjs`、`3d/{environment,grass,holo-ui,models,scenery,textures,view}.mjs`），并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
 - ✅ [2026-11-25] 优化夜晚猪/小鸭/大象着色器哑光表现并消除夜间反光过重（`?v=20261125h`）

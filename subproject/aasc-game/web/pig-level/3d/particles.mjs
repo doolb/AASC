@@ -118,6 +118,38 @@ export function createParticles(scene, textures, tier = 'high') {
         rippleLife[i] = 0.55;
     }
 
+    const TREE_BURST_CFG = {
+        spring: { palette: ['#ffd2e4', '#ffb8d4', '#fff5f9', '#ffe8f0'], mainKind: KIND.PETAL, subKind: KIND.PETAL, count: 28 },
+        summer: { palette: ['#6cd44c', '#88e35c', '#ffe878', '#52b83e'], mainKind: KIND.LEAF, subKind: KIND.DOT, count: 26 },
+        autumn: { palette: ['#ff8c38', '#f2b830', '#d94c2c', '#ffd060'], mainKind: KIND.LEAF, subKind: KIND.LEAF, count: 28 },
+        winter: { palette: ['#ffffff', '#e6f2ff', '#d0e6ff', '#f5f9ff'], mainKind: KIND.SNOW, subKind: KIND.DOT, count: 32 }
+    };
+
+    // 点击树木时从树冠抖落对应季节的花瓣 / 树叶 / 枫叶 / 松雪与冰晶
+    function burstTree(x, y, z, season = 'spring') {
+        const cfg = TREE_BURST_CFG[season] || TREE_BURST_CFG.spring;
+        for (let i = 0; i < cfg.count; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const r = 0.25 + Math.random() * 1.15;
+            const sp = 0.45 + Math.random() * 1.25;
+            const kind = i % 4 === 0 ? cfg.subKind : cfg.mainKind;
+            emit(
+                x + Math.cos(a) * r,
+                y + (Math.random() - 0.35) * 1.1,
+                z + Math.sin(a) * r,
+                Math.cos(a) * sp,
+                0.3 + Math.random() * 0.9,
+                Math.sin(a) * sp,
+                cfg.palette[i % cfg.palette.length],
+                0.48 + Math.random() * 0.36,
+                1.35 + Math.random() * 0.85,
+                kind,
+                -1.35,
+                1.1
+            );
+        }
+    }
+
     function burstGrass(x, z, season = 'spring') {
         const palette = season === 'autumn' ? ['#d98c36', '#e6b84c', '#c95a2b'] : season === 'winter' ? ['#ffffff', '#dcebf7'] : ['#9ad468', '#ffd2e4', '#fff2a6'];
         const kind = season === 'autumn' ? KIND.LEAF : season === 'winter' ? KIND.SNOW : KIND.PETAL;
@@ -281,6 +313,7 @@ export function createParticles(scene, textures, tier = 'high') {
 
     return {
         burstGrass,
+        burstTree,
         burstDust,
         burstDash,
         burstImpact,

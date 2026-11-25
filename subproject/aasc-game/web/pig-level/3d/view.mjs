@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261125h';
-import { createTextureLibrary } from './textures.mjs?v=20261125h';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261125h';
-import { createScenery } from './scenery.mjs?v=20261125h';
-import { createGrass } from './grass.mjs?v=20261125h';
-import { createParticles } from './particles.mjs?v=20261125h';
-import { createEnvironment } from './environment.mjs?v=20261125h';
-import { createHoloUI } from './holo-ui.mjs?v=20261125h';
-import { createAudioSystem } from './audio.mjs?v=20261125h';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261125h';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261125i';
+import { createTextureLibrary } from './textures.mjs?v=20261125i';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261125i';
+import { createScenery } from './scenery.mjs?v=20261125i';
+import { createGrass } from './grass.mjs?v=20261125i';
+import { createParticles } from './particles.mjs?v=20261125i';
+import { createEnvironment } from './environment.mjs?v=20261125i';
+import { createHoloUI } from './holo-ui.mjs?v=20261125i';
+import { createAudioSystem } from './audio.mjs?v=20261125i';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261125i';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -660,6 +660,21 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         return boxHits.length ? boxHits[0].object.userData.pigId : null;
     }
 
+    function pickTree(clientX, clientY) {
+        const ndc = clientToNdc(clientX, clientY);
+        raycaster.setFromCamera(ndc, camera);
+        return scenery.pickTree(raycaster);
+    }
+
+    function triggerTreeInteract(hitTree) {
+        if (!hitTree) return false;
+        scenery.shakeTree(hitTree.index);
+        particles.burstTree(hitTree.x, hitTree.y, hitTree.z, season);
+        grass.stamp(hitTree.x, hitTree.z, 1.35, 0.95);
+        audio.playSfx('rustle');
+        return true;
+    }
+
     function pinchInfo() {
         const pts = [...activePointers.values()];
         const a = pts[0], b = pts[1];
@@ -829,6 +844,11 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             if (pigId !== null) {
                 audio.playSfx('oink');
                 onPick?.(pigId);
+                return;
+            }
+            const hitTree = pickTree(e.clientX, e.clientY);
+            if (hitTree) {
+                triggerTreeInteract(hitTree);
                 return;
             }
             const pt = pickGround(e.clientX, e.clientY);
@@ -1183,6 +1203,8 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         getGroundPbrState: () => scenery.getGroundPbrState(),
         getSnowInteractSample: (wx = 0, wz = 0) => grass.getInteractSample(wx, wz),
         stampGround: (wx = 0, wz = 0, r = 0.9, s = 1.0) => grass.stamp(wx, wz, r, s),
+        shakeTree: (index = 0) => triggerTreeInteract(scenery.shakeTree(index)),
+        getTreeState: (index = 0) => scenery.getTreeState(index),
         getPigLightState: () => models.getLightState(),
         getGuideHandScreen() {
             if (!markers.handSprite.visible) return null;
