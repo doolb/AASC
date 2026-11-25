@@ -16,10 +16,12 @@ try
     using var vigem = new ViGEmClient();
     var audioTask = port < 65535 ? AudioServer.RunAsync(address, port + 1, stop.Token) : Task.CompletedTask;
     var aggregateTask = port < 65534 ? AggregateServer.RunAsync(address, port + 2, port, stop.Token) : Task.CompletedTask;
+    var screenTask = port <= 65532 ? ScreenServer.RunAsync(address, port + 3, stop.Token) : Task.CompletedTask;
     if (port == 65535) Console.WriteLine("端口过大，音频不可用。");
     if (port >= 65534) Console.WriteLine("端口过大，聚合端口不可用。");
+    if (port > 65532) Console.WriteLine("端口过大，画面端口不可用。");
     try { await ControlServer.RunAsync(address, port, vigem, stop.Token); }
-    finally { stop.Cancel(); await Task.WhenAll(audioTask, aggregateTask); }
+    finally { stop.Cancel(); await Task.WhenAll(audioTask, aggregateTask, screenTask); }
 }
 catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
 catch (Exception ex) { Console.Error.WriteLine($"服务端错误: {ex.Message}。请确认 ViGEmBus 已安装且端口可用。"); return 1; }
