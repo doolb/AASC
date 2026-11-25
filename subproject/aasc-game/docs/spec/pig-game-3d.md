@@ -73,9 +73,9 @@ cancelAnimation():
 
 SEASON_BASE / WEATHER_BASE / CAGE_DUSK:
     WEATHERS = ['sunny', 'cloudy', 'rain']（晴 / 阴 / 雨，4 季节 × 3 天气 = 12 组基础预设，搭配 4 时段共 48 种环境状态）
-    春 #74bf54→#b4e36e / 夏高饱和 #3ea824→#8ee632 / 秋 #c8a85a→#f0cf72 / 冬 #9cb5aa→#f6fafc
+    春 #74bf54→#b4e36e / 夏高饱和 #3ea824→#8ee632 / 秋 #c8a85a→#f0cf72 / 冬外雪地 #dce7f5→内棋盘覆霜青绿 #5e9690（草叶 #9cb5aa→#f6fafc）
 buildPreset(season, weather, options):
-    合成基础季节与天气参数（含铁笼黄昏 dusk=1）；当 season === 'winter' 且 weather === 'rain' 时，降水自动转为冬雪飘落（precip='snow', precipCount=3000, snowCover>=0.85, lightning=false）
+    合成基础季节与天气参数（含铁笼黄昏 dusk=1）；冬季保持内棋盘青绿覆霜条纹草坪（lawn 仅混入 snowCover*0.18）、外围大面积雪白粉雪地（ground 混入 snowCover*0.92）；当 season === 'winter' 且 weather === 'rain' 时，降水自动转为冬雪飘落（precip='snow', precipCount=3000, snowCover>=0.85, lightning=false）
 ```
 
 ## 3. 程序纹理（3d/textures.mjs）
@@ -116,10 +116,13 @@ createModelFactory(textures):
 ```
 createScenery(scene, textures, level, tier):
     外网完整手绘地貌与景物:
-        - 修剪草坪平面(y=0.008) + 卵石镶边 + 粗段原木棋盘围框（四角立柱帽、长边拼缝端头与散落石块，含冬季厚雪顶盖）+ 外部起伏大草地(82×82)，双方通过 onBeforeCompile 注入 uHorizonColor 做远景柔和空气透视雾化（20.0~36.0 低饱和与地平线混合）
-        - 四向生态布局对齐概念图: 左前开阔豁口让位于荷花小池塘（卵石砌边 + 圆缺荷叶 + 小荷花，冬转冰蓝）、右前补全短段木栅栏，西北石板小径旁置 3 簇圆润灌木丛（冬盖雪帽）及冬季围巾胡萝卜鼻雪人（带黑煤球眼/扣与树枝手臂）；右上角高脚木屋（原木墙肌理 + 人字木顶 + 对称双暖亮方窗 + 中央木门 + 4 级阶梯，冬夜高亮发光）与粗柱木栅栏（冬季/黄昏点亮暖黄串联灯珠）；正后中偏右远景山脊风车剪影、四季四角 10 棵主题树（冬季升级三层叠翠深青松枝+分层白雪盖帽，附绘本细描边）
+        - 修剪草坪平面(y=0.008) + 卵石镶边 + 粗段原木棋盘围框（四角立柱帽、长边拼缝端头与散落石块，含冬季厚雪顶盖及向内棋盘边角漫延的雪堆 + 池塘卵石雪帽）+ 外部起伏大草地(82×82)；双方通过 enhanceGroundAerial(material, sharedGround, isInnerLawn) 注入 uHorizonColor / uNightMix / uSnow / uBoardHalf / uTime：
+            * 冬季(uSnow>0.15)平滑外围地面笔触为粉雪质感，沿栅栏灯串与木屋前投出暖金地面光晕并点缀雪地微闪星点
+            * 夜晚(uNightMix>0.05)压暗棋盘(#215258)与外坡(#183d4a)，由左后明月投出银青漫射光池并在右后木屋前形成暖黄窗光晕
+            * 远景(20.0~36.0)低饱和柔和融入 uHorizonColor
+        - 四向生态布局对齐概念图: 左前开阔豁口让位于荷花小池塘（卵石砌边+冬季雪帽、圆缺荷叶与小荷花，冬转冰蓝）、右前补全短段木栅栏，西北石板小径旁置 3 簇圆润灌木丛（冬盖雪帽）及冬季围巾胡萝卜鼻雪人；右上角高脚木屋（对称双暖亮方窗）与粗柱木栅栏（仅冬季启用下垂暖黄灯串 `fenceBulbInst.visible = isWinter`，非冬季夜晚保持幽暗原木突显木屋暖窗唯一焦点）；正后中偏右山脊风车、四季四角 10 棵主题树（冬松三层叠翠+厚雪盖）
         - 实例化小花: 按棋盘左/右两侧通道草带及前后栅栏内缘形成聚簇花丛（high 1800 / medium 900 / low 420），high/medium 采用交叉双面 5 瓣星形花（夜晚随环境压暗调色）
-    applyPreset(preset, blend, horizonColor, lightState): 同步 ground/lawn/crown/pond/flower 颜色、uHorizonColor、雪景 props、冬/暮栅栏串灯与木屋暖窗显隐
+    applyPreset(preset, blend, horizonColor, lightState): 同步 ground/lawn/crown/trunk/board/fence/cabin/bush/pebble/path/pond/snow/flower 颜色（随 nightMix 平滑压暗转冷青靛紫避免水粉暗色过亮）、sharedGround uniforms、雪景 props、仅冬季灯串与木屋暖窗显隐
 ```
 
 ## 6. 可交互草地（3d/grass.mjs）
@@ -129,11 +132,11 @@ grassCountForTier(tier, isMobile, isSoftware):
     桌面端: high 140000 / medium 36000 / low 22000
     手机端(isMobile): high 8000 / medium 4000 / low 2000
 createGrass(scene, textures, level, tier):
-    实例数: 由 grassCountForTier(tier, isMobile, isSoftware) 决定（棋盘内占 28%，其余集中分布于外围可见草坪）；动态降档 setTierCount 共用同一映射，getCount 返回当前可见数量
+    实例数: 由 grassCountForTier(tier, isMobile, isSoftware) 决定；棋盘内缩减至 8% 并偏向棋盘边缘且保持 0.06~0.12 低矮高度以露出整洁草坪条纹与清晰小猪投影；外围跳过池塘范围并按自然草丛聚簇分布；冬季通过顶点着色器按 `uSnow` 与 `aTint` 剔除约 90% 外围草叶与 97% 棋盘内草叶，露出干净平滑雪地与零星覆霜草簇
     草叶几何: 5 段渐细弯折三角带（uv.y 0→1，基底宽 0.072）
     实例属性: aOffset(x,z), aBaseY(groundHeight 贴合丘陵), aHeight, aAngle, aTint
     交互贴图 DataTexture 256×256 RGBA: R 踩踏衰减 + G 在场动物占格压扁
-    片元着色器: 外网明快水粉渐层（0.28+0.72*smoothstep(0,0.80)）、13% 金色麦草秆（vTint>0.87）、大尺度晴天冷暖斑块（入夜自动转月夜冷斑）、移动云影（0.72~1.12）、5 点 PCF 太阳/月亮阴影、踩踏微暗与远景空气透视雾化（smoothstep(20.0,36.0,length(vWorldXZ))*0.36 向 uHorizonColor 柔和过渡），并接入全时段写实光效（`uTimeTint` / `uDirectTint` / `uNightMix` / `uSunDir`）：早晨暖桃金、正午翠绿鲜亮、黄昏琥珀、夜晚彻底压暗收敛为月夜深青绿（根目录沉暗，叶尖沿 `uSunDir` 保留清冷银蓝月辉）
+    片元着色器: 外网明快水粉渐层（0.28+0.72*smoothstep(0,0.80)）、13% 金色麦草秆（vTint>0.87）、大尺度晴天冷暖斑块（入夜自动转月夜冷斑）、移动云影（0.72~1.12）、5 点 PCF 太阳/月亮阴影 `shadowMask`、踩踏微暗与远景空气透视雾化（smoothstep(20.0,36.0,length(vWorldXZ))*0.36 向 uHorizonColor 柔和过渡），并接入全时段写实光效（`uTimeTint` / `uDirectTint` / `uNightMix` / `uSunDir`）：早晨暖桃金、正午翠绿鲜亮、黄昏琥珀、夜晚彻底压暗收敛为月夜深青绿（#102a36→#285e66），且夜间银青叶尖月辉严格受 `(1.0 - shadowMask*0.88)` 与左上月光衰减控制，保证阴影内草叶沉暗融入夜色
     update(dt, time, state, actorPositions, preset, shadowData, horizonColor, lightState)
 ```
 

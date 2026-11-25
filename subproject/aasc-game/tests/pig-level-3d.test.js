@@ -16,6 +16,8 @@ test('环境预设 12 种季节×天气组合（含冬雨自动飘雪）与关�
     assert.equal(presets.WEATHER_BASE.rain.sunIntensity, 1.08);
     assert.equal(presets.WEATHER_BASE.rain.hemiIntensity, 1.02);
     assert.equal(presets.buildPreset('winter', 'rain').precip, 'snow', '冬季降水应自动转为飘雪');
+    const winterSun = presets.buildPreset('winter', 'sunny');
+    assert.ok(winterSun.lawn !== winterSun.ground && winterSun.snowCover >= 0.78, '冬季应保留棋盘青绿覆霜草坪并形成外围粉雪雪地');
 
     for (const season of presets.SEASONS) {
         for (const weather of presets.WEATHERS) {
@@ -392,6 +394,7 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
         const nightRgb = parseHexRgb(envState.grass.sunColor);
         assert.deepEqual(envState.preset, { season: 'winter', weather: 'rain', isCageLevel: false });
         assert.equal(envState.timeSlot, 'night', '时钟表盘应切换 24h 时段为夜晚');
+        assert.ok(envState.grass.snowCover >= 0.78, `冬雨草地应触发雪地稀草状态 (snowCover=${envState.grass.snowCover})`);
         assert.ok(envState.sunNight.z < -10 && envState.pig.lightDir.z < -0.3, `夜晚主光与猪受光方向均应转向天空月亮方位 z<0 (sunZ=${envState.sunNight.z.toFixed(1)}, pigDirZ=${envState.pig.lightDir.z.toFixed(2)})`);
         assert.ok(envState.grass.nightMix > 0.8 && nightRgb[2] > nightRgb[0], `夜晚草地与月光应响应深靛冷蓝夜色 (nightMix=${envState.grass.nightMix.toFixed(2)}, moon=${envState.grass.sunColor})`);
         assert.equal(envState.uiSkin, 'winterRain:night', '全息 UI 配色应跟随冬雨和夜间状态自动切换');

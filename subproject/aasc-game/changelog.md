@@ -1,3 +1,10 @@
+- ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261124k`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 14 个文件，并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
+- ✅ [2026-11-25] 还原概念图 `night_moonlight_concept` 月夜物件/草地光照及 `concept_winter` 冬季平滑雪地与稀疏草叶效果（`?v=20261124k`）
+  - `web/pig-level/3d/presets.mjs`：将 `SEASON_BASE.winter.lawn` 调整为 `#5e9690`（`ground` 为 `#dce7f5`），`buildPreset` 中 `lawn` 仅混入 `snowCover * 0.18`，确保冬季保留棋盘内青绿覆霜条纹草坪、外围呈现大片雪白粉雪地。
+  - `web/pig-level/3d/scenery.mjs`：升级 `enhanceGroundAerial(material, sharedGround, isInnerLawn)`，冬季柔化外围笔触为粉雪质感并在栅栏灯串下方与木屋门前雪地投出暖金地面光晕及雪地星光闪烁点；夜晚由左后方明月投出银青色漫射光池并在右后木屋前形成暖窗光晕；新增棋盘四角与鹅卵石内缘向内漫延的雪堆以及池塘卵石雪帽（`pondSnowMesh`）；将栅栏暖黄灯串改为仅冬季开启（`fenceBulbInst.visible = isWinter`），使非冬季夜晚聚焦木屋暖窗唯一暖光源；并让地面、草坪、树冠、枝干、木框、栅栏、木屋、灌木、卵石、石板与冬季雪顶全面接入 `nightMix` 冷青靛紫压暗，避免夜晚物件过亮。
+  - `web/pig-level/3d/grass.mjs`：将棋盘内草叶比例由 `28%` 降至 `8%` 并收拢至边缘（高度 `0.06~0.12`）、外围跳过池塘范围聚簇分布，露出干净修剪条纹与清晰小猪投影；在顶点着色器按 `uSnow` 与 `aTint` 剔除冬季约 `90%` 外围草叶与 `97%` 棋盘内草叶以呈现平滑大片雪地；在片元着色器将夜间叶尖银青月辉约束在实时阴影遮罩 `(1.0 - shadowMask * 0.88)` 与左上月光光池之内，阴影区保持深青暗部；`getLightState()` 补充暴露 `snowCover`。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/{design,spec}/pig-game-3d.md`、`docs/task/20261124_场景丰富草地时变与462表盘.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261124k`，版本检查无残留，`test:pig-web`（`119 / 119`）、`test:pig-animation`（`1 / 1`）、`test:pig-3d`（`5 / 5`）全部通过。
 - ✅ [2026-11-24] 将最新网页版 `web/pig-level/`（`?v=20261124j`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 与新增 `assets/ui/*.svg` 共 19 个更新文件，并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
 - ✅ [2026-11-24] 严格对齐概念图的物件细节、布局与氛围色彩（`?v=20261124j`）

@@ -1,8 +1,8 @@
 // 可交互实例化草地：风浪、鼠标拨草、小猪占位压倒、滑动踩踏轨迹、季节着色与积雪/湿润。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261124j';
-import { groundHeight } from './geometry.mjs?v=20261124j';
-import { entityCells, gridToWorldCenter } from './models.mjs?v=20261124j';
+import { seededRandom } from './presets.mjs?v=20261124k';
+import { groundHeight } from './geometry.mjs?v=20261124k';
+import { entityCells, gridToWorldCenter } from './models.mjs?v=20261124k';
 
 const INTERACT_SIZE = 256;
 const WORLD_SPAN = 48; // 交互贴图覆盖 [-24, 24] 世界区间
@@ -58,34 +58,57 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
     const tints = new Float32Array(maxBlades);
 
     const rand = seededRandom(level.id * 31 + 19);
-    const innerTarget = Math.floor(maxBlades * 0.28);
+    const innerTarget = Math.floor(maxBlades * 0.08);
     let idx = 0;
 
-    // 先在棋盘区加密矮草（不遮挡小猪底部）
-    while (idx < innerTarget) {
-        const x = (rand() - 0.5) * (cols + 0.6);
-        const z = (rand() - 0.5) * (rows + 0.6);
+    // 棋盘内仅保留 8% 极矮边缘草丝，确保修剪条纹草坪与小猪阴影干净清晰
+    let innerAttempts = 0;
+    while (idx < innerTarget && innerAttempts < innerTarget * 12) {
+        innerAttempts++;
+        const x = (rand() - 0.5) * (cols + 0.4);
+        const z = (rand() - 0.5) * (rows + 0.4);
+        const edgeRatio = Math.max(Math.abs(x) / Math.max(1, halfW), Math.abs(z) / Math.max(1, halfH));
+        if (edgeRatio < 0.62 && rand() < 0.82) continue;
         offsets[idx * 2] = x;
         offsets[idx * 2 + 1] = z;
         baseYs[idx] = 0;
-        heights[idx] = 0.10 + rand() * 0.09;
+        heights[idx] = 0.06 + rand() * 0.06;
         angles[idx] = rand() * Math.PI * 2;
         tints[idx] = rand();
         idx++;
     }
-    // 再在外围草坪布置中高草（棋盘外 0.4～22 格，靠中心略密，并贴合丘陵起伏高度）
-    while (idx < maxBlades) {
+    // 外围草坪按自然草丛聚簇分布，跳过左下池塘水面范围，保留草坡呼吸感
+    const pondX = -halfW - 3.6;
+    const pondZ = halfH + 3.4;
+    let outerAttempts = 0;
+    while (idx < maxBlades && outerAttempts < maxBlades * 12) {
+        outerAttempts++;
         const u = rand() * 2 - 1;
         const v = rand() * 2 - 1;
-        // 偏向中心分布
         const sx = Math.sign(u) * Math.pow(Math.abs(u), 1.35) * 24;
         const sz = Math.sign(v) * Math.pow(Math.abs(v), 1.35) * 24;
         if (Math.abs(sx) < halfW + 0.35 && Math.abs(sz) < halfH + 0.35) continue;
+        if (Math.hypot(sx - pondX, (sz - pondZ) * 1.4) < 2.65) continue;
+        const tuft = Math.sin(sx * 0.62 + 0.8) * Math.cos(sz * 0.58 - 0.5);
+        if (tuft < -0.22 && rand() < 0.65) continue;
         const dist = Math.hypot(Math.max(0, Math.abs(sx) - halfW), Math.max(0, Math.abs(sz) - halfH));
         offsets[idx * 2] = sx;
         offsets[idx * 2 + 1] = sz;
         baseYs[idx] = Math.max(0, groundHeight(sx, sz, halfW, halfH) - 0.03);
-        heights[idx] = dist < 3 ? 0.28 + rand() * 0.24 : 0.42 + rand() * 0.48;
+        heights[idx] = dist < 3 ? 0.20 + rand() * 0.18 : 0.30 + rand() * 0.36;
+        angles[idx] = rand() * Math.PI * 2;
+        tints[idx] = rand();
+        idx++;
+    }
+    while (idx < maxBlades) {
+        const ang = rand() * Math.PI * 2;
+        const rr = Math.max(halfW, halfH) + 0.8 + rand() * 8;
+        const sx = Math.cos(ang) * rr;
+        const sz = Math.sin(ang) * rr;
+        offsets[idx * 2] = sx;
+        offsets[idx * 2 + 1] = sz;
+        baseYs[idx] = Math.max(0, groundHeight(sx, sz, halfW, halfH) - 0.03);
+        heights[idx] = 0.24 + rand() * 0.24;
         angles[idx] = rand() * Math.PI * 2;
         tints[idx] = rand();
         idx++;
@@ -146,13 +169,17 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
             varying vec2 vWorldXZ;
             varying vec4 vShadowCoord;
             void main() {
-                float h = aHeight * (1.0 - uSnow * 0.35);
+                // 冬季大幅隐去外围约 90% 及棋盘内约 97% 草叶，露出大片干净平滑雪地与零星覆霜草簇
+                float isInner = (abs(aOffset.x) < ${(halfW + 0.25).toFixed(2)} && abs(aOffset.y) < ${(halfH + 0.25).toFixed(2)}) ? 1.0 : 0.0;
+                float snowCull = smoothstep(0.15, 0.65, uSnow);
+                float keepRatio = mix(1.0, mix(0.10, 0.03, isInner), snowCull);
+                float h = (aTint <= keepRatio) ? aHeight * (1.0 - uSnow * 0.42) : 0.0;
                 float c = cos(aAngle), s = sin(aAngle);
-                vec3 localPos = vec3(
+                vec3 localPos = h > 0.0 ? vec3(
                     position.x * c - position.z * s,
                     position.y * h,
                     position.x * s + position.z * c
-                );
+                ) : vec3(0.0);
                 vec2 worldXZ = aOffset;
                 vec2 iUv = worldXZ / ${WORLD_SPAN.toFixed(1)} + 0.5;
                 vec4 inter = texture2D(uInteractMap, clamp(iUv, 0.0, 1.0));
@@ -234,6 +261,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                 float shadowK = mix(0.72, 1.12, smoothstep(0.36, 0.64, cloud));
                 base *= shadowK;
                 // 采样太阳/月亮方向光阴影贴图（5 点 PCF），让树影/木屋/栅栏/小猪阴影清晰落到草叶上
+                float shadowMask = 0.0;
                 if (uShadowEnabled > 0.5) {
                     vec3 sc = vShadowCoord.xyz / vShadowCoord.w;
                     if (sc.x >= 0.0 && sc.x <= 1.0 && sc.y >= 0.0 && sc.y <= 1.0 && sc.z <= 1.0) {
@@ -243,16 +271,19 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
                         s += (sc.z - bias > unpackDepth(texture2D(uShadowMap, sc.xy + vec2(0.8, -0.8) * uShadowTexel))) ? 1.0 : 0.0;
                         s += (sc.z - bias > unpackDepth(texture2D(uShadowMap, sc.xy + vec2(-0.8, 0.8) * uShadowTexel))) ? 1.0 : 0.0;
                         s += (sc.z - bias > unpackDepth(texture2D(uShadowMap, sc.xy + vec2(0.8, 0.8) * uShadowTexel))) ? 1.0 : 0.0;
-                        base *= mix(vec3(1.0), vec3(0.22, 0.30, 0.38), (s * 0.2) * uShadowStrength);
+                        shadowMask = (s * 0.2) * uShadowStrength;
+                        base *= mix(vec3(1.0), vec3(0.22, 0.30, 0.38), shadowMask);
                     }
                 }
-                // 24h 昼夜时变染色：白天随真实日光光谱在晨暖桃金/正午翠亮/夕照琥珀间平滑演进；夜晚压暗为深靛月夜草并保留月光叶尖银蓝微辉
+                // 24h 昼夜时变染色：白天随日光光谱演化；夜晚彻底融入深青绿月夜草地，仅未遮挡叶尖泛出受月亮方位调控的银青光泽
                 float dirLift = 0.76 + 0.26 * clamp(uSunDir.y, 0.15, 1.0);
                 vec3 timeLit = base * uTimeTint * mix(vec3(1.0), uDirectTint, 0.48 + 0.44 * vY) * dirLift;
-                vec3 nightRoot = vec3(0.05, 0.09, 0.20) * (0.75 + 0.5 * vTint);
-                vec3 nightBlade = mix(nightRoot, base * vec3(0.16, 0.26, 0.52), 0.35 + 0.65 * vY);
-                base = mix(timeLit, nightBlade, uNightMix * 0.78);
-                base += vec3(0.32, 0.48, 0.86) * (uNightMix * smoothstep(0.45, 1.0, vY) * (0.28 + 0.42 * max(uSunDir.y, 0.0)));
+                float moonPool = 1.0 - smoothstep(4.0, 28.0, length(vWorldXZ - vec2(${(-halfW - 4.0).toFixed(1)}, ${(-halfH - 5.0).toFixed(1)})));
+                vec3 nightRoot = vec3(0.05, 0.13, 0.17) * (0.78 + 0.44 * vTint);
+                vec3 nightBlade = mix(nightRoot, base * vec3(0.14, 0.30, 0.36), 0.32 + 0.68 * vY);
+                base = mix(timeLit, nightBlade, uNightMix * 0.84);
+                float moonTip = uNightMix * smoothstep(0.42, 1.0, vY) * (1.0 - shadowMask * 0.88) * (0.22 + 0.38 * moonPool);
+                base += vec3(0.22, 0.42, 0.52) * moonTip;
                 // 踩踏微暗
                 base *= 1.0 - vTrample * 0.06;
                 // 远景柔和空气透视雾化，使边缘草叶平滑融入地平线，不与地貌产生硬割裂
@@ -381,6 +412,7 @@ export function createGrass(scene, textures, level, tier = 'high', isSoftware = 
         getCount: () => mesh.count,
         getLightState: () => ({
             nightMix: uniforms.uNightMix.value,
+            snowCover: uniforms.uSnow.value,
             timeTint: `#${uniforms.uTimeTint.value.getHexString()}`,
             directTint: `#${uniforms.uDirectTint.value.getHexString()}`,
             sunColor: `#${uniforms.uDirectTint.value.getHexString()}`

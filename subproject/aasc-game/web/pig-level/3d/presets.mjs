@@ -31,7 +31,7 @@ export const SEASON_BASE = {
         sunElevation: 32, hillColor: '#cca862', mountainTint: '#b4a8d8'
     },
     winter: {
-        grassRoot: '#9cb5aa', grassTip: '#f6fafc', lawn: '#dde8f2', ground: '#d5e2ee',
+        grassRoot: '#9cb5aa', grassTip: '#f6fafc', lawn: '#5e9690', ground: '#dce7f5',
         foliage: ['#3c6c78', '#467d88', '#335d68', '#4f8892'], treeType: 'pine',
         flowers: ['#ffffff', '#dcecff'], flowerDensity: 0.14,
         ambientLife: 'none', seasonParticle: 'sparkle', props: ['snowman'],
@@ -140,8 +140,8 @@ export function buildPreset(season, weather, options = {}) {
         season, weather,
         grassRoot: wet ? mixHex(s.grassRoot, '#468838', 0.15 * wet) : s.grassRoot,
         grassTip: snowCover > 0.5 ? s.grassTip : mixHex(s.grassTip, '#f4f8fb', snowCover * 0.8),
-        lawn: mixHex(s.lawn, '#eef4f7', snowCover * 0.85),
-        ground: mixHex(s.ground, '#eef4f7', snowCover * 0.9),
+        lawn: mixHex(s.lawn, '#eef4f7', snowCover * 0.18),
+        ground: mixHex(s.ground, '#eef5fc', snowCover * 0.92),
         foliage: s.foliage, treeType: s.treeType, flowers: s.flowers,
         flowerDensity: s.flowerDensity * (1 - snowCover * 0.7),
         hillColor: mixHex(s.hillColor, '#eef4f7', snowCover * 0.8),
