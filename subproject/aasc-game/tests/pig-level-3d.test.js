@@ -389,12 +389,27 @@ test('3D 模式渲染、点击小猪、全息 UI 按钮、季节天气切换与�
             sunNight: window.__pig3d.getSunPosition(),
             uiSkin: window.__pig3d.getUiSkinKey(),
             grass: window.__pig3d.getGrassLightState(),
+            groundPbr: window.__pig3d.getGroundPbrState(),
             pig: window.__pig3d.getPigLightState()
         }));
         const nightRgb = parseHexRgb(envState.grass.sunColor);
         assert.deepEqual(envState.preset, { season: 'winter', weather: 'rain', isCageLevel: false });
         assert.equal(envState.timeSlot, 'night', '时钟表盘应切换 24h 时段为夜晚');
         assert.ok(envState.grass.snowCover >= 0.78, `冬雨草地应触发雪地稀草状态 (snowCover=${envState.grass.snowCover})`);
+        assert.equal(envState.grass.metalness, 0, '草叶 PBR 金属度应预设为 0');
+        assert.ok(envState.grass.roughness > 0.6, `冬季雪草 PBR 粗糙度应大于 0.6 (${envState.grass.roughness})`);
+        assert.equal(envState.groundPbr.ground.metalness, 0, '外围地形 PBR 金属度应为 0');
+        assert.equal(envState.groundPbr.lawn.metalness, 0, '棋盘草坪 PBR 金属度应为 0');
+        assert.ok(
+            envState.groundPbr.ground.roughness >= 0.4 && envState.groundPbr.ground.roughness <= 0.9 &&
+            envState.groundPbr.lawn.roughness >= 0.4 && envState.groundPbr.lawn.roughness <= 0.9,
+            `地面与草坪 PBR 粗糙度应在合理范围 (ground=${envState.groundPbr.ground.roughness}, lawn=${envState.groundPbr.lawn.roughness})`
+        );
+        const snowInteract = await page.evaluate(() => {
+            window.__pig3d.stampGround(0, 0, 1.0, 1.0);
+            return window.__pig3d.getSnowInteractSample(0, 0);
+        });
+        assert.ok(snowInteract.trample > 0.5, `冬季棋盘雪地应响应踩雪交互写入 (trample=${snowInteract.trample})`);
         assert.ok(envState.sunNight.z < -10 && envState.pig.lightDir.z < -0.3, `夜晚主光与猪受光方向均应转向天空月亮方位 z<0 (sunZ=${envState.sunNight.z.toFixed(1)}, pigDirZ=${envState.pig.lightDir.z.toFixed(2)})`);
         assert.ok(envState.grass.nightMix > 0.8 && nightRgb[2] > nightRgb[0], `夜晚草地与月光应响应深靛冷蓝夜色 (nightMix=${envState.grass.nightMix.toFixed(2)}, moon=${envState.grass.sunColor})`);
         assert.equal(envState.uiSkin, 'winterRain:night', '全息 UI 配色应跟随冬雨和夜间状态自动切换');

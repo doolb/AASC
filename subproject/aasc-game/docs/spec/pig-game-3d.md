@@ -115,14 +115,19 @@ createModelFactory(textures):
 ## 5. 手绘场景（3d/scenery.mjs）
 ```
 createScenery(scene, textures, level, tier):
+    导出 PBR_SURFACE_PRESETS = { ground: { metalness: 0.0, roughness: 0.86, wetRoughness: 0.46, snowRoughness: 0.68 }, lawn: { metalness: 0.0, roughness: 0.82, wetRoughness: 0.42, snowRoughness: 0.74 } }
     外网完整手绘地貌与景物:
-        - 修剪草坪平面(y=0.008) + 卵石镶边 + 粗段原木棋盘围框（四角立柱帽、长边拼缝端头与散落石块，含冬季厚雪顶盖及向内棋盘边角漫延的雪堆 + 池塘卵石雪帽）+ 外部起伏大草地(82×82)；双方通过 enhanceGroundAerial(material, sharedGround, isInnerLawn) 注入 uHorizonColor / uNightMix / uSnow / uBoardHalf / uTime：
-            * 冬季(uSnow>0.15)平滑外围地面笔触为粉雪质感，沿栅栏灯串与木屋前投出暖金地面光晕并点缀雪地微闪星点
-            * 夜晚(uNightMix>0.05)压暗棋盘(#215258)与外坡(#183d4a)，由左后明月投出银青漫射光池并在右后木屋前形成暖黄窗光晕
+        - 修剪草坪平面(y=0.008，细分 48×48 网格)与外部起伏大草地(82×82)升级为无额外 PBR 贴图的参数化 THREE.MeshStandardMaterial（Cook-Torrance GGX 微表面 PBR），通过 setInteractTexture(tex) 绑定共享交互贴图 uInteractMap；在 enhanceGroundAerial(material, sharedGround, isInnerLawn) 中：
+            * 冬季(uSnow>0.15)顶点着色器采样 uInteractMap 抬升积雪层（内棋盘 +0.044m / 外雪地 +0.052m），在踩踏/滑行轨迹 R 与占位 G 处下陷为 3D 雪槽并挤起四周雪垄 scRim
+            * 片元着色器于 `#include <normal_fragment_maps>` 按 uInteractMap 4 邻域梯度扰动 PBR 法线形成立体受光雪脊；棋盘覆一层柔和蓬松白雪，被小猪踏过或玩家划拨处（scPress）拨开露底显示覆霜青绿草坪并呈冰蓝冷雪槽与亮雪垄，外围雪地平滑笔触、沿栅栏灯串与木屋前投出暖金地面光晕并点缀雪地微闪星点
+            * 夜晚(uNightMix>0.05)由左后明月投出银青漫射光池并在右后木屋前形成暖黄窗光晕，配合 PBR 能量守恒漫反射自然进入深沉月夜
             * 远景(20.0~36.0)低饱和柔和融入 uHorizonColor
+        - 卵石镶边 + 粗段原木棋盘围框（四角立柱帽、长边拼缝端头与散落石块，含冬季厚雪顶盖及向内棋盘边角漫延的雪堆 + 池塘卵石雪帽）
         - 四向生态布局对齐概念图: 左前开阔豁口让位于荷花小池塘（卵石砌边+冬季雪帽、圆缺荷叶与小荷花，冬转冰蓝）、右前补全短段木栅栏，西北石板小径旁置 3 簇圆润灌木丛（冬盖雪帽）及冬季围巾胡萝卜鼻雪人；右上角高脚木屋（对称双暖亮方窗）与粗柱木栅栏（仅冬季启用下垂暖黄灯串 `fenceBulbInst.visible = isWinter`，非冬季夜晚保持幽暗原木突显木屋暖窗唯一焦点）；正后中偏右山脊风车、四季四角 10 棵主题树（冬松三层叠翠+厚雪盖）
         - 实例化小花: 按棋盘左/右两侧通道草带及前后栅栏内缘形成聚簇花丛（high 1800 / medium 900 / low 420），high/medium 采用交叉双面 5 瓣星形花（夜晚随环境压暗调色）
-    applyPreset(preset, blend, horizonColor, lightState): 同步 ground/lawn/crown/trunk/board/fence/cabin/bush/pebble/path/pond/snow/flower 颜色（随 nightMix 平滑压暗转冷青靛紫避免水粉暗色过亮）、sharedGround uniforms、雪景 props、仅冬季灯串与木屋暖窗显隐
+    applyPreset(preset, blend, horizonColor, lightState): 同步 ground/lawn 的 PBR metalness/roughness 与底色、外景道具随 nightMix 的冷青靛紫压暗、sharedGround uniforms、雪景 props、仅冬季灯串与木屋暖窗显隐
+    setInteractTexture(tex): 绑定实时踩踏/占位交互贴图 uInteractMap
+    getGroundPbrState(): 返回 { ground: { metalness, roughness }, lawn: { metalness, roughness } }
 ```
 
 ## 6. 可交互草地（3d/grass.mjs）
@@ -132,12 +137,17 @@ grassCountForTier(tier, isMobile, isSoftware):
     桌面端: high 140000 / medium 36000 / low 22000
     手机端(isMobile): high 8000 / medium 4000 / low 2000
 createGrass(scene, textures, level, tier):
+    导出 PBR_GRASS_PRESET = { metalness: 0.0, roughness: 0.56, wetRoughness: 0.28, snowRoughness: 0.76 }
     实例数: 由 grassCountForTier(tier, isMobile, isSoftware) 决定；棋盘内缩减至 8% 并偏向棋盘边缘且保持 0.06~0.12 低矮高度以露出整洁草坪条纹与清晰小猪投影；外围跳过池塘范围并按自然草丛聚簇分布；冬季通过顶点着色器按 `uSnow` 与 `aTint` 剔除约 90% 外围草叶与 97% 棋盘内草叶，露出干净平滑雪地与零星覆霜草簇
     草叶几何: 5 段渐细弯折三角带（uv.y 0→1，基底宽 0.072）
     实例属性: aOffset(x,z), aBaseY(groundHeight 贴合丘陵), aHeight, aAngle, aTint
+    顶点着色器额外输出: 随 aAngle 与倒伏姿态旋转的世界法线 vWorldNormal 及世界坐标 vWorldPos
     交互贴图 DataTexture 256×256 RGBA: R 踩踏衰减 + G 在场动物占格压扁
-    片元着色器: 外网明快水粉渐层（0.28+0.72*smoothstep(0,0.80)）、13% 金色麦草秆（vTint>0.87）、大尺度晴天冷暖斑块（入夜自动转月夜冷斑）、移动云影（0.72~1.12）、5 点 PCF 太阳/月亮阴影 `shadowMask`、踩踏微暗与远景空气透视雾化（smoothstep(20.0,36.0,length(vWorldXZ))*0.36 向 uHorizonColor 柔和过渡），并接入全时段写实光效（`uTimeTint` / `uDirectTint` / `uNightMix` / `uSunDir`）：早晨暖桃金、正午翠绿鲜亮、黄昏琥珀、夜晚彻底压暗收敛为月夜深青绿（#102a36→#285e66），且夜间银青叶尖月辉严格受 `(1.0 - shadowMask*0.88)` 与左上月光衰减控制，保证阴影内草叶沉暗融入夜色
-    update(dt, time, state, actorPositions, preset, shadowData, horizonColor, lightState)
+    片元着色器(无贴图 Cook-Torrance GGX PBR + 叶片透射): 保留外网明快水粉渐层、13% 金色麦草秆、晴天冷暖斑块、移动云影、5 点 PCF 阴影 `shadowMask` 与踩踏微暗，基于 `uMetalness` 与随湿润/积雪变化的 `uRoughness` 计算 Trowbridge-Reitz GGX 法线分布 $D$、Schlick-GGX 几何遮蔽 $G$、Schlick 菲涅尔 $F$ ($F_0=0.04+0.02\cdot uWet$)、能量守恒漫反射 $k_D=(1-F)(1-uMetalness)$、逆光叶片次表面透射、以及受草根 AO 调制的半球环境光 (`uHemiSkyColor`/`uHemiGroundColor`/`uHemiIntensity`)；入夜与左上月光池融合呈深青绿并按 `(1.0 - shadowMask*0.88)` 约束叶尖银青月辉，远景平滑融入 uHorizonColor
+    getLightState(): 返回 { nightMix, snowCover, metalness, roughness, timeTint, directTint, sunColor }
+    getInteractTexture(): 返回 256×256 共享实时交互贴图供棋盘与地面雪坑交互共用
+    getInteractSample(wx, wz): 查询指定世界坐标当前 trample / occupy 归一化采样值
+    update(dt, time, state, actorPositions, preset, shadowData, horizonColor, lightState): 冬季 uSnow > 0.35 时放缓踩踏回弹系数为 pow(0.68, dt) 以拉长雪槽保留时间
 ```
 
 ## 7. 粒子系统（3d/particles.mjs）
@@ -164,7 +174,7 @@ createEnvironment(scene, textures, tier):
     一局内时间推进（默认开启，可开关，并受表盘 24h 时段控制）:
         - TIME_SLOTS = ['morning', 'noon', 'evening', 'night']（早/中/晚/夜，对应 dayPhase 0.0 / 0.25 / 0.5 / 0.75）
         - 周期缩短至 90 秒一圈（默认 `timeCycleEnabled = true`）；内置 24 小时真实日光光谱关键帧表 `SOLAR_24H_STOPS` + `sampleSolarCycle(dayPhase)`（0.00 日出桃金 `#ffb36b` → 0.12 晨阳 `#fff1d4` → 0.25 正午纯白 `#fffdf6` → 0.40 午后 `#ffd594` → 0.50 夕照橘红 `#ff7d3e` → 0.58 蓝调暮色 `#6e84cf` → 0.75 午夜银蓝 `#9ec2ff` → 0.90 破晓微曙 `#7285c4`），同步驱动天穹、地平线晚霞、主光色彩与草地/角色色温；白天 `sunLight` 跟随东→正中→西太阳弧线，入夜后平滑转向天空月亮 `uMoonDir` 方位，夜晚大幅下调半球补光至 `~0.44`、月光主强 `~0.66`，使草地与地形真实压暗进入月夜
-        - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` / `getSunPosition()` / `getLightState()` 供时钟圆盘手控与草地/角色着色器每帧同步
+        - 新增 `setTimeSlot(slot)` / `getTimeSlot()` / `getDayPhase()` / `getSunPosition()` / `getLightState()` 供时钟圆盘手控与草地/角色着色器每帧同步（`lightState` 同步导出 `sunIntensity` / `hemiIntensity` / `hemiSkyColor` / `hemiGroundColor`）
     积云: 14~20 朵噪声球簇，顶白底蓝灰，按风速缓慢漂移并环绕回折；阴雨天加厚下压并调暗
     远山: 3 层圆柱剪影带（textures.mountain(0..2)），随季节与雾色过渡
     灯光与雾: 主平行光（high 2048 / medium 1024 软阴影，low 关闭阴影）+ 外网半球光（#fff7e8 天光 / #5a7d3e 地色，随黄昏渐变）+ 月光方向光 + 指数雾
@@ -239,5 +249,5 @@ createView3D({ container, level, levels, onPick, onAction }):
     animateExit(id): 蓄力下蹲后沿朝向冲刺跑出棋盘并淡出，沿途写入 grass 踩踏与白金冲刺尾迹，累计帧间隔确保完整播放
     shake(id, message): 前方受阻时前冲撞击喷火花+挤压回弹再左右摇摆；锁定态原地扭动身体；弹出红色叉号 + blocked/spring 音效
     cancelAnimations(): 立即完成或停止进行中补间，确保状态瞬间落位
-    测试钩子 window.__pig3d = { ready, tier, preset, timeSlot, dayPhase, fps, getGrassCount, getGrassLightState, getPigLightState, getClockDialSize, getBoardScreenBounds, getCameraState, screenOf(id), getGuideHandScreen(), holoButton(name), setSeasonWeather(s, w), setTimeSlot(slot), resetCamera }
+    测试钩子 window.__pig3d = { ready, tier, preset, timeSlot, dayPhase, fps, getGrassCount, getGrassLightState, getGroundPbrState, getSnowInteractSample, stampGround, getPigLightState, getClockDialSize, getBoardScreenBounds, getCameraState, screenOf(id), getGuideHandScreen(), holoButton(name), setSeasonWeather(s, w), setTimeSlot(slot), resetCamera }
 ```

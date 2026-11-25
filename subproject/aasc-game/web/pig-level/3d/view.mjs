@@ -1,15 +1,15 @@
 // 主控 3D 视图：渲染调度、左键/单指平移、右键/双指旋转与捏合缩放、手绘场景、草地交互、丰富角色动画、卡通全息 UI 与音效。
 import * as THREE from '../vendor/three.module.min.js';
-import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261124k';
-import { createTextureLibrary } from './textures.mjs?v=20261124k';
-import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261124k';
-import { createScenery } from './scenery.mjs?v=20261124k';
-import { createGrass } from './grass.mjs?v=20261124k';
-import { createParticles } from './particles.mjs?v=20261124k';
-import { createEnvironment } from './environment.mjs?v=20261124k';
-import { createHoloUI } from './holo-ui.mjs?v=20261124k';
-import { createAudioSystem } from './audio.mjs?v=20261124k';
-import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261124k';
+import { SEASONS, WEATHERS, seasonForLevel, randomWeather } from './presets.mjs?v=20261125b';
+import { createTextureLibrary } from './textures.mjs?v=20261125b';
+import { createModelFactory, entityCells, gridToWorldCenter, DIR_VECTORS } from './models.mjs?v=20261125b';
+import { createScenery } from './scenery.mjs?v=20261125b';
+import { createGrass } from './grass.mjs?v=20261125b';
+import { createParticles } from './particles.mjs?v=20261125b';
+import { createEnvironment } from './environment.mjs?v=20261125b';
+import { createHoloUI } from './holo-ui.mjs?v=20261125b';
+import { createAudioSystem } from './audio.mjs?v=20261125b';
+import { createPostPipeline, detectInitialTier, isSoftwareWebGL } from './post.mjs?v=20261125b';
 
 const SEASON_STORE_KEY = 'pig3d.manualEnv';
 
@@ -48,6 +48,7 @@ export async function createView3D({ container, level, levels, onPick, onAction 
     const environment = createEnvironment(scene, textures, initialTier, () => audio.playSfx('thunder'));
     const scenery = createScenery(scene, textures, level, initialTier);
     const grass = createGrass(scene, textures, level, initialTier, isSoftware);
+    scenery.setInteractTexture(grass.getInteractTexture());
     const models = createModelFactory(textures);
     const particles = createParticles(scene, textures, initialTier);
 
@@ -794,7 +795,10 @@ export async function createView3D({ container, level, levels, onPick, onAction 
             }
         }
         const pt = pickGround(e.clientX, e.clientY);
-        if (pt) grass.stamp(pt.x, pt.z, 0.85, 0.65);
+        if (pt) {
+            grass.stamp(pt.x, pt.z, 0.85, 0.65);
+            if (season === 'winter' && Math.random() < 0.18) particles.burstGrass(pt.x, pt.z, season);
+        }
     };
 
     const onPointerUp = e => {
@@ -1178,6 +1182,9 @@ export async function createView3D({ container, level, levels, onPick, onAction 
         getUiSkinKey: () => holoUI.getUiSkinKey(),
         getClockDialSize: () => holoUI.getClockDialSize(),
         getGrassLightState: () => grass.getLightState(),
+        getGroundPbrState: () => scenery.getGroundPbrState(),
+        getSnowInteractSample: (wx = 0, wz = 0) => grass.getInteractSample(wx, wz),
+        stampGround: (wx = 0, wz = 0, r = 0.9, s = 1.0) => grass.stamp(wx, wz, r, s),
         getPigLightState: () => models.getLightState(),
         getGuideHandScreen() {
             if (!markers.handSprite.visible) return null;

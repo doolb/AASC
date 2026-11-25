@@ -1,3 +1,14 @@
+- ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261125b`，含 PBR 草叶/草地与冬季棋盘踩雪交互）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
+  - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 14 个文件，并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
+- ✅ [2026-11-25] 为棋盘与外围地面加入冬季积雪及 3D 踩雪/拨雪交互效果（`?v=20261125b`）
+  - `web/pig-level/3d/grass.mjs`：导出共享交互贴图 `getInteractTexture()` 与采样查询接口 `getInteractSample(wx, wz)`；冬季 `uSnow > 0.35` 时放缓踩踏衰减至 `pow(0.68, dt)`，使雪坑与雪槽自然留存更久。
+  - `web/pig-level/3d/scenery.mjs`：将棋盘平面 `lawnGeo` 细分为 `48×48` 网格并通过 `setInteractTexture(tex)` 绑定 `uInteractMap`；在 `enhanceGroundAerial` 顶点着色器抬升冬季积雪并在小猪/小鸭占格与划拨轨迹处下陷为 3D 雪槽、四周挤起边缘雪垄；在片元 `#include <normal_fragment_maps>` 实时扰动 PBR 微表面法线呈现立体雪脊受光，冬季棋盘内覆盖蓬松白雪并在踩踏/拨开深槽处露出底层覆霜青绿草坪、冰蓝冷雪槽与亮雪垄。
+  - `web/pig-level/3d/view.mjs`：启动时连接 `scenery.setInteractTexture(grass.getInteractTexture())`，冬季指针移动时按概率溅起细碎雪沫，并在 `window.__pig3d` 暴露 `getSnowInteractSample` 与 `stampGround`。
+  - `web/pig-level/{index.html,app.mjs}`、`web/pig-level/3d/*.mjs`、`docs/{design,spec}/pig-game-3d.md`、`docs/task/20261124_场景丰富草地时变与462表盘.md`、`tests/pig-level-3d.test.js`：统一升级 `?v=20261125b` 并新增冬季棋盘踩雪交互校验（`test:pig-web` `119 / 119`、`test:pig-animation` `1 / 1`、`test:pig-3d` `5 / 5` 全部通过）。
+- ✅ [2026-11-25] 第一阶段无贴图参数化 PBR 光照改造：升级草地地面与实例化草叶（`?v=20261125a`）
+  - `web/pig-level/3d/scenery.mjs`：新增 `PBR_SURFACE_PRESETS`（`ground` 金属度 `0.0` / 粗糙度 `0.86` / 湿 `0.46` / 雪 `0.68`；`lawn` 金属度 `0.0` / 粗糙度 `0.82` / 湿 `0.42` / 雪 `0.74`），将 `groundMat` 与 `lawnMat` 升级为 `THREE.MeshStandardMaterial` 并按雨天湿润度与冬季积雪实时插值粗糙度，暴露 `getGroundPbrState()`。
+  - `web/pig-level/3d/grass.mjs`：新增 `PBR_GRASS_PRESET`（金属度 `0.0` / 粗糙度 `0.56` / 湿 `0.28` / 雪 `0.76`），顶点着色器计算世界法线 `vWorldNormal` 与坐标 `vWorldPos`，片元着色器升级为无贴图 Cook-Torrance GGX 微表面 PBR（法线分布 $D$、几何遮蔽 $G$、Schlick 菲涅尔 $F$）+ 叶片逆光次表面透射 + 受草根 AO 调制的半球环境光，`getLightState()` 新增 `metalness` 与 `roughness`。
+  - `web/pig-level/3d/environment.mjs`、`web/pig-level/3d/view.mjs`、`tests/pig-level-3d.test.js`：`lightState` 同步导出 `sunIntensity` / `hemiIntensity` / `hemiSkyColor` / `hemiGroundColor`；`window.__pig3d` 新增 `getGroundPbrState()`；通过全部 PBR 校验与测试（`119 / 119`、`1 / 1`、`5 / 5`）。
 - ✅ [2026-11-25] 将最新网页版 `web/pig-level/`（`?v=20261124k`）同步发布至外网 `https://c.aasc.us/mnt/game/pig-game/`
   - 目标路径：`c.aasc.us:/home/as/a/game/pig-game/`；增量上传 HTML/MJS 共 14 个文件，并核验全量 22 个核心网页/3D 脚本/SVG 皮肤/入口关卡资源在公网 HTTPS 状态码 `200` 与 SHA-256 与本地逐字节一致。
 - ✅ [2026-11-25] 还原概念图 `night_moonlight_concept` 月夜物件/草地光照及 `concept_winter` 冬季平滑雪地与稀疏草叶效果（`?v=20261124k`）

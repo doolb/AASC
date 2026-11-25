@@ -1,7 +1,7 @@
 // 动态环境：手绘天空穹顶、飘动积云、三层远山、太阳与半球光、指数雾、昼夜缓慢流逝与天气闪电。
 import * as THREE from '../vendor/three.module.min.js';
-import { buildPreset, seededRandom } from './presets.mjs?v=20261124k';
-import { blobSphere } from './geometry.mjs?v=20261124k';
+import { buildPreset, seededRandom } from './presets.mjs?v=20261125b';
+import { blobSphere } from './geometry.mjs?v=20261125b';
 
 export const TIME_SLOTS = ['morning', 'noon', 'evening', 'night'];
 export const TIME_LABELS = { morning: '早', noon: '中', evening: '晚', night: '夜' };
@@ -230,6 +230,10 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         sunsetBlend: 0,
         dawnBlend: 0,
         duskMix: 0,
+        sunIntensity: 1.5,
+        hemiIntensity: 0.7,
+        hemiSkyColor: new THREE.Color('#fff7e8'),
+        hemiGroundColor: new THREE.Color('#5a7d3e'),
         sunColor: new THREE.Color('#fffdf6'),
         timeTint: new THREE.Color('#ffffff'),
         directTint: new THREE.Color('#ffffff'),
@@ -294,11 +298,15 @@ export function createEnvironment(scene, textures, tier = 'high', onThunder = nu
         hemiLight.color.set('#fff7e8').lerp(solar.sun, 0.35).lerp(cB.set('#5d7dc2'), duskMix * 0.82);
         hemiLight.groundColor.set('#5a7d3e').lerp(cB.set('#1c2648'), duskMix * 0.82);
 
-        // 同步草地、角色与外景 24h 时变色温与主光方向
+        // 同步草地、角色与外景 24h 时变色温、主光方向及 PBR 物理光源参数
         lightState.nightBlend = nightBlend;
         lightState.sunsetBlend = sunsetBlend;
         lightState.dawnBlend = dawnBlend;
         lightState.duskMix = duskMix;
+        lightState.sunIntensity = sunLight.intensity;
+        lightState.hemiIntensity = hemiLight.intensity;
+        lightState.hemiSkyColor.copy(hemiLight.color);
+        lightState.hemiGroundColor.copy(hemiLight.groundColor);
         lightState.sunColor.copy(skyUniforms.uSunColor.value);
         lightState.timeTint.copy(solar.tint);
         if (p.dusk > 0) lightState.timeTint.lerp(cB.set('#283a70'), p.dusk * 0.65);

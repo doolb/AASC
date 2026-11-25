@@ -1,35 +1,107 @@
 // 手绘吉卜力风场景：修剪草坪棋盘、卵石边、石板路、高脚木屋、栅栏、季节树、小花与远坡风车。
 import * as THREE from '../vendor/three.module.min.js';
-import { seededRandom } from './presets.mjs?v=20261124k';
-import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261124k';
+import { seededRandom } from './presets.mjs?v=20261125b';
+import { blobSphere, groundHeight, part, trs, mergeParts, shadeByHeight, outlineOf } from './geometry.mjs?v=20261125b';
 
-// 为大草地与棋盘草坪注入空气透视、月夜左上银青光池、木屋暖窗地面光晕及冬季粉雪地面效果
+// 无贴图 PBR 材质预设参数（金属度与粗糙度，随湿润度与积雪动态插值）
+export const PBR_SURFACE_PRESETS = {
+    ground: { metalness: 0.0, roughness: 0.86, wetRoughness: 0.46, snowRoughness: 0.68 },
+    lawn: { metalness: 0.0, roughness: 0.82, wetRoughness: 0.42, snowRoughness: 0.74 }
+};
+
+// 为大草地与棋盘草坪注入 PBR 交互雪层位移、法线扰动、反照率校准、空气透视与昼夜地面光池
 function enhanceGroundAerial(material, sharedGround, isInnerLawn = false) {
-    material.customProgramCacheKey = () => (isInnerLawn ? 'pig3d-lawn-aerial-v2' : 'pig3d-ground-aerial-v2');
+    material.customProgramCacheKey = () => (isInnerLawn ? 'pig3d-lawn-pbr-snow-v2' : 'pig3d-ground-pbr-snow-v2');
     material.onBeforeCompile = shader => {
         shader.uniforms.uHorizonColor = sharedGround.uHorizonColor;
         shader.uniforms.uNightMix = sharedGround.uNightMix;
         shader.uniforms.uSnow = sharedGround.uSnow;
         shader.uniforms.uTime = sharedGround.uTime;
         shader.uniforms.uBoardHalf = sharedGround.uBoardHalf;
+        shader.uniforms.uInteractMap = sharedGround.uInteractMap;
         shader.vertexShader = shader.vertexShader
-            .replace('void main() {', 'varying vec2 vGroundXZ;\nvoid main() {')
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGroundXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+            .replace(
+                'void main() {',
+                'uniform float uSnow;\nuniform sampler2D uInteractMap;\nvarying vec2 vGroundXZ;\nvoid main() {'
+            )
+            .replace(
+                '#include <begin_vertex>',
+                `#include <begin_vertex>
+                vec4 scWorld0 = modelMatrix * vec4(transformed, 1.0);
+                vGroundXZ = scWorld0.xz;
+                float scSnowV = smoothstep(0.15, 0.70, uSnow);
+                if (scSnowV > 0.01) {
+                    vec2 scIuv = clamp(vGroundXZ / 48.0 + 0.5, 0.0, 1.0);
+                    vec4 scInter = texture2D(uInteractMap, scIuv);
+                    float scPress = clamp(scInter.r * 0.88 + scInter.g * 0.95, 0.0, 1.0);
+                    float scEps = 1.0 / 256.0;
+                    float scN = max(
+                        max(texture2D(uInteractMap, clamp(scIuv + vec2(scEps, 0.0), 0.0, 1.0)).r,
+                            texture2D(uInteractMap, clamp(scIuv - vec2(scEps, 0.0), 0.0, 1.0)).r),
+                        max(texture2D(uInteractMap, clamp(scIuv + vec2(0.0, scEps), 0.0, 1.0)).r,
+                            texture2D(uInteractMap, clamp(scIuv - vec2(0.0, scEps), 0.0, 1.0)).r)
+                    );
+                    float scRim = max(0.0, scN - scPress) * 0.65;
+                    transformed.y += scSnowV * (${isInnerLawn ? '0.044' : '0.052'} * (1.0 - scPress * 0.92) + scRim * 0.028);
+                }`
+            );
         shader.fragmentShader = shader.fragmentShader
             .replace(
                 'void main() {',
-                'uniform vec3 uHorizonColor;\nuniform float uNightMix;\nuniform float uSnow;\nuniform float uTime;\nuniform vec2 uBoardHalf;\nvarying vec2 vGroundXZ;\nvoid main() {'
+                'uniform vec3 uHorizonColor;\nuniform float uNightMix;\nuniform float uSnow;\nuniform float uTime;\nuniform vec2 uBoardHalf;\nuniform sampler2D uInteractMap;\nvarying vec2 vGroundXZ;\nvoid main() {'
+            )
+            .replace(
+                '#include <normal_fragment_maps>',
+                `#include <normal_fragment_maps>
+                float scSnowN = smoothstep(0.15, 0.70, uSnow);
+                if (scSnowN > 0.01) {
+                    vec2 scNuv = clamp(vGroundXZ / 48.0 + 0.5, 0.0, 1.0);
+                    float scNeps = 1.0 / 256.0;
+                    vec4 iL = texture2D(uInteractMap, clamp(scNuv - vec2(scNeps, 0.0), 0.0, 1.0));
+                    vec4 iR = texture2D(uInteractMap, clamp(scNuv + vec2(scNeps, 0.0), 0.0, 1.0));
+                    vec4 iD = texture2D(uInteractMap, clamp(scNuv - vec2(0.0, scNeps), 0.0, 1.0));
+                    vec4 iU = texture2D(uInteractMap, clamp(scNuv + vec2(0.0, scNeps), 0.0, 1.0));
+                    float pL = clamp(iL.r * 0.88 + iL.g * 0.95, 0.0, 1.0);
+                    float pR = clamp(iR.r * 0.88 + iR.g * 0.95, 0.0, 1.0);
+                    float pD = clamp(iD.r * 0.88 + iD.g * 0.95, 0.0, 1.0);
+                    float pU = clamp(iU.r * 0.88 + iU.g * 0.95, 0.0, 1.0);
+                    vec3 scSlopeView = mat3(viewMatrix) * vec3((pL - pR) * 0.65, 0.0, (pD - pU) * 0.65);
+                    normal = normalize(normal + scSlopeView * scSnowN);
+                }`
             )
             .replace(
                 '#include <opaque_fragment>',
                 `#include <opaque_fragment>
+                gl_FragColor.rgb *= mix(1.34, 0.94, uNightMix);
                 float scSnow = smoothstep(0.15, 0.70, uSnow);
-                ${isInnerLawn ? '' : `
+                vec2 scUvF = clamp(vGroundXZ / 48.0 + 0.5, 0.0, 1.0);
+                vec4 scInterF = texture2D(uInteractMap, scUvF);
+                float scPressF = clamp(scInterF.r * 0.88 + scInterF.g * 0.95, 0.0, 1.0);
+                float scFeps = 1.0 / 256.0;
+                float scNb = max(
+                    max(texture2D(uInteractMap, clamp(scUvF + vec2(scFeps, 0.0), 0.0, 1.0)).r,
+                        texture2D(uInteractMap, clamp(scUvF - vec2(scFeps, 0.0), 0.0, 1.0)).r),
+                    max(texture2D(uInteractMap, clamp(scUvF + vec2(0.0, scFeps), 0.0, 1.0)).r,
+                        texture2D(uInteractMap, clamp(scUvF - vec2(0.0, scFeps), 0.0, 1.0)).r)
+                );
+                float scRimF = max(0.0, scNb - scPressF) * 0.65;
+                ${isInnerLawn ? `
+                if (scSnow > 0.01) {
+                    // 冬季棋盘内覆盖蓬松雪层（保留轻微修剪条纹肌理），小猪踏过或玩家拨雪时露出底层覆霜青绿草坪
+                    float lumLawn = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
+                    vec3 boardSnow = vec3(lumLawn * 0.30 + 0.64) * vec3(0.90, 0.95, 1.03) * mix(vec3(1.0), vec3(0.45, 0.58, 0.82), uNightMix);
+                    float snowReveal = 1.0 - smoothstep(0.10, 0.58, scPressF) * 0.82;
+                    vec3 snowUnder = mix(boardSnow, boardSnow * vec3(0.70, 0.80, 0.95), scPressF * 0.45);
+                    gl_FragColor.rgb = mix(gl_FragColor.rgb, snowUnder, scSnow * 0.84 * snowReveal);
+                    gl_FragColor.rgb += vec3(0.14, 0.16, 0.22) * scRimF * scSnow;
+                }` : `
                 if (scSnow > 0.01) {
                     // 冬季外围平滑粉雪质感（柔化绿草刷痕并叠加淡淡粉紫冷雪调）
                     float lumSnow = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
                     vec3 powderSnow = vec3(lumSnow * 0.42 + 0.54) * vec3(0.90, 0.94, 1.02);
                     gl_FragColor.rgb = mix(gl_FragColor.rgb, powderSnow, scSnow * 0.56);
+                    gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * vec3(0.72, 0.82, 0.96), scPressF * scSnow * 0.52);
+                    gl_FragColor.rgb += vec3(0.14, 0.16, 0.22) * scRimF * scSnow;
                     // 栅栏暖黄灯串沿雪地投出暖金光晕
                     float dBack = length(vec2(vGroundXZ.x - clamp(vGroundXZ.x, -uBoardHalf.x - 4.4, uBoardHalf.x + 3.0), vGroundXZ.y - (-uBoardHalf.y - 4.9)));
                     float dLeft = length(vec2(vGroundXZ.x - (-uBoardHalf.x - 5.05), vGroundXZ.y - clamp(vGroundXZ.y, -uBoardHalf.y - 4.3, uBoardHalf.y + 1.4)));
@@ -120,7 +192,8 @@ export function createScenery(scene, textures, level, tier = 'high') {
         uNightMix: { value: 0 },
         uSnow: { value: 0 },
         uTime: { value: 0 },
-        uBoardHalf: { value: new THREE.Vector2(halfW, halfH) }
+        uBoardHalf: { value: new THREE.Vector2(halfW, halfH) },
+        uInteractMap: { value: textures.noiseMap() }
     };
 
     // 1. 远景起伏大地（76×76，棋盘外平滑抬升成柔和丘陵）
@@ -134,19 +207,29 @@ export function createScenery(scene, textures, level, tier = 'high') {
     groundGeo.computeVertexNormals();
     const groundTex = textures.ground();
     groundTex.repeat.set(10, 10);
-    const groundMat = new THREE.MeshToonMaterial({ map: groundTex, color: '#7fb35a', gradientMap });
+    const groundMat = new THREE.MeshStandardMaterial({
+        map: groundTex,
+        color: '#7fb35a',
+        metalness: PBR_SURFACE_PRESETS.ground.metalness,
+        roughness: PBR_SURFACE_PRESETS.ground.roughness
+    });
     enhanceGroundAerial(groundMat, sharedGround, false);
     const groundMesh = new THREE.Mesh(groundGeo, groundMat);
     groundMesh.receiveShadow = true;
     group.add(groundMesh);
     disposables.push(groundGeo, groundMat);
 
-    // 2. 棋盘修剪草坪（比外草地略浅，带明暗修剪条纹）
-    const lawnGeo = new THREE.PlaneGeometry(cols + 0.5, rows + 0.5);
+    // 2. 棋盘修剪草坪（48×48 细分网格支持冬季棋盘内 3D 踩雪压陷，比外草地略浅，带明暗修剪条纹）
+    const lawnGeo = new THREE.PlaneGeometry(cols + 0.5, rows + 0.5, 48, 48);
     lawnGeo.rotateX(-Math.PI / 2);
     const lawnTex = textures.lawn();
     lawnTex.repeat.set(1, Math.max(1, Math.round(rows / 6)));
-    const lawnMat = new THREE.MeshToonMaterial({ map: lawnTex, color: '#9fd27a', gradientMap });
+    const lawnMat = new THREE.MeshStandardMaterial({
+        map: lawnTex,
+        color: '#9fd27a',
+        metalness: PBR_SURFACE_PRESETS.lawn.metalness,
+        roughness: PBR_SURFACE_PRESETS.lawn.roughness
+    });
     enhanceGroundAerial(lawnMat, sharedGround, true);
     const lawnMesh = new THREE.Mesh(lawnGeo, lawnMat);
     lawnMesh.position.y = 0.008;
@@ -711,14 +794,31 @@ export function createScenery(scene, textures, level, tier = 'high') {
         sharedGround.uNightMix.value = nightMix;
         sharedGround.uSnow.value = preset.snowCover;
 
-        // 地面、棋盘与树冠先做预设平滑插值，再按 nightMix 压暗转入月夜冷青/靛紫，避免水粉阶梯高光段过亮
+        // 地面、棋盘先做预设平滑插值并同步更新 PBR 金属度/粗糙度（按湿润度与积雪插值），再温和染入月夜冷青
+        const gPreset = PBR_SURFACE_PRESETS.ground;
+        const lPreset = PBR_SURFACE_PRESETS.lawn;
+        const snowMix = THREE.MathUtils.clamp(preset.snowCover, 0, 1);
+        const wetMix = THREE.MathUtils.clamp(preset.wetness, 0, 1);
+        groundMat.metalness = gPreset.metalness;
+        groundMat.roughness = THREE.MathUtils.lerp(
+            THREE.MathUtils.lerp(gPreset.roughness, gPreset.wetRoughness, wetMix),
+            gPreset.snowRoughness,
+            snowMix
+        );
+        lawnMat.metalness = lPreset.metalness;
+        lawnMat.roughness = THREE.MathUtils.lerp(
+            THREE.MathUtils.lerp(lPreset.roughness, lPreset.wetRoughness, wetMix),
+            lPreset.snowRoughness,
+            snowMix
+        );
+
         colTmp.set(preset.ground);
         curGround.lerp(colTmp, blend);
-        groundMat.color.copy(curGround).lerp(colTmp.set(isWinter ? '#324a74' : '#183d4a'), nightMix * 0.76);
+        groundMat.color.copy(curGround).lerp(colTmp.set(isWinter ? '#324a74' : '#183d4a'), nightMix * 0.52);
 
         colTmp.set(preset.lawn);
         curLawn.lerp(colTmp, blend);
-        lawnMat.color.copy(curLawn).lerp(colTmp.set(isWinter ? '#29525e' : '#215258'), nightMix * 0.72);
+        lawnMat.color.copy(curLawn).lerp(colTmp.set(isWinter ? '#29525e' : '#215258'), nightMix * 0.48);
 
         colTmp.set(preset.foliage[0]);
         curCrown.lerp(colTmp, blend);
@@ -793,6 +893,13 @@ export function createScenery(scene, textures, level, tier = 'high') {
     return {
         applyPreset,
         update,
+        setInteractTexture(tex) {
+            if (tex) sharedGround.uInteractMap.value = tex;
+        },
+        getGroundPbrState: () => ({
+            ground: { metalness: groundMat.metalness, roughness: Number(groundMat.roughness.toFixed(3)) },
+            lawn: { metalness: lawnMat.metalness, roughness: Number(lawnMat.roughness.toFixed(3)) }
+        }),
         dispose() {
             scene.remove(group);
             for (const d of disposables) d?.dispose?.();
