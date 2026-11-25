@@ -414,22 +414,32 @@ function createContourBoundaryGuides(E){
       out.push({patch:patch.id,annular:shape.loops===2,normals,method:'one-sided area-weighted normals on the structural CSI boundary; no interior position targets'});
     }return out;
   }
-  function fitNetwork(mesh,t,network,{scale,tolerance,cornerAngle=55,regularization=.01,field:orientation=null,fieldStrength=1,cornerMergeDistance=.02,manualEdges=[],localScaleFitting=false,curveFairing=false,internalSmoothing=0}={}){
+  function fitNetwork(mesh,t,network,{scale,tolerance,cornerAngle=55,regularization=.01,field:orientation=null,fieldStrength=1,cornerMergeDistance=.02,manualEdges=[],fixedCornerNodes=[],localScaleFitting=false,curveFairing=false,internalSmoothing=0}={}){
+    const fixedNodes=new Set(fixedCornerNodes);
+    // 二次拟合继承已确认角点；接口编号会因局部重三角化改变，因此只按共享顶点编号匹配。
+    function preserveCorners(review,indices){
+      if(!indices.length)return review;
+      const fixed=new Set(indices),combine=values=>[...new Set([...values,...indices])].sort((a,b)=>a-b);
+      return {...review,indices:combine(review.indices),candidates:combine(review.candidates),
+        rounded:review.rounded.filter(i=>!fixed.has(i)),
+        reviews:[...review.reviews.filter(item=>!fixed.has(item.index)),...indices.map(index=>({index,decision:'keep',reason:'继承已确认的结构角点，二次拟合保持位置'}))]};
+    }
     const frames=surfaceFrames(mesh,t,network),annular=new Set(frames.filter(f=>f.annular).map(f=>f.patch)),manual=new Set(manualEdges),contrastEdges=new Set((network.report.surfaceContrastSplits||[]).flatMap(s=>s.sourceEdges));
     const broad=new Set(network.patches.filter(p=>{const border=[...t.edges.values()].filter(e=>e.faces.some(i=>network.groups[i]===p.id)&&(e.faces.length===1||e.faces.some(i=>network.groups[i]!==p.id))),length=border.reduce((s,e)=>s+dist(mesh.vertices[e.a],mesh.vertices[e.b]),0);return !annular.has(p.id)&&p.area>=Math.max(...network.patches.map(q=>q.area))*.12&&p.area/(length*length||1)>=.025;}).map(p=>p.id));
     const triangles=E.triangulate(mesh),faceTriangles=mesh.faces.map(()=>[]);triangles.faces.forEach((f,i)=>faceTriangles[triangles.source[i]].push(f));
     function constrainToRegion(chain,points){
       const region=chain.regionPair?.find(id=>annular.has(id));if(region===undefined)return points;
-      return points.map((p,i)=>{const faces=new Set();for(let j=Math.max(0,i-1);j<=Math.min(chain.vertices.length-1,i+1);j++)for(const fi of t.incident[chain.vertices[j]])if(network.groups[fi]===region)faces.add(fi);
+      return points.map((p,i)=>{if(fixedNodes.has(chain.vertices[i]))return chain.points[i].slice();const faces=new Set();for(let j=Math.max(0,i-1);j<=Math.min(chain.vertices.length-1,i+1);j++)for(const fi of t.incident[chain.vertices[j]])if(network.groups[fi]===region)faces.add(fi);
         let best=null;for(const fi of faces)for(const triangle of faceTriangles[fi]){const point=closestTriangle(p,...triangle.map(id=>mesh.vertices[id])),distance=dist(p,point);if(!best||distance<best.distance)best={point,distance};}
         if(!best)return p;return dist(best.point,chain.points[i])<=scale*regularization+EPS?best.point:chain.points[i].slice();
       });
     }
     const prepared=network.chains.map(chain=>{
+      const fixedIndices=chain.vertices.flatMap((id,i)=>fixedNodes.has(id)&&i<chain.vertices.length-1&&(chain.closed||i>0)?[i]:[]);
       const inferred=chain.edges.every(k=>contrastEdges.has(k)&&!manual.has(k)),raw=inferred?interfaceCorners(chain.points,{closed:chain.closed,cornerAngle}):null,
-        prefair=inferred?regularizeChain(chain.points,{closed:chain.closed,allowance:scale*regularization*.5,protectTurns:false,fixedIndices:raw.indices,rounds:48,nonShrinking:true}):{points:chain.points},
-        reviewed=raw?{...raw,candidates:raw.indices,rounded:[],reviews:raw.indices.map(index=>({index,decision:'keep',reason:'localized original-route turn fixed before statistical fairing'}))}:reviewInterfaceCorners(prefair.points,{closed:chain.closed,cornerAngle,scale,tolerance,regularization}),
-        corners=mergeNearbyCorners(prefair.points,reviewed,{closed:chain.closed,scale,distance:cornerMergeDistance,protectedIndices:reviewed.indices.filter(i=>manual.has(chain.edges[i-1])||manual.has(chain.edges[i]))}),
+        prefair=inferred?regularizeChain(chain.points,{closed:chain.closed,allowance:scale*regularization*.5,protectTurns:false,fixedIndices:[...raw.indices,...fixedIndices],rounds:48,nonShrinking:true}):{points:chain.points},
+        reviewed=preserveCorners(raw?{...raw,candidates:raw.indices,rounded:[],reviews:raw.indices.map(index=>({index,decision:'keep',reason:'localized original-route turn fixed before statistical fairing'}))}:reviewInterfaceCorners(prefair.points,{closed:chain.closed,cornerAngle,scale,tolerance,regularization}),fixedIndices),
+        corners=mergeNearbyCorners(prefair.points,reviewed,{closed:chain.closed,scale,distance:cornerMergeDistance,protectedIndices:reviewed.indices.filter(i=>fixedNodes.has(chain.vertices[i])||manual.has(chain.edges[i-1])||manual.has(chain.edges[i]))}),
         regularized=regularizeChain(prefair.points,{closed:chain.closed,allowance:scale*regularization*(inferred?.5:1),fixedIndices:corners.indices,nonShrinking:chain.regionPair?.some(id=>annular.has(id))}),
         displacement=Math.max(...regularized.points.map((p,i)=>dist(p,chain.points[i])));
       const points=inferred?constrainToRegion(chain,regularized.points):regularized.points;

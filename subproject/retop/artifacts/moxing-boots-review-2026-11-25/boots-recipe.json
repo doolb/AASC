@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "analysisFingerprint": "cb1ba0a8",
+  "source": "csi-review-v4-texture-details.json",
+  "bootBaseIds": [
+    2,
+    4,
+    34,
+    43,
+    44,
+    47,
+    48,
+    63,
+    64,
+    65
+  ],
+  "method": "美术结构参考的局部图割：靴口带、鞋面、完整鞋底；仅用于本样本",
+  "sole": {
+    "center": 0.031,
+    "edgeRise": 0.012,
+    "zScale": 0.13
+  },
+  "cuff": {
+    "height": 0.099,
+    "zSlope": 0.04
+  },
+  "band": 0.012,
+  "bootTextureGate": {
+    "maxY": 0.155,
+    "redBlueRatio": 1.14,
+    "greenBlueRatio": 1.06
+  }
+}
